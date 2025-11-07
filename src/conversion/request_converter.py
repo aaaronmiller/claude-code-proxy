@@ -126,7 +126,50 @@ def convert_claude_to_openai(
         else:
             openai_request["tool_choice"] = "auto"
 
+    # Add reasoning configuration if enabled and model supports it
+    if model_manager.config.reasoning_effort and _model_supports_reasoning(openai_model):
+        openai_request["reasoning"] = {
+            "effort": model_manager.config.reasoning_effort,
+            "enabled": True,
+            "exclude": model_manager.config.reasoning_exclude
+        }
+        logger.debug(f"Added reasoning configuration: {openai_request['reasoning']}")
+
+    # Add verbosity if configured (for providers that support it)
+    if model_manager.config.verbosity:
+        openai_request["verbosity"] = model_manager.config.verbosity
+        logger.debug(f"Added verbosity configuration: {model_manager.config.verbosity}")
+
     return openai_request
+
+
+def _model_supports_reasoning(model_id: str) -> bool:
+    """
+    Check if a model supports reasoning parameters.
+
+    Models known to support reasoning_effort and related parameters:
+    - GPT-5 family (openai/gpt-5 and variants)
+    - OpenAI o3 models (openai/o3, openai/o3-mini)
+    - Qwen thinking models (qwen/qwen3, qwen/qwen-2.5 thinking variants)
+    - DeepSeek V3 thinking models (deepseek/deepseek-v3.1 thinking)
+    - Anthropic Claude Haiku 4.5
+    """
+    model_lower = model_id.lower()
+
+    # Keywords that indicate reasoning support
+    reasoning_keywords = [
+        "gpt-5",
+        "openai/o3",
+        "qwen3",
+        "qwen-2.5-thinking",
+        "deepseek-v3",
+        "deepseek-v3.1",
+        "claude-haiku",
+        "claude-4.5",  # Some variants
+        "thinking",
+    ]
+
+    return any(keyword in model_lower for keyword in reasoning_keywords)
 
 
 def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:

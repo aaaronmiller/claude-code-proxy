@@ -3,11 +3,88 @@
 
 import sys
 import os
+import argparse
 
 # Add src to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.main import main
+def main():
+    """Parse CLI arguments and start the proxy."""
+    parser = argparse.ArgumentParser(
+        description='Claude Code Proxy - Use Claude API with OpenAI-compatible providers',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                                    # Start with .env config
+  %(prog)s --big-model gpt-5 --reasoning high # Set models via CLI
+  %(prog)s --list-modes                       # List saved modes
+  %(prog)s --load-mode 1                      # Load saved mode
+  %(prog)s --mode development                 # Save current config as mode
+        """
+    )
+
+    # Model arguments
+    parser.add_argument('--big-model', dest='big_model', metavar='MODEL',
+                       help='Model for Claude Opus requests')
+    parser.add_argument('--middle-model', dest='middle_model', metavar='MODEL',
+                       help='Model for Claude Sonnet requests')
+    parser.add_argument('--small-model', dest='small_model', metavar='MODEL',
+                       help='Model for Claude Haiku requests')
+
+    # Reasoning arguments
+    parser.add_argument('--reasoning-effort', dest='reasoning_effort',
+                       choices=['low', 'medium', 'high'],
+                       help='Reasoning effort level (low, medium, high)')
+    parser.add_argument('--verbosity', dest='verbosity',
+                       help='Response verbosity level')
+    parser.add_argument('--reasoning-exclude', dest='reasoning_exclude',
+                       choices=['true', 'false'],
+                       help='Whether to exclude reasoning tokens from response')
+
+    # Server arguments
+    parser.add_argument('--host', dest='host', metavar='HOST',
+                       help='Server host (default: 0.0.0.0)')
+    parser.add_argument('--port', dest='port', type=int, metavar='PORT',
+                       help='Server port (default: 8082)')
+    parser.add_argument('--log-level', dest='log_level',
+                       choices=['debug', 'info', 'warning', 'error', 'critical'],
+                       help='Logging level')
+
+    # Mode arguments
+    parser.add_argument('--list-modes', action='store_true',
+                       help='List all saved modes')
+    parser.add_argument('--load-mode', dest='load_mode', metavar='ID_OR_NAME',
+                       help='Load a saved mode (ID or name)')
+    parser.add_argument('--save-mode', dest='save_mode', metavar='NAME',
+                       help='Save current configuration as a mode')
+    parser.add_argument('--delete-mode', dest='delete_mode', metavar='ID_OR_NAME',
+                       help='Delete a saved mode')
+    parser.add_argument('--mode', dest='mode_name', metavar='NAME',
+                       help='Shorthand for --save-mode when combined with other args')
+
+    # Other options
+    parser.add_argument('--config', dest='show_config', action='store_true',
+                       help='Show current configuration and exit')
+    parser.add_argument('--select-models', action='store_true',
+                       help='Launch interactive model selector')
+
+    args = parser.parse_args()
+
+    # Handle mode operations
+    from src.utils.modes import handle_mode_operations
+    if handle_mode_operations(args):
+        return
+
+    # Set environment variables from CLI args
+    env_updates = {}
+    for key, value in vars(args).items():
+        if value is not None and key not in ['show_config', 'select_models']:
+            env_key = key.upper().replace('-', '_')
+            env_updates[f'CLAUDE_{env_key}'] = str(value)
+
+    # Import main after handling modes
+    from src.main import main as start_main
+    start_main(env_updates)
 
 if __name__ == "__main__":
     main()

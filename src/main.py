@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from src.api.endpoints import router as api_router
 import uvicorn
 import sys
+import os
 from src.core.config import config
 
 app = FastAPI(title="Claude-to-OpenAI API Proxy", version="1.0.0")
@@ -9,7 +10,15 @@ app = FastAPI(title="Claude-to-OpenAI API Proxy", version="1.0.0")
 app.include_router(api_router)
 
 
-def main():
+def main(env_updates: dict = None):
+    """Main entry point with optional environment updates."""
+    # Apply environment updates from CLI
+    if env_updates:
+        for key, value in env_updates.items():
+            # Remove CLAUDE_ prefix and set as environment variable
+            env_key = key.replace('CLAUDE_', '')
+            os.environ[env_key] = value
+
     if len(sys.argv) > 1 and sys.argv[1] == "--help":
         print("Claude-to-OpenAI API Proxy v1.0.0")
         print("")
@@ -46,6 +55,10 @@ def main():
     print(f"   Big Model (opus): {config.big_model}")
     print(f"   Middle Model (sonnet): {config.middle_model}")
     print(f"   Small Model (haiku): {config.small_model}")
+    if config.reasoning_effort:
+        print(f"   Reasoning Effort: {config.reasoning_effort}")
+    if config.verbosity:
+        print(f"   Verbosity: {config.verbosity}")
     print(f"   Max Tokens Limit: {config.max_tokens_limit}")
     print(f"   Request Timeout: {config.request_timeout}s")
     print(f"   Server: {config.host}:{config.port}")
@@ -54,7 +67,7 @@ def main():
 
     # Parse log level - extract just the first word to handle comments
     log_level = config.log_level.split()[0].lower()
-    
+
     # Validate and set default if invalid
     valid_levels = ['debug', 'info', 'warning', 'error', 'critical']
     if log_level not in valid_levels:

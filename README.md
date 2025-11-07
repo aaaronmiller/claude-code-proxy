@@ -1,24 +1,41 @@
+<div align="center">
+
 # Claude Code Proxy
 
-A proxy server that enables **Claude Code** to work with OpenAI-compatible API providers. Convert Claude API requests to OpenAI API calls, allowing you to use various LLM providers through the Claude Code CLI.
+**Use Claude Code with any OpenAI-compatible provider**
 
-![Claude Code Proxy](demo.png)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
 
-## Features
+</div>
 
-- **Full Claude API Compatibility**: Complete `/v1/messages` endpoint support
-- **Multiple Provider Support**: OpenAI, Azure OpenAI, local models (Ollama), and any OpenAI-compatible API
-- **Smart Model Mapping**: Configure BIG and SMALL models via environment variables
-- **Function Calling**: Complete tool use support with proper conversion
-- **Streaming Responses**: Real-time SSE streaming support
-- **Image Support**: Base64 encoded image input
-- **Error Handling**: Comprehensive error handling and logging
+---
 
-## Quick Start
+## 🎯 What is this?
 
-### 1. Install Dependencies
+Claude Code Proxy is a **drop-in replacement** that enables the official Claude Code CLI to work with **any OpenAI-compatible API provider** (OpenAI, OpenRouter, Azure OpenAI, local models via Ollama/LMStudio, and more).
+
+### Why use it?
+
+- ✅ **Use Claude Code with any provider** - Not just Anthropic's API
+- ✅ **Save money** - Use local models (Ollama/LMStudio) or cheaper providers
+- ✅ **GPT-5 & Advanced Reasoning** - Support for high-reasoning mode
+- ✅ **352+ models** - Browse and configure from our model database
+- ✅ **Smart templates** - One-click setups for common use cases
+- ✅ **Free alternatives** - Find cost-saving model suggestions
+- ✅ **Local models** - Run everything on your machine
+
+---
+
+## 🚀 Quick Start
+
+### 1. Clone & Install
 
 ```bash
+git clone https://github.com/yourusername/claude-code-proxy.git
+cd claude-code-proxy
+
 # Using UV (recommended)
 uv sync
 
@@ -30,94 +47,200 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Edit .env and add your API configuration
-# Note: Environment variables are automatically loaded from .env file
+# Edit .env with your settings
+```
+
+**Example: OpenRouter with GPT-5 (High Reasoning)**
+```bash
+OPENAI_API_KEY="your-openrouter-key"
+OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+BIG_MODEL="openai/gpt-5"
+REASONING_EFFORT="high"
+VERBOSITY="high"
+```
+
+**Example: Free Local Models (No API costs!)**
+```bash
+BIG_MODEL="ollama/qwen2.5:72b"
+MIDDLE_MODEL="ollama/llama3.1:70b"
+SMALL_MODEL="ollama/llama3.1:8b"
+REASONING_EFFORT="medium"
 ```
 
 ### 3. Start Server
 
 ```bash
-# Direct run
 python start_proxy.py
-
-# Or with UV
-uv run claude-code-proxy
-
-# Or with docker compose
-docker compose up -d
 ```
 
 ### 4. Use with Claude Code
 
 ```bash
-# If ANTHROPIC_API_KEY is not set in the proxy:
-ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY="any-value" claude
+# Set the base URL
+export ANTHROPIC_BASE_URL=http://localhost:8082
 
-# If ANTHROPIC_API_KEY is set in the proxy:
-ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY="exact-matching-key" claude
+# Use Claude Code normally
+claude "Write a Python function to calculate fibonacci numbers"
 ```
 
-## Configuration
+---
 
-The application automatically loads environment variables from a `.env` file in the project root using `python-dotenv`. You can also set environment variables directly in your shell.
+## ✨ Features
+
+### Core Features
+
+| Feature | Description |
+|---------|-------------|
+| **Full Claude API Compatibility** | Complete `/v1/messages` endpoint support with all Claude features |
+| **Multi-Provider Support** | OpenAI, Azure, OpenRouter, local (Ollama/LMStudio), any OpenAI-compatible API |
+| **Smart Model Mapping** | Configure BIG, MIDDLE, SMALL models via environment variables |
+| **Function Calling** | Full tool/function calling support with proper conversion |
+| **Streaming Responses** | Real-time Server-Sent Events (SSE) streaming |
+| **Image Support** | Handle base64 encoded image inputs |
+| **Error Handling** | Comprehensive error handling with detailed logging |
+
+### Advanced Features
+
+#### 🤖 GPT-5 & Advanced Reasoning
+
+Support for GPT-5's high-reasoning mode and other advanced reasoning models:
+
+```bash
+REASONING_EFFORT="high"     # low, medium, high
+VERBOSITY="high"            # Response detail level
+REASONING_EXCLUDE="false"   # Show/hide reasoning tokens
+```
+
+**Supported reasoning models:**
+- OpenAI GPT-5
+- OpenAI o3 series (o3, o3-mini)
+- Qwen thinking models (qwen-2.5-thinking)
+- DeepSeek V3 series
+- Local models (Ollama Qwen 2.5, DeepSeek V2.5)
+
+#### 📦 Mode Templates (10 Pre-Built Configurations)
+
+One-click setups for common use cases:
+
+1. **Free Tier** - Completely free local models
+2. **Development** - Cost-effective setup
+3. **Production** - Premium GPT-5 setup
+4. **Reasoning Intensive** - For complex analysis
+5. **Vision & Multimodal** - Image processing
+6. **Fast Inference** - Speed optimized
+7. **Local Reasoning** - Free local with reasoning
+8. **Budget Conscious** - Ultra-low cost
+9. **LMStudio** - GUI-based local models
+10. **Research** - High context models
+
+#### 🎯 Smart Model Recommender
+
+Intelligent suggestions based on your usage:
+
+- **Find free alternatives** to expensive models
+- **Usage pattern analysis** - see what works for you
+- **Correlation tracking** - find models used together
+- **Cost optimization** - discover cheaper alternatives
+
+#### 📊 Model Database
+
+**352 models** from multiple sources:
+
+- **OpenRouter** - 340+ models
+- **LMStudio** - 5 local models (port 1234)
+- **Ollama** - 7 local models (port 11434)
+- **140 free models** - All listed and easy to find
+
+**Detailed metadata for each model:**
+- Pricing per 1M tokens
+- Context window size
+- Reasoning support
+- Vision support
+- Provider information
+- Endpoint URLs
+
+#### 💾 Configuration Modes
+
+Save and load different configurations:
+
+- **99 mode slots** (ID 1-99)
+- **Load by name or ID**
+- **Case-insensitive lookup**
+- **JSON persistence**
+- **Export/import ready**
+
+#### 🎨 Interactive Selector
+
+Beautiful terminal UI with:
+
+- **Color-coded interface** - 16-color palette
+- **ASCII art headers** - Professional appearance
+- **Browse by capability** - Filter by reasoning, vision, free
+- **Search functionality** - Find specific models
+- **Visual feedback** - Clear status messages
+
+---
+
+## 🛠️ Configuration
 
 ### Environment Variables
 
-**Required:**
+#### Required
+```bash
+OPENAI_API_KEY="your-api-key"    # Your provider's API key
+```
 
-- `OPENAI_API_KEY` - Your API key for the target provider
+#### Security
+```bash
+ANTHROPIC_API_KEY="exact-key"    # (Optional) Client must match this
+```
 
-**Security:**
+#### Model Configuration
+```bash
+BIG_MODEL="openai/gpt-5"         # Claude Opus requests
+MIDDLE_MODEL="openai/gpt-5"      # Claude Sonnet requests  
+SMALL_MODEL="gpt-4o-mini"        # Claude Haiku requests
+```
 
-- `ANTHROPIC_API_KEY` - Expected Anthropic API key for client validation
-  - If set, clients must provide this exact API key to access the proxy
-  - If not set, any API key will be accepted
+#### Reasoning Configuration
+```bash
+REASONING_EFFORT="high"          # low, medium, high
+VERBOSITY="high"                 # Response detail
+REASONING_EXCLUDE="false"        # Show/hide reasoning
+```
 
-**Model Configuration:**
+#### API Configuration
+```bash
+OPENAI_BASE_URL="https://openrouter.ai/api/v1"  # Your provider's base URL
+```
 
-- `BIG_MODEL` - Model for Claude opus requests (default: `gpt-4o`)
-- `MIDDLE_MODEL` - Model for Claude opus requests (default: `gpt-4o`)
-- `SMALL_MODEL` - Model for Claude haiku requests (default: `gpt-4o-mini`)
-
-**API Configuration:**
-
-- `OPENAI_BASE_URL` - API base URL (default: `https://api.openai.com/v1`)
-
-**Server Settings:**
-
-- `HOST` - Server host (default: `0.0.0.0`)
-- `PORT` - Server port (default: `8082`)
-- `LOG_LEVEL` - Logging level (default: `WARNING`)
-
-**Performance:**
-
-- `MAX_TOKENS_LIMIT` - Token limit (default: `4096`)
-- `REQUEST_TIMEOUT` - Request timeout in seconds (default: `90`)
-
-### Model Mapping
-
-The proxy maps Claude model requests to your configured models:
-
-| Claude Request                 | Mapped To     | Environment Variable   |
-| ------------------------------ | ------------- | ---------------------- |
-| Models with "haiku"            | `SMALL_MODEL` | Default: `gpt-4o-mini` |
-| Models with "sonnet"           | `MIDDLE_MODEL`| Default: `BIG_MODEL`   |
-| Models with "opus"             | `BIG_MODEL`   | Default: `gpt-4o`      |
+#### Server Settings
+```bash
+HOST="0.0.0.0"                   # Server host
+PORT="8082"                      # Server port
+LOG_LEVEL="info"                 # debug, info, warning, error
+```
 
 ### Provider Examples
 
 #### OpenAI
-
 ```bash
-OPENAI_API_KEY="sk-your-openai-key"
+OPENAI_API_KEY="sk-..."
 OPENAI_BASE_URL="https://api.openai.com/v1"
 BIG_MODEL="gpt-4o"
 MIDDLE_MODEL="gpt-4o"
 SMALL_MODEL="gpt-4o-mini"
 ```
 
-#### Azure OpenAI
+#### OpenRouter
+```bash
+OPENAI_API_KEY="sk-or-..."
+OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+BIG_MODEL="openai/gpt-5"
+REASONING_EFFORT="high"
+```
 
+#### Azure OpenAI
 ```bash
 OPENAI_API_KEY="your-azure-key"
 OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/deployments/your-deployment"
@@ -127,73 +250,234 @@ SMALL_MODEL="gpt-35-turbo"
 ```
 
 #### Local Models (Ollama)
-
 ```bash
-OPENAI_API_KEY="dummy-key"  # Required but can be dummy
+OPENAI_API_KEY="dummy"  # Required but can be dummy
 OPENAI_BASE_URL="http://localhost:11434/v1"
-BIG_MODEL="llama3.1:70b"
-MIDDLE_MODEL="llama3.1:70b"
-SMALL_MODEL="llama3.1:8b"
+BIG_MODEL="ollama/qwen2.5:72b"
+MIDDLE_MODEL="ollama/llama3.1:70b"
+SMALL_MODEL="ollama/llama3.1:8b"
+REASONING_EFFORT="medium"
 ```
 
-#### Other Providers
+#### LMStudio
+```bash
+OPENAI_API_KEY="dummy"  # Required but can be dummy
+OPENAI_BASE_URL="http://127.0.0.1:1234/v1"
+BIG_MODEL="lmstudio/Meta-Llama-3.1-405B-Instruct"
+MIDDLE_MODEL="lmstudio/Meta-Llama-3.1-70B-Instruct"
+SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
+```
 
-Any OpenAI-compatible API can be used by setting the appropriate `OPENAI_BASE_URL`.
+---
 
-## Usage Examples
+## 💡 Usage Examples
 
-### Basic Chat
+### Interactive Model Selection
+
+**Browse and configure models visually:**
+
+```bash
+# Step 1: Fetch latest models (optional, updates monthly)
+python scripts/fetch_openrouter_models.py
+
+# Step 2: Launch interactive selector
+python scripts/select_model.py
+```
+
+**Features:**
+- Browse 352 models with filtering
+- Apply templates (one-click setup)
+- Get recommendations (find free alternatives)
+- Configure BIG/MIDDLE/SMALL models
+- Set reasoning parameters
+- Save as mode for later
+
+### CLI Configuration
+
+**Start with specific models:**
+
+```bash
+# Use GPT-5 with high reasoning
+python start_proxy.py \
+  --big-model openai/gpt-5 \
+  --reasoning-effort high \
+  --verbosity high
+
+# Use local models
+python start_proxy.py \
+  --big-model ollama/qwen2.5:72b \
+  --reasoning-effort medium
+```
+
+**Manage modes:**
+
+```bash
+# Save current config as mode
+python start_proxy.py --save-mode production
+
+# List all saved modes
+python start_proxy.py --list-modes
+
+# Load a mode
+python start_proxy.py --load-mode production
+
+# Delete a mode
+python start_proxy.py --delete-mode production
+
+# Save with parameters (shorthand)
+python start_proxy.py \
+  --big-model gpt-5 \
+  --reasoning-effort high \
+  --mode premium
+```
+
+### Programmatic Usage
+
+**Apply a template:**
 
 ```python
-import httpx
+from src.utils.templates import ModeTemplates
 
-response = httpx.post(
-    "http://localhost:8082/v1/messages",
-    json={
-        "model": "claude-3-5-sonnet-20241022",  # Maps to MIDDLE_MODEL
-        "max_tokens": 100,
-        "messages": [
-            {"role": "user", "content": "Hello!"}
-        ]
-    }
-)
+config = ModeTemplates.get_config("free-tier")
+# Returns: {'BIG_MODEL': 'ollama/qwen2.5:72b', ...}
 ```
 
-## Integration with Claude Code
+**Find free alternatives:**
 
-This proxy is designed to work seamlessly with Claude Code CLI:
+```python
+from src.utils.recommender import ModelRecommender
 
-```bash
-# Start the proxy
-python start_proxy.py
+recommender = ModelRecommender()
+alternatives = recommender.find_model_alternatives("openai/gpt-5", "free")
 
-# Use Claude Code with the proxy
-ANTHROPIC_BASE_URL=http://localhost:8082 claude
-
-# Or set permanently
-export ANTHROPIC_BASE_URL=http://localhost:8082
-claude
+for alt in alternatives[:3]:
+    print(f"{alt['model']['id']}: score={alt['score']}")
+    for reason in alt['reasons'][:2]:
+        print(f"  - {reason}")
 ```
 
-## Testing
+---
 
-Test the proxy functionality:
+## 🔌 API Reference
 
-```bash
-# Run comprehensive tests
-python src/test_claude_to_openai.py
+### Endpoints
+
+#### POST /v1/messages
+
+Main Claude API endpoint. Converts Claude requests to OpenAI format.
+
+**Request:**
+```json
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 100,
+  "messages": [
+    {"role": "user", "content": "Hello!"}
+  ]
+}
 ```
 
-## Development
+**Response:**
+```json
+{
+  "id": "msg_...",
+  "object": "message",
+  "content": [...],
+  "model": "openai/gpt-5"
+}
+```
 
-### Using UV
+### Model Mapping
+
+| Claude Model | Maps To | Config Variable |
+|--------------|---------|-----------------|
+| `claude-3-opus-*` | BIG_MODEL | `BIG_MODEL` |
+| `claude-3-sonnet-*` | MIDDLE_MODEL | `MIDDLE_MODEL` |
+| `claude-3-5-sonnet-*` | MIDDLE_MODEL | `MIDDLE_MODEL` |
+| `claude-3-haiku-*` | SMALL_MODEL | `SMALL_MODEL` |
+
+---
+
+## 📊 Model Database
+
+### Statistics
+
+```
+Total Models: 352
+├─ Local Models: 12 (at TOP)
+│  ├─ LMStudio: 5 models
+│  └─ Ollama: 7 models
+│
+├─ OpenRouter Models: 340
+│  ├─ Reasoning Support: 210 (62%)
+│  ├─ Vision Support: 45 (13%)
+│  └─ Standard: 85 (25%)
+│
+Pricing:
+├─ Free Models: 140 (40%)
+│  └─ All 12 local + 128 OpenRouter
+│
+└─ Paid Models: 212 (60%)
+```
+
+### Top Free Models (No API costs!)
+
+1. **ollama/qwen2.5:72b** - 131K context, Reasoning ✓
+2. **ollama/deepseek-v2.5:236b** - 131K context, Reasoning ✓
+3. **ollama/llama3.1:70b** - 131K context
+4. **ollama/mistral-nemo:12b** - 131K context
+5. **lmstudio/Meta-Llama-3.1-405B-Instruct** - 131K context
+
+### Top Reasoning Models
+
+1. **openai/gpt-5** - Premium reasoning
+2. **openai/o3-mini** - Fast reasoning
+3. **qwen/qwen-2.5-thinking-32b** - Open source
+4. **ollama/qwen2.5:72b** - Free local
+5. **amazon/nova-premier-v1** - 1M context
+
+---
+
+## 🛠️ Development
+
+### Project Structure
+
+```
+claude-code-proxy/
+├── src/
+│   ├── main.py                 # FastAPI server
+│   ├── core/
+│   │   ├── config.py           # Configuration
+│   │   └── model_manager.py    # Model mapping
+│   ├── conversion/
+│   │   └── request_converter.py # Claude → OpenAI conversion
+│   ├── api/
+│   │   └── endpoints.py        # API routes
+│   ├── utils/
+│   │   ├── modes.py            # Configuration modes
+│   │   ├── templates.py        # 10 pre-built templates
+│   │   └── recommender.py      # Smart recommendations
+│   └── client.py               # OpenAI client
+├── scripts/
+│   ├── fetch_openrouter_models.py  # Model database fetcher
+│   └── select_model.py             # Interactive selector
+├── models/                     # Model databases
+│   ├── openrouter_models.json  # 352 models
+│   └── openrouter_models.csv   # Spreadsheet format
+├── .env.example                # Config template
+├── .gitignore                  # Git ignore rules
+├── start_proxy.py              # Startup script
+└── README.md                   # This file
+```
+
+### Development Setup
 
 ```bash
 # Install dependencies
 uv sync
 
-# Run server
-uv run claude-code-proxy
+# Run server in development
+uv run python start_proxy.py
 
 # Format code
 uv run black src/
@@ -201,29 +485,103 @@ uv run isort src/
 
 # Type checking
 uv run mypy src/
+
+# Run tests
+uv run pytest
 ```
 
-### Project Structure
+### Adding New Features
 
-```
-claude-code-proxy/
-├── src/
-│   ├── main.py  # Main server
-│   ├── test_claude_to_openai.py    # Tests
-│   └── [other modules...]
-├── start_proxy.py                  # Startup script
-├── .env.example                    # Config template
-└── README.md                       # This file
-```
+**Add a new model source:**
 
-## Performance
+1. Add models to `scripts/fetch_openrouter_models.py`
+2. Add endpoint in `get_local_providers()`
+3. Update model selector in `scripts/select_model.py`
+
+**Add a new template:**
+
+1. Edit `src/utils/templates.py`
+2. Add template to `TEMPLATES` dict
+3. Include config, description, requirements
+
+**Extend recommender:**
+
+1. Edit `src/utils/recommender.py`
+2. Add new recommendation algorithm
+3. Update scoring logic
+
+---
+
+## 📈 Performance
 
 - **Async/await** for high concurrency
 - **Connection pooling** for efficiency
 - **Streaming support** for real-time responses
 - **Configurable timeouts** and retries
 - **Smart error handling** with detailed logging
+- **Automatic model detection** for reasoning parameters
 
-## License
+---
 
-MIT License
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Ways to contribute:
+
+- 🐛 Report bugs
+- 💡 Suggest features
+- 📚 Improve documentation
+- 🔧 Submit pull requests
+- ⭐ Star the repository
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- [Anthropic](https://anthropic.com) for Claude Code
+- [OpenAI](https://openai.com) for the API
+- [OpenRouter](https://openrouter.ai) for model aggregation
+- [FastAPI](https://fastapi.tiangolo.com) for the web framework
+- [Ollama](https://ollama.com) for local model serving
+- [LMStudio](https://lmstudio.ai) for the GUI
+
+---
+
+## 📞 Support
+
+- 📖 [Documentation](https://github.com/yourusername/claude-code-proxy/wiki)
+- 🐛 [Issues](https://github.com/yourusername/claude-code-proxy/issues)
+- 💬 [Discussions](https://github.com/yourusername/claude-code-proxy/discussions)
+
+---
+
+## 🎉 Features Summary
+
+✅ **352 models** from multiple sources  
+✅ **GPT-5 & Advanced Reasoning** support  
+✅ **10 pre-built templates** for quick setup  
+✅ **Smart recommendations** with cost optimization  
+✅ **99 configuration modes** for flexibility  
+✅ **Interactive selector** with beautiful UI  
+✅ **Free local models** (Ollama, LMStudio)  
+✅ **Multi-provider support** (OpenAI, Azure, OpenRouter, local)  
+✅ **Function calling** & streaming support  
+✅ **CLI configuration** for automation  
+✅ **Comprehensive documentation** & examples  
+
+---
+
+<div align="center">
+
+**Made with ❤️ for the developer community**
+
+[⭐ Star on GitHub](https://github.com/yourusername/claude-code-proxy)
+
+</div>

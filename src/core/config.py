@@ -29,6 +29,14 @@ class Config:
         self.big_model = os.environ.get("BIG_MODEL", "gpt-4o")
         self.middle_model = os.environ.get("MIDDLE_MODEL", self.big_model)
         self.small_model = os.environ.get("SMALL_MODEL", "gpt-4o-mini")
+
+        # GPT-5 reasoning configuration
+        # Options: "low", "medium", "high", or None to disable
+        self.reasoning_effort = os.environ.get("REASONING_EFFORT")
+        # Verbosity setting for responses (affects how detailed the output is)
+        self.verbosity = os.environ.get("VERBOSITY")
+        # Whether to exclude reasoning tokens from response (default: false)
+        self.reasoning_exclude = os.environ.get("REASONING_EXCLUDE", "false").lower() == "true"
         
     def validate_api_key(self):
         """Basic API key validation"""

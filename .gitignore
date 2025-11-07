@@ -173,5 +173,42 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+# Claude Code Proxy specific
+# =========================
+
+# Model databases (can be regenerated)
+models/*.json
+models/*.csv
+!models/.gitkeep
+
+# Saved mode configurations
+modes.json
+modes_backup_*.json
+
+# User configurations
+.env.local
+.env.production
+.env.development
+
+# Recommendations exports
+recommendations_*.json
+
+# Log files
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
 # End of https://www.toptal.com/developers/gitignore/api/python
 n
