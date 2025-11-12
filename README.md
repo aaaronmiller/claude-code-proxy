@@ -225,9 +225,32 @@ SMALL_MODEL="gpt-4o-mini"        # Claude Haiku requests
 #### Reasoning Configuration
 ```bash
 REASONING_EFFORT="high"          # low, medium, high
+REASONING_MAX_TOKENS="8000"      # Optional: max tokens for reasoning
 VERBOSITY="high"                 # Response detail
 REASONING_EXCLUDE="false"        # Show/hide reasoning
 ```
+
+**Reasoning Configuration Options:**
+
+- **REASONING_EFFORT**: Controls reasoning intensity
+  - `low`: ~20% of tokens for reasoning (faster)
+  - `medium`: ~50% of tokens (balanced)
+  - `high`: ~80% of tokens (best quality)
+  - Empty/None: Disable reasoning
+
+- **REASONING_MAX_TOKENS**: Fine-grained control (Anthropic/OpenRouter style)
+  - Integer value (e.g., `2000`, `8000`, `16000`)
+  - Directly specifies maximum tokens for reasoning
+  - Works with Anthropic and OpenRouter models
+  - Leave empty to use provider default
+
+- **REASONING_EXCLUDE**: Control reasoning token visibility
+  - `false`: Include reasoning tokens in response (default)
+  - `true`: Use reasoning internally but exclude from response
+
+- **VERBOSITY**: Response detail level
+  - `high`: More detailed responses
+  - `default` or empty: Standard detail
 
 #### API Configuration
 ```bash
