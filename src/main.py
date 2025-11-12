@@ -57,6 +57,8 @@ def main(env_updates: dict = None):
     print(f"   Small Model (haiku): {config.small_model}")
     if config.reasoning_effort:
         print(f"   Reasoning Effort: {config.reasoning_effort}")
+    if config.reasoning_max_tokens:
+        print(f"   Reasoning Max Tokens: {config.reasoning_max_tokens}")
     if config.verbosity:
         print(f"   Verbosity: {config.verbosity}")
     print(f"   Max Tokens Limit: {config.max_tokens_limit}")
