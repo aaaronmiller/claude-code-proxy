@@ -311,6 +311,50 @@ ENABLE_OPENROUTER_SELECTION="true"  # Show/hide OpenRouter models in selector
   - `false`: Show local models only (LMStudio, Ollama)
   - Useful for local-only deployments or when you want to hide marketplace models
 
+#### Hybrid Mode Configuration (Per-Model Routing)
+```bash
+# Enable per-model endpoints (set to "true" to enable)
+ENABLE_BIG_ENDPOINT="true"
+ENABLE_MIDDLE_ENDPOINT="true"
+ENABLE_SMALL_ENDPOINT="true"
+
+# Per-model endpoints (if enabled above)
+BIG_ENDPOINT="http://localhost:11434/v1"
+MIDDLE_ENDPOINT="https://openrouter.ai/api/v1"
+SMALL_ENDPOINT="http://127.0.0.1:1234/v1"
+
+# Per-model API keys (defaults to OPENAI_API_KEY if not set)
+BIG_API_KEY="sk-or-..."
+MIDDLE_API_KEY=""
+SMALL_API_KEY="dummy"
+```
+
+**Hybrid Mode Options:**
+
+- **ENABLE_BIG_ENDPOINT**: Enable custom endpoint for BIG model (Claude Opus)
+  - `true`: Use `BIG_ENDPOINT` and `BIG_API_KEY`
+  - `false`: Use default `OPENAI_BASE_URL` and `OPENAI_API_KEY`
+
+- **ENABLE_MIDDLE_ENDPOINT**: Enable custom endpoint for MIDDLE model (Claude Sonnet)
+  - `true`: Use `MIDDLE_ENDPOINT` and `MIDDLE_API_KEY`
+  - `false`: Use default `OPENAI_BASE_URL` and `OPENAI_API_KEY`
+
+- **ENABLE_SMALL_ENDPOINT**: Enable custom endpoint for SMALL model (Claude Haiku)
+  - `true`: Use `SMALL_ENDPOINT` and `SMALL_API_KEY`
+  - `false`: Use default `OPENAI_BASE_URL` and `OPENAI_API_KEY`
+
+- **Per-Model Endpoints**: Custom base URLs for different providers
+  - Ollama: `http://localhost:11434/v1`
+  - LMStudio: `http://127.0.0.1:1234/v1`
+  - OpenRouter: `https://openrouter.ai/api/v1`
+  - OpenAI: `https://api.openai.com/v1`
+  - Azure OpenAI: `https://your-resource.openai.azure.com/openai/deployments/your-deployment`
+
+- **Per-Model API Keys**: Optional per-model authentication
+  - If not set, falls back to main `OPENAI_API_KEY`
+  - Useful for different API keys per provider
+  - Local models can use dummy values
+
 #### Server Settings
 ```bash
 HOST="0.0.0.0"                   # Server host
