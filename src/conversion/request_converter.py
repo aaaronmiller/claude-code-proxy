@@ -143,33 +143,89 @@ def convert_claude_to_openai(
     return openai_request
 
 
-def _model_supports_reasoning(model_id: str) -> bool:
+def _model_supports_reasoning(model_id: str, model_manager=None) -> bool:
     """
     Check if a model supports reasoning parameters.
 
     Models known to support reasoning_effort and related parameters:
-    - GPT-5 family (openai/gpt-5 and variants)
-    - OpenAI o3 models (openai/o3, openai/o3-mini)
-    - Qwen thinking models (qwen/qwen3, qwen/qwen-2.5 thinking variants)
-    - DeepSeek V3 thinking models (deepseek/deepseek-v3.1 thinking)
-    - Anthropic Claude Haiku 4.5
+    - OpenAI: GPT-5 family, o1 series, o3 series
+    - Anthropic: Claude 3.7, Claude 4.x, Claude 4.1 with reasoning
+    - xAI: Grok models with reasoning
+    - Qwen: Qwen3, Qwen-2.5 thinking variants
+    - DeepSeek: DeepSeek V3/V3.1, DeepSeek R1 variants
+    - MiniMax: M2 thinking models
+    - Kimi: K2 thinking models
     """
     model_lower = model_id.lower()
 
-    # Keywords that indicate reasoning support
-    reasoning_keywords = [
-        "gpt-5",
-        "openai/o3",
+    # Primary keyword patterns that indicate reasoning support
+    # OpenAI models
+    if any(keyword in model_lower for keyword in ["openai/gpt-5", "openai/o1", "openai/o3"]):
+        return True
+
+    # Anthropic models (explicit support for all reasoning-capable variants)
+    if any(pattern in model_lower for pattern in [
+        "anthropic/claude-3.7",
+        "anthropic/claude-4",
+        "anthropic/claude-4.1",
+        "anthropic/claude-sonnet",
+        "anthropic/claude-opus",
+        "anthropic/claude-haiku"
+    ]):
+        return True
+
+    # xAI models
+    if "xai/" in model_lower and any(keyword in model_lower for keyword in ["reason", "thinking"]):
+        return True
+
+    # Qwen thinking models
+    if any(keyword in model_lower for keyword in [
         "qwen3",
+        "qwen2.5-thinking",
         "qwen-2.5-thinking",
+        "qwen-thinking",
+        "qwen-reasoning"
+    ]):
+        return True
+
+    # DeepSeek reasoning models
+    if any(keyword in model_lower for keyword in [
         "deepseek-v3",
         "deepseek-v3.1",
-        "claude-haiku",
-        "claude-4.5",  # Some variants
-        "thinking",
-    ]
+        "deepseek-r1",
+        "deepseek-reasoning"
+    ]):
+        return True
 
-    return any(keyword in model_lower for keyword in reasoning_keywords)
+    # MiniMax and Kimi
+    if any(keyword in model_lower for keyword in [
+        "minimax/m2",
+        "minimax-thinking",
+        "kimi-k2",
+        "kimi-thinking"
+    ]):
+        return True
+
+    # Generic patterns
+    if any(keyword in model_lower for keyword in [
+        "thinking",
+        "-reasoning",
+        "-r1",
+        "-deepseek-r1",
+        "cognition",
+        "chain-of-thought"
+    ]):
+        return True
+
+    # Check metadata if available (for OpenRouter models)
+    if model_manager and hasattr(model_manager, 'models_data'):
+        for category in ['reasoning_models', 'verbosity_models']:
+            if category in model_manager.models_data:
+                for model in model_manager.models_data[category]:
+                    if model.get('id', '').lower() == model_lower:
+                        return True
+
+    return False
 
 
 def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:
