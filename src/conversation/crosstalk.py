@@ -177,31 +177,62 @@ class CrosstalkOrchestrator:
 
         Returns:
             Complete conversation history
+
+        Raises:
+            ValueError: If session not found
+            RuntimeError: If execution fails
+            asyncio.TimeoutError: If execution times out
         """
         if session_id not in self.active_sessions:
             raise ValueError(f"Session {session_id} not found")
 
         session = self.active_sessions[session_id]
+
+        # Check if session already completed
+        if session.status == "completed":
+            return self._session_to_dict(session)
+
+        # Check if session is already running
+        if session.status == "running":
+            raise RuntimeError(f"Session {session_id} is already running")
+
         session.status = "running"
 
+        # Set a timeout based on iterations (30s per iteration)
+        timeout = min(60 * 10, session.iterations * 30)  # Max 10 minutes
+
         try:
-            if session.paradigm == CrosstalkParadigm.MEMORY:
-                await self._execute_memory_paradigm(session)
-            elif session.paradigm == CrosstalkParadigm.REPORT:
-                await self._execute_report_paradigm(session)
-            elif session.paradigm == CrosstalkParadigm.RELAY:
-                await self._execute_relay_paradigm(session)
-            elif session.paradigm == CrosstalkParadigm.DEBATE:
-                await self._execute_debate_paradigm(session)
+            # Run with timeout
+            await asyncio.wait_for(
+                self._execute_paradigm(session),
+                timeout=timeout
+            )
 
             session.status = "completed"
 
+        except asyncio.TimeoutError:
+            session.status = "error"
+            raise asyncio.TimeoutError(
+                f"Crosstalk execution timed out after {timeout}s. "
+                f"Session {session_id} has {session.iterations} iterations."
+            )
         except Exception as e:
             session.status = "error"
             raise RuntimeError(f"Crosstalk execution failed: {str(e)}")
 
         # Convert to return format
         return self._session_to_dict(session)
+
+    async def _execute_paradigm(self, session: CrosstalkSession):
+        """Execute the appropriate paradigm based on session configuration."""
+        if session.paradigm == CrosstalkParadigm.MEMORY:
+            await self._execute_memory_paradigm(session)
+        elif session.paradigm == CrosstalkParadigm.REPORT:
+            await self._execute_report_paradigm(session)
+        elif session.paradigm == CrosstalkParadigm.RELAY:
+            await self._execute_relay_paradigm(session)
+        elif session.paradigm == CrosstalkParadigm.DEBATE:
+            await self._execute_debate_paradigm(session)
 
     async def _execute_memory_paradigm(self, session: CrosstalkSession):
         """Memory paradigm: Store and retrieve insights from other models."""
