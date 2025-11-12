@@ -62,6 +62,25 @@ Examples:
     parser.add_argument('--mode', dest='mode_name', metavar='NAME',
                        help='Shorthand for --save-mode when combined with other args')
 
+    # Crosstalk options
+    parser.add_argument('--crosstalk-init', action='store_true',
+                       help='Launch interactive crosstalk setup wizard')
+    parser.add_argument('--crosstalk', dest='crosstalk_models',
+                       help='Quick crosstalk setup with comma-separated models (e.g., "big,small")')
+    parser.add_argument('--system-prompt-big', dest='big_system_prompt',
+                       help='System prompt for BIG model (file path with "path:" prefix or inline text)')
+    parser.add_argument('--system-prompt-middle', dest='middle_system_prompt',
+                       help='System prompt for MIDDLE model (file path with "path:" prefix or inline text)')
+    parser.add_argument('--system-prompt-small', dest='small_system_prompt',
+                       help='System prompt for SMALL model (file path with "path:" prefix or inline text)')
+    parser.add_argument('--crosstalk-iterations', dest='crosstalk_iterations', type=int,
+                       help='Number of crosstalk iterations (default: 20)')
+    parser.add_argument('--crosstalk-topic', dest='crosstalk_topic',
+                       help='Initial topic for crosstalk conversation')
+    parser.add_argument('--crosstalk-paradigm', dest='crosstalk_paradigm',
+                       choices=['memory', 'report', 'relay', 'debate'],
+                       help='Crosstalk communication paradigm')
+
     # Other options
     parser.add_argument('--config', dest='show_config', action='store_true',
                        help='Show current configuration and exit')
