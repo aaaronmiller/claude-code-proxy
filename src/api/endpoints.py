@@ -104,7 +104,7 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
         else:
             # Non-streaming response
             openai_response = await openai_client.create_chat_completion(
-                openai_request, request_id
+                openai_request, request_id, config
             )
             claude_response = convert_openai_to_claude_response(
                 openai_response, request
