@@ -24,6 +24,9 @@ openai_client = OpenAIClient(
     api_version=config.azure_api_version,
 )
 
+# Configure per-model clients for hybrid deployments
+openai_client.configure_per_model_clients(config)
+
 async def validate_api_key(x_api_key: Optional[str] = Header(None), authorization: Optional[str] = Header(None)):
     """Validate the client's API key from either x-api-key header or Authorization header."""
     client_api_key = None
