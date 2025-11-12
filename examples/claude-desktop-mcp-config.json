@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "claude-code-proxy-crosstalk": {
+      "command": "python",
+      "args": ["/absolute/path/to/claude-code-proxy/src/mcp_server.py", "--stdio"],
+      "env": {
+        "OPENAI_API_KEY": "your-api-key-here",
+        "BIG_MODEL": "gpt-4o",
+        "MIDDLE_MODEL": "gpt-4o-mini",
+        "SMALL_MODEL": "gpt-4o-mini"
+      }
+    }
+  }
+}
