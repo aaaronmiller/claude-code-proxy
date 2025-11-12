@@ -144,36 +144,39 @@ class OpenAIClient:
     
     async def create_chat_completion_stream(self, request: Dict[str, Any], request_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to OpenAI API with cancellation support."""
-        
+
+        # Get the appropriate client based on the model
+        client = self.get_client_for_model(request.get('model', ''))
+
         # Create cancellation token if request_id provided
         if request_id:
             cancel_event = asyncio.Event()
             self.active_requests[request_id] = cancel_event
-        
+
         try:
             # Ensure stream is enabled
             request["stream"] = True
             if "stream_options" not in request:
                 request["stream_options"] = {}
             request["stream_options"]["include_usage"] = True
-            
+
             # Create the streaming completion
-            streaming_completion = await self.client.chat.completions.create(**request)
-            
+            streaming_completion = await client.chat.completions.create(**request)
+
             async for chunk in streaming_completion:
                 # Check for cancellation before yielding each chunk
                 if request_id and request_id in self.active_requests:
                     if self.active_requests[request_id].is_set():
                         raise HTTPException(status_code=499, detail="Request cancelled by client")
-                
+
                 # Convert chunk to SSE format matching original HTTP client format
                 chunk_dict = chunk.model_dump()
                 chunk_json = json.dumps(chunk_dict, ensure_ascii=False)
                 yield f"data: {chunk_json}"
-            
+
             # Signal end of stream
             yield "data: [DONE]"
-                
+
         except AuthenticationError as e:
             raise HTTPException(status_code=401, detail=self.classify_openai_error(str(e)))
         except RateLimitError as e:
@@ -185,7 +188,7 @@ class OpenAIClient:
             raise HTTPException(status_code=status_code, detail=self.classify_openai_error(str(e)))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-        
+
         finally:
             # Clean up active request tracking
             if request_id and request_id in self.active_requests:
