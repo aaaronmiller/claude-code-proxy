@@ -10,7 +10,9 @@ class CrosstalkSetupRequest(BaseModel):
     """Request to setup a new crosstalk session."""
     models: List[str] = Field(
         description="List of models to use (e.g., ['big', 'small', 'middle'])",
-        example=["big", "small"]
+        example=["big", "small"],
+        min_length=2,
+        max_length=5
     )
     system_prompts: Optional[Dict[str, str]] = Field(
         default=None,
@@ -32,8 +34,31 @@ class CrosstalkSetupRequest(BaseModel):
     topic: str = Field(
         default="",
         description="Initial topic or message",
-        example="hery whats up"
+        example="hery whats up",
+        max_length=1000
     )
+
+    @field_validator('paradigm')
+    @classmethod
+    def validate_paradigm(cls, v):
+        """Validate that paradigm is one of the allowed values."""
+        valid_paradigms = ['memory', 'report', 'relay', 'debate']
+        if v not in valid_paradigms:
+            raise ValueError(f'paradigm must be one of {valid_paradigms}')
+        return v
+
+    @field_validator('models')
+    @classmethod
+    def validate_models(cls, v):
+        """Validate that all models are valid."""
+        valid_models = ['big', 'middle', 'small']
+        for model in v:
+            if model.lower() not in valid_models:
+                raise ValueError(f'Invalid model: {model}. Must be one of {valid_models}')
+        # Check for duplicates
+        if len(v) != len(set(v)):
+            raise ValueError('Duplicate models not allowed')
+        return v
 
 
 class CrosstalkSetupResponse(BaseModel):
