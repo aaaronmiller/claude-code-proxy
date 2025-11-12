@@ -722,16 +722,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🎉 Features Summary
 
-✅ **352 models** from multiple sources  
-✅ **GPT-5 & Advanced Reasoning** support  
-✅ **10 pre-built templates** for quick setup  
-✅ **Smart recommendations** with cost optimization  
-✅ **99 configuration modes** for flexibility  
-✅ **Interactive selector** with beautiful UI  
-✅ **Free local models** (Ollama, LMStudio)  
-✅ **Multi-provider support** (OpenAI, Azure, OpenRouter, local)  
-✅ **Function calling** & streaming support  
-✅ **CLI configuration** for automation  
+✅ **352 models** from multiple sources
+✅ **Comprehensive reasoning support** (OpenAI, Anthropic, all providers)
+✅ **Dual reasoning control** (effort + max_tokens)
+✅ **OpenRouter reasoning tokens** with block preservation
+✅ **10 pre-built templates** for quick setup
+✅ **Smart recommendations** with cost optimization
+✅ **99 configuration modes** for flexibility
+✅ **Interactive selector** with beautiful UI + filtering
+✅ **Local-only mode** (hide/show OpenRouter models)
+✅ **Free local models** (Ollama, LMStudio)
+✅ **Multi-provider support** (OpenAI, Azure, OpenRouter, local)
+✅ **Function calling** & streaming support
+✅ **CLI configuration** for automation
 ✅ **Comprehensive documentation** & examples  
 
 ---
