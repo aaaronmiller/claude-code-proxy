@@ -127,7 +127,7 @@ def convert_claude_to_openai(
             openai_request["tool_choice"] = "auto"
 
     # Add reasoning configuration if enabled and model supports it
-    if model_manager.config.reasoning_effort and _model_supports_reasoning(openai_model):
+    if model_manager.config.reasoning_effort and _model_supports_reasoning(openai_model, model_manager):
         openai_request["reasoning"] = {
             "effort": model_manager.config.reasoning_effort,
             "enabled": True,
