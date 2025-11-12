@@ -365,6 +365,67 @@ MIDDLE_MODEL="lmstudio/Meta-Llama-3.1-70B-Instruct"
 SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
 ```
 
+### OpenRouter Reasoning Tokens
+
+OpenRouter provides unified reasoning support across all providers. Claude Code Proxy implements full compatibility with OpenRouter's reasoning tokens specification.
+
+**Reasoning Token Features:**
+
+1. **Preserving Reasoning Blocks**: Automatically preserves reasoning tokens when `REASONING_EXCLUDE="false"`
+   - Reasoning appears in `choices[].message.reasoning` field
+   - Enables tool-calling workflows with continued reasoning
+   - Maintains conversation integrity across multiple API calls
+
+2. **Unified Control**: Single configuration works across all reasoning-capable models:
+   - OpenAI (GPT-5, o1, o3)
+   - Anthropic (Claude 3.7, 4.x)
+   - Qwen, DeepSeek, xAI Grok, MiniMax, Kimi
+
+3. **Dual Control Modes**:
+   - **Effort-based**: `REASONING_EFFORT="high/medium/low"`
+     - OpenAI-style proportional reasoning
+     - ~20%/50%/80% of max_tokens for reasoning
+
+   - **Token-based**: `REASONING_MAX_TOKENS="8000"`
+     - Anthropic/OpenRouter-style direct control
+     - Exact token budget for reasoning
+     - Capped at 32,000 tokens max, 1,024 tokens min
+
+**Example: Tool Calling with Reasoning**
+
+```python
+# First request with reasoning
+response = client.chat.completions.create(
+    model="openai/gpt-5",
+    messages=[{"role": "user", "content": "What's 9.9 vs 9.11?"}],
+    extra_body={
+        "reasoning": {
+            "effort": "high",
+            "exclude": False
+        }
+    }
+)
+
+# Reasoning is preserved in response
+reasoning = response.choices[0].message.reasoning
+content = response.choices[0].message.content
+
+# Pass reasoning back for continued reasoning
+response2 = client.chat.completions.create(
+    model="openai/gpt-5",
+    messages=[
+        {"role": "user", "content": f"Context: {reasoning}"},
+        {"role": "user", "content": "Explain this comparison"}
+    ],
+    extra_body={
+        "reasoning": {
+            "effort": "high",
+            "exclude": False
+        }
+    }
+)
+```
+
 ---
 
 ## 💡 Usage Examples
