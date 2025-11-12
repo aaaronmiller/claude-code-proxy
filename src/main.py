@@ -55,6 +55,22 @@ def main(env_updates: dict = None):
     print(f"   Big Model (opus): {config.big_model}")
     print(f"   Middle Model (sonnet): {config.middle_model}")
     print(f"   Small Model (haiku): {config.small_model}")
+
+    # Show hybrid mode status
+    hybrid_enabled = (config.enable_big_endpoint or
+                     config.enable_middle_endpoint or
+                     config.enable_small_endpoint)
+    if hybrid_enabled:
+        print(f"   Hybrid Mode: {'Enabled' if hybrid_enabled else 'Disabled'}")
+        if config.enable_big_endpoint:
+            print(f"   ├─ BIG: {config.big_endpoint}")
+        if config.enable_middle_endpoint:
+            print(f"   ├─ MIDDLE: {config.middle_endpoint}")
+        if config.enable_small_endpoint:
+            print(f"   └─ SMALL: {config.small_endpoint}")
+    else:
+        print(f"   Hybrid Mode: Disabled (single provider)")
+
     if config.reasoning_effort:
         print(f"   Reasoning Effort: {config.reasoning_effort}")
     if config.reasoning_max_tokens:
