@@ -89,7 +89,71 @@ class CrosstalkOrchestrator:
 
         Returns:
             Session ID for the new crosstalk
+
+        Raises:
+            ValueError: If input validation fails
         """
+        # Validate models
+        if not models:
+            raise ValueError("models list cannot be empty")
+
+        if len(models) < 2:
+            raise ValueError(f"At least 2 models required for crosstalk, got {len(models)}")
+
+        if len(models) > 5:
+            raise ValueError(f"Too many models ({len(models)}). Maximum 5 for crosstalk")
+
+        # Validate model names
+        valid_models = {"big", "middle", "small"}
+        for model in models:
+            if model.lower() not in valid_models:
+                raise ValueError(f"Invalid model name: {model}. Must be one of {valid_models}")
+
+        # Validate iterations
+        if iterations < 1:
+            raise ValueError(f"Iterations must be at least 1, got {iterations}")
+
+        if iterations > 100:
+            raise ValueError(f"Iterations too high ({iterations}). Maximum is 100")
+
+        # Validate paradigm
+        try:
+            paradigm_enum = CrosstalkParadigm(paradigm)
+        except ValueError:
+            valid_paradigms = [p.value for p in CrosstalkParadigm]
+            raise ValueError(f"Invalid paradigm: {paradigm}. Must be one of: {', '.join(valid_paradigms)}")
+
+        # Validate topic length
+        if len(topic) > 1000:
+            raise ValueError(f"Topic too long ({len(topic)} chars). Maximum is 1000")
+
+        # Validate system_prompts
+        if system_prompts is not None:
+            # Ensure all models in system_prompts are valid
+            for model, prompt in system_prompts.items():
+                if not isinstance(prompt, str):
+                    raise ValueError(f"System prompt for {model} must be a string")
+
+                if len(prompt) > 1000:
+                    # Warning: prompt is too long (may cause issues)
+                    pass  # Still allowed but may cause problems
+
+                # Check model name is valid
+                if model.lower() not in valid_models:
+                    raise ValueError(f"Invalid model in system_prompts: {model}")
+
+        # Load system prompts if not provided
+        if system_prompts is None:
+            system_prompts = {}
+            for model in models:
+                prompt = get_model_system_prompt(model, self.config)
+                if prompt:
+                    system_prompts[model] = prompt
+
+        # Check for duplicate models
+        if len(models) != len(set(models)):
+            raise ValueError(f"Duplicate models in list: {models}")
+
         session_id = str(uuid.uuid4())
 
         # Load system prompts if not provided
