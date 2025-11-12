@@ -7,27 +7,78 @@ from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai._exceptions import APIError, RateLimitError, AuthenticationError, BadRequestError
 
 class OpenAIClient:
-    """Async OpenAI client with cancellation support."""
-    
+    """Async OpenAI client with cancellation support and multi-endpoint routing."""
+
     def __init__(self, api_key: str, base_url: str, timeout: int = 90, api_version: Optional[str] = None):
-        self.api_key = api_key
-        self.base_url = base_url
-        
-        # Detect if using Azure and instantiate the appropriate client
+        self.default_api_key = api_key
+        self.default_base_url = base_url
+        self.default_api_version = api_version
+        self.timeout = timeout
+
+        # Single default client for backward compatibility
+        self.client = self._create_client(api_key, base_url, api_version)
+
+        # Per-model clients for hybrid deployments
+        self.big_client = None
+        self.middle_client = None
+        self.small_client = None
+
+        self.active_requests: Dict[str, asyncio.Event] = {}
+
+    def _create_client(self, api_key: str, base_url: str, api_version: Optional[str] = None):
+        """Create an OpenAI or Azure client."""
         if api_version:
-            self.client = AsyncAzureOpenAI(
+            return AsyncAzureOpenAI(
                 api_key=api_key,
                 azure_endpoint=base_url,
                 api_version=api_version,
-                timeout=timeout
+                timeout=self.timeout
             )
         else:
-            self.client = AsyncOpenAI(
+            return AsyncOpenAI(
                 api_key=api_key,
                 base_url=base_url,
-                timeout=timeout
+                timeout=self.timeout
             )
-        self.active_requests: Dict[str, asyncio.Event] = {}
+
+    def configure_per_model_clients(self, config):
+        """Configure per-model clients for hybrid deployments."""
+        # Big model client
+        if config.enable_big_endpoint:
+            self.big_client = self._create_client(
+                config.big_api_key,
+                config.big_endpoint,
+                config.azure_api_version if config.big_endpoint == config.openai_base_url else None
+            )
+
+        # Middle model client
+        if config.enable_middle_endpoint:
+            self.middle_client = self._create_client(
+                config.middle_api_key,
+                config.middle_endpoint,
+                config.azure_api_version if config.middle_endpoint == config.openai_base_url else None
+            )
+
+        # Small model client
+        if config.enable_small_endpoint:
+            self.small_client = self._create_client(
+                config.small_api_key,
+                config.small_endpoint,
+                config.azure_api_version if config.small_endpoint == config.openai_base_url else None
+            )
+
+    def get_client_for_model(self, model: str) -> Any:
+        """Get the appropriate client for a model (BIG, MIDDLE, or SMALL)."""
+        # Check for exact model matches first
+        if self.big_client and model == config.big_model:
+            return self.big_client
+        if self.middle_client and model == config.middle_model:
+            return self.middle_client
+        if self.small_client and model == config.small_model:
+            return self.small_client
+
+        # Fallback to default client
+        return self.client
     
     async def create_chat_completion(self, request: Dict[str, Any], request_id: Optional[str] = None) -> Dict[str, Any]:
         """Send chat completion to OpenAI API with cancellation support."""
