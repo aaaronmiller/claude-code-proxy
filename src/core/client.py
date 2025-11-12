@@ -80,11 +80,11 @@ class OpenAIClient:
         # Fallback to default client
         return self.client
     
-    async def create_chat_completion(self, request: Dict[str, Any], request_id: Optional[str] = None) -> Dict[str, Any]:
+    async def create_chat_completion(self, request: Dict[str, Any], request_id: Optional[str] = None, config=None) -> Dict[str, Any]:
         """Send chat completion to OpenAI API with cancellation support."""
 
         # Get the appropriate client based on the model
-        client = self.get_client_for_model(request.get('model', ''))
+        client = self.get_client_for_model(request.get('model', ''), config)
 
         # Create cancellation token if request_id provided
         if request_id:
