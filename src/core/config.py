@@ -37,6 +37,10 @@ class Config:
         self.verbosity = os.environ.get("VERBOSITY")
         # Whether to exclude reasoning tokens from response (default: false)
         self.reasoning_exclude = os.environ.get("REASONING_EXCLUDE", "false").lower() == "true"
+        # Optional: Maximum tokens for reasoning (Anthropic/OpenRouter style)
+        # Set to integer (e.g., 2000, 8000) or leave empty for provider default
+        reasoning_max_tokens = os.environ.get("REASONING_MAX_TOKENS")
+        self.reasoning_max_tokens = int(reasoning_max_tokens) if reasoning_max_tokens else None
         
     def validate_api_key(self):
         """Basic API key validation"""
