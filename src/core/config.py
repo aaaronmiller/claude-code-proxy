@@ -34,6 +34,23 @@ class Config:
         self.middle_model = os.environ.get("MIDDLE_MODEL", self.big_model)
         self.small_model = os.environ.get("SMALL_MODEL", "gpt-4o-mini")
 
+        # Optional: Per-model routing for hybrid deployments
+        # Enable per-model endpoints (set to "true" to enable)
+        self.enable_big_endpoint = os.environ.get("ENABLE_BIG_ENDPOINT", "false").lower() == "true"
+        self.enable_middle_endpoint = os.environ.get("ENABLE_MIDDLE_ENDPOINT", "false").lower() == "true"
+        self.enable_small_endpoint = os.environ.get("ENABLE_SMALL_ENDPOINT", "false").lower() == "true"
+
+        # Per-model endpoints (if enabled above)
+        self.big_endpoint = os.environ.get("BIG_ENDPOINT", self.openai_base_url)
+        self.middle_endpoint = os.environ.get("MIDDLE_ENDPOINT", self.openai_base_url)
+        self.small_endpoint = os.environ.get("SMALL_ENDPOINT", self.openai_base_url)
+
+        # Per-model API keys (if enabled above)
+        # If not set, falls back to main OPENAI_API_KEY
+        self.big_api_key = os.environ.get("BIG_API_KEY", self.openai_api_key)
+        self.middle_api_key = os.environ.get("MIDDLE_API_KEY", self.openai_api_key)
+        self.small_api_key = os.environ.get("SMALL_API_KEY", self.openai_api_key)
+
         # GPT-5 reasoning configuration
         # Options: "low", "medium", "high", or None to disable
         self.reasoning_effort = os.environ.get("REASONING_EFFORT")
