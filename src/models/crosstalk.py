@@ -3,7 +3,7 @@ Pydantic models for crosstalk API requests and responses.
 """
 
 from typing import Dict, List, Optional, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CrosstalkSetupRequest(BaseModel):
