@@ -51,6 +51,25 @@ class Config:
         self.middle_api_key = os.environ.get("MIDDLE_API_KEY", self.openai_api_key)
         self.small_api_key = os.environ.get("SMALL_API_KEY", self.openai_api_key)
 
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # CUSTOM SYSTEM PROMPTS
+        # ═══════════════════════════════════════════════════════════════════════════════
+
+        # Enable custom system prompts for each model
+        self.enable_custom_big_prompt = os.environ.get("ENABLE_CUSTOM_BIG_PROMPT", "false").lower() == "true"
+        self.enable_custom_middle_prompt = os.environ.get("ENABLE_CUSTOM_MIDDLE_PROMPT", "false").lower() == "true"
+        self.enable_custom_small_prompt = os.environ.get("ENABLE_CUSTOM_SMALL_PROMPT", "false").lower() == "true"
+
+        # Custom system prompt files (load from file path, use "path:" prefix)
+        self.big_system_prompt_file = os.environ.get("BIG_SYSTEM_PROMPT_FILE", "")
+        self.middle_system_prompt_file = os.environ.get("MIDDLE_SYSTEM_PROMPT_FILE", "")
+        self.small_system_prompt_file = os.environ.get("SMALL_SYSTEM_PROMPT_FILE", "")
+
+        # Inline system prompts (alternative to files)
+        self.big_system_prompt = os.environ.get("BIG_SYSTEM_PROMPT", "")
+        self.middle_system_prompt = os.environ.get("MIDDLE_SYSTEM_PROMPT", "")
+        self.small_system_prompt = os.environ.get("SMALL_SYSTEM_PROMPT", "")
+
         # GPT-5 reasoning configuration
         # Options: "low", "medium", "high", or None to disable
         self.reasoning_effort = os.environ.get("REASONING_EFFORT")
