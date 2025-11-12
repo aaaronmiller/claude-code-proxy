@@ -843,6 +843,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ✅ **99 configuration modes** for flexibility
 ✅ **Interactive selector** with beautiful UI + filtering
 ✅ **Local-only mode** (hide/show OpenRouter models)
+✅ **HYBRID MODE** - Mix local and remote models simultaneously!
+✅ **Per-model routing** - Each model to different provider
 ✅ **Free local models** (Ollama, LMStudio)
 ✅ **Multi-provider support** (OpenAI, Azure, OpenRouter, local)
 ✅ **Function calling** & streaming support
