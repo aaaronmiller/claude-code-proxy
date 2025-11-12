@@ -67,14 +67,14 @@ class OpenAIClient:
                 config.azure_api_version if config.small_endpoint == config.openai_base_url else None
             )
 
-    def get_client_for_model(self, model: str) -> Any:
+    def get_client_for_model(self, model: str, config=None) -> Any:
         """Get the appropriate client for a model (BIG, MIDDLE, or SMALL)."""
         # Check for exact model matches first
-        if self.big_client and model == config.big_model:
+        if self.big_client and config and model == config.big_model:
             return self.big_client
-        if self.middle_client and model == config.middle_model:
+        if self.middle_client and config and model == config.middle_model:
             return self.middle_client
-        if self.small_client and model == config.small_model:
+        if self.small_client and config and model == config.small_model:
             return self.small_client
 
         # Fallback to default client
