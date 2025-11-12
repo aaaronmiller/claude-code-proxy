@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Optional
 
 
+class SecurityError(Exception):
+    """Raised when a security violation is detected (e.g., path traversal)."""
+    pass
+
+
 def load_system_prompt(prompt_source: str) -> str:
     """
     Load system prompt from various sources.
