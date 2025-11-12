@@ -326,16 +326,45 @@ class CrosstalkOrchestrator:
 
         messages.append({"role": "user", "content": prompt})
 
+        # Determine which model to use based on model size
+        model_id = self.config.big_model if model == "big" else \
+                    self.config.middle_model if model == "middle" else \
+                    self.config.small_model
+
         request = {
-            "model": self.config.big_model if model == "big" else
-                    self.config.middle_model if model == "middle" else
-                    self.config.small_model,
+            "model": model_id,
             "messages": messages,
             "max_tokens": 2000,
         }
 
-        response = await self.openai_client.create_chat_completion(request, config=self.config)
-        return response["choices"][0]["message"]["content"]
+        try:
+            response = await self.openai_client.create_chat_completion(request, config=self.config)
+
+            # Extract response content with error handling
+            if not response.get("choices"):
+                raise RuntimeError(f"No choices in response from {model_id}")
+
+            choice = response["choices"][0]
+
+            if "message" not in choice:
+                raise RuntimeError(f"No message in response from {model_id}")
+
+            if "content" not in choice["message"]:
+                raise RuntimeError(f"No content in response from {model_id}")
+
+            content = choice["message"]["content"]
+
+            if not content:
+                raise RuntimeError(f"Empty response from {model_id}")
+
+            return content
+
+        except KeyError as e:
+            raise RuntimeError(f"Malformed response from {model_id}: missing field {str(e)}")
+        except (IndexError, TypeError) as e:
+            raise RuntimeError(f"Invalid response structure from {model_id}: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to call {model_id}: {str(e)}")
 
     def _build_conversation_context(self, session: CrosstalkSession, max_iterations: int) -> str:
         """Build conversation context from history."""
