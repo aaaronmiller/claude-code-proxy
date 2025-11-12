@@ -241,5 +241,125 @@ async def root():
             "count_tokens": "/v1/messages/count_tokens",
             "health": "/health",
             "test_connection": "/test-connection",
+            "crosstalk": {
+                "setup": "/v1/crosstalk/setup",
+                "run": "/v1/crosstalk/{session_id}/run",
+                "status": "/v1/crosstalk/{session_id}/status",
+                "list": "/v1/crosstalk/list",
+                "delete": "/v1/crosstalk/{session_id}/delete",
+            },
         },
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CROSSTALK ENDPOINTS - Model-to-Model Conversations
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/v1/crosstalk/setup")
+async def setup_crosstalk(
+    request: CrosstalkSetupRequest,
+) -> CrosstalkSetupResponse:
+    """
+    Setup a new crosstalk session.
+
+    This endpoint configures a model-to-model conversation using Exchange-of-Thought
+    (EoT) paradigms: Memory, Report, Relay, or Debate.
+    """
+    try:
+        session_id = await crosstalk_orchestrator.setup_crosstalk(
+            models=request.models,
+            system_prompts=request.system_prompts,
+            paradigm=request.paradigm,
+            iterations=request.iterations,
+            topic=request.topic
+        )
+
+        return CrosstalkSetupResponse(
+            session_id=session_id,
+            status="configured",
+            models=request.models,
+            paradigm=request.paradigm,
+            iterations=request.iterations
+        )
+
+    except Exception as e:
+        logger.error(f"Crosstalk setup failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/v1/crosstalk/{session_id}/run")
+async def run_crosstalk(
+    session_id: str,
+) -> CrosstalkRunResponse:
+    """
+    Execute a configured crosstalk session.
+
+    Runs the model-to-model conversation and returns the complete transcript.
+    """
+    try:
+        start_time = time.time()
+        conversation = await crosstalk_orchestrator.execute_crosstalk(session_id)
+        duration = time.time() - start_time
+
+        return CrosstalkRunResponse(
+            session_id=session_id,
+            status="completed",
+            conversation=conversation,
+            duration_seconds=duration
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Crosstalk execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/v1/crosstalk/{session_id}/status")
+async def crosstalk_status(
+    session_id: str,
+) -> CrosstalkStatusResponse:
+    """
+    Get the status of a crosstalk session.
+    """
+    status = crosstalk_orchestrator.get_session_status(session_id)
+
+    if "error" in status:
+        raise HTTPException(status_code=404, detail=status["error"])
+
+    return CrosstalkStatusResponse(**status)
+
+
+@router.get("/v1/crosstalk/list")
+async def list_crosstalk_sessions() -> CrosstalkListResponse:
+    """
+    List all active crosstalk sessions.
+    """
+    sessions = []
+    for session_id in crosstalk_orchestrator.active_sessions:
+        status = crosstalk_orchestrator.get_session_status(session_id)
+        sessions.append(status)
+
+    return CrosstalkListResponse(
+        sessions=sessions,
+        total=len(sessions)
+    )
+
+
+@router.delete("/v1/crosstalk/{session_id}/delete")
+async def delete_crosstalk_session(
+    session_id: str,
+) -> CrosstalkDeleteResponse:
+    """
+    Delete a completed or errored crosstalk session.
+    """
+    success = crosstalk_orchestrator.delete_session(session_id)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return CrosstalkDeleteResponse(
+        success=True,
+        message="Session deleted successfully"
+    )
