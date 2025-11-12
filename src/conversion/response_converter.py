@@ -220,6 +220,7 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     http_request: Request,
     openai_client,
     request_id: str,
+    config=None,
 ):
     """Convert OpenAI streaming response to Claude streaming format with cancellation support."""
 
