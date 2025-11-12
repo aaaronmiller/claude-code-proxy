@@ -103,20 +103,40 @@ claude "Write a Python function to calculate fibonacci numbers"
 
 #### 🤖 GPT-5 & Advanced Reasoning
 
-Support for GPT-5's high-reasoning mode and other advanced reasoning models:
+Full support for reasoning-capable models across all providers via OpenRouter's unified API:
 
 ```bash
-REASONING_EFFORT="high"     # low, medium, high
-VERBOSITY="high"            # Response detail level
-REASONING_EXCLUDE="false"   # Show/hide reasoning tokens
+REASONING_EFFORT="high"        # low, medium, high
+REASONING_MAX_TOKENS="8000"    # Optional: fine-grained token control
+VERBOSITY="high"               # Response detail level
+REASONING_EXCLUDE="false"      # Show/hide reasoning tokens
 ```
 
-**Supported reasoning models:**
-- OpenAI GPT-5
-- OpenAI o3 series (o3, o3-mini)
-- Qwen thinking models (qwen-2.5-thinking)
-- DeepSeek V3 series
+**Comprehensive reasoning support:**
+
+**OpenAI Models:**
+- GPT-5 family (openai/gpt-5)
+- o1 series (openai/o1, openai/o1-mini)
+- o3 series (openai/o3, openai/o3-mini)
+
+**Anthropic Models:**
+- Claude 3.7 Sonnet/Opus/Haiku
+- Claude 4.x series
+- Claude 4.1 series
+
+**OpenRouter & Other Providers:**
+- Qwen3 and Qwen-2.5 thinking models
+- DeepSeek V3, V3.1, and R1 variants
+- xAI Grok with reasoning
+- MiniMax M2 thinking models
+- Kimi K2 thinking models
 - Local models (Ollama Qwen 2.5, DeepSeek V2.5)
+
+**Unified Reasoning Control:**
+- Uses OpenRouter's `reasoning` object for cross-provider compatibility
+- Supports both `effort` (OpenAI-style) and `max_tokens` (Anthropic-style)
+- Auto-detects reasoning-capable models from model metadata
+- Preserves reasoning blocks in responses for tool-calling workflows
 
 #### 📦 Mode Templates (10 Pre-Built Configurations)
 
