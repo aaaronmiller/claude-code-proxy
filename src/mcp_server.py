@@ -12,8 +12,7 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from mcp.server import Server
-from mcp.server.models import Tool, ToolInput
-from mcp.types import TextContent
+from mcp.types import Tool, TextContent
 from src.conversation.crosstalk import crosstalk_orchestrator, CrosstalkParadigm
 from src.core.config import config
 
