@@ -182,7 +182,8 @@ async def test_connection():
                 "model": config.small_model,
                 "messages": [{"role": "user", "content": "Hello"}],
                 "max_tokens": 5,
-            }
+            },
+            config=config
         )
 
         return {
