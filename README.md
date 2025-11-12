@@ -195,9 +195,26 @@ Beautiful terminal UI with:
 
 - **Color-coded interface** - 16-color palette
 - **ASCII art headers** - Professional appearance
-- **Browse by capability** - Filter by reasoning, vision, free
+- **Browse by capability** - Filter by reasoning, vision, free, local
 - **Search functionality** - Find specific models
+- **Local models filter** - Show only LMStudio/Ollama models (Option 6)
+- **OpenRouter toggle** - Hide/show marketplace models via config
+- **Template system** - One-click apply 10 pre-built configurations (Option 7)
+- **Smart recommendations** - Find free alternatives (Option 8)
 - **Visual feedback** - Clear status messages
+
+**Interactive selector features:**
+
+- **Option 1-3**: Select BIG/MIDDLE/SMALL models
+- **Option 4**: Configure reasoning settings (effort, max_tokens, exclude)
+- **Option 5**: View current selections
+- **Option 6**: Browse LOCAL models only (LMStudio, Ollama)
+- **Option 7**: Use Template (pre-built configurations)
+- **Option 8**: Get Recommendations (find free alternatives)
+- **Option 9**: Save and apply configuration
+- **Option 10**: Load saved mode
+- **Option 11**: Save current as mode
+- **Option 12**: List all modes
 
 ---
 
