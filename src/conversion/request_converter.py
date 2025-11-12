@@ -143,6 +143,12 @@ def convert_claude_to_openai(
         openai_request["verbosity"] = model_manager.config.verbosity
         logger.debug(f"Added verbosity configuration: {model_manager.config.verbosity}")
 
+    # Inject custom system prompt if configured
+    from src.utils.system_prompt_loader import inject_system_prompt
+    model_size = _get_model_size_from_model_id(openai_model)
+    openai_messages = inject_system_prompt(openai_messages, model_size, model_manager.config)
+    openai_request["messages"] = openai_messages
+
     return openai_request
 
 
