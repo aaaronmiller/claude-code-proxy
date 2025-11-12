@@ -133,6 +133,9 @@ def convert_claude_to_openai(
             "enabled": True,
             "exclude": model_manager.config.reasoning_exclude
         }
+        # Add max_tokens for Anthropic/OpenRouter-style fine-grained control
+        if model_manager.config.reasoning_max_tokens:
+            openai_request["reasoning"]["max_tokens"] = model_manager.config.reasoning_max_tokens
         logger.debug(f"Added reasoning configuration: {openai_request['reasoning']}")
 
     # Add verbosity if configured (for providers that support it)
