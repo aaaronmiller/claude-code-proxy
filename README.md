@@ -365,6 +365,74 @@ MIDDLE_MODEL="lmstudio/Meta-Llama-3.1-70B-Instruct"
 SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
 ```
 
+### Hybrid Mode - Mix Local & Remote Models
+
+**The project NOW supports TRUE hybrid deployments!** Route each model (BIG/MIDDLE/SMALL) to different providers simultaneously:
+
+#### Hybrid Mode Examples
+
+**Example 1: BIG=Local Ollama, MIDDLE=OpenRouter, SMALL=LMStudio**
+
+```bash
+# Main API config
+OPENAI_API_KEY="your-openrouter-key"
+OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+
+# BIG model - Local Ollama
+ENABLE_BIG_ENDPOINT="true"
+BIG_ENDPOINT="http://localhost:11434/v1"
+BIG_API_KEY="dummy"
+BIG_MODEL="ollama/qwen2.5:72b"
+
+# MIDDLE model - OpenRouter
+ENABLE_MIDDLE_ENDPOINT="false"  # Uses default OPENAI_BASE_URL
+MIDDLE_MODEL="openai/gpt-5"
+
+# SMALL model - LMStudio
+ENABLE_SMALL_ENDPOINT="true"
+SMALL_ENDPOINT="http://127.0.0.1:1234/v1"
+SMALL_API_KEY="dummy"
+SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
+```
+
+**Example 2: All Different Providers**
+
+```bash
+# BIG - GPT-5 on OpenRouter
+ENABLE_BIG_ENDPOINT="true"
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-..."
+BIG_MODEL="openai/gpt-5"
+
+# MIDDLE - Azure OpenAI
+ENABLE_MIDDLE_ENDPOINT="true"
+MIDDLE_ENDPOINT="https://your-resource.openai.azure.com/openai/deployments/your-deployment"
+MIDDLE_API_KEY="your-azure-key"
+MIDDLE_MODEL="gpt-4"
+MIDDLE_AZURE_API_VERSION="2024-03-01-preview"
+
+# SMALL - Local LMStudio
+ENABLE_SMALL_ENDPOINT="true"
+SMALL_ENDPOINT="http://127.0.0.1:1234/v1"
+SMALL_API_KEY="dummy"
+SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
+```
+
+**How It Works:**
+
+1. **Enable per-model routing**: Set `ENABLE_BIG_ENDPOINT="true"`, etc.
+2. **Configure endpoint**: Set `BIG_ENDPOINT`, `MIDDLE_ENDPOINT`, `SMALL_ENDPOINT`
+3. **Optional API key**: Set per-model API keys or use main `OPENAI_API_KEY`
+4. **Automatic routing**: Proxy automatically routes each request to the correct provider
+
+**Benefits:**
+
+- ✅ **Cost optimization**: Use free local models for simple tasks
+- ✅ **Best-of-breed**: Pick the best model for each tier
+- ✅ **Failover**: If one provider is down, others still work
+- ✅ **Privacy**: Route sensitive requests to local models
+- ✅ **Performance**: Use local models for speed, cloud for complexity
+
 ### OpenRouter Reasoning Tokens
 
 OpenRouter provides unified reasoning support across all providers. Claude Code Proxy implements full compatibility with OpenRouter's reasoning tokens specification.
