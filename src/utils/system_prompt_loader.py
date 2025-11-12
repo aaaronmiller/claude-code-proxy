@@ -19,22 +19,57 @@ def load_system_prompt(prompt_source: str) -> str:
 
     Returns:
         The loaded prompt text
+
+    Raises:
+        ValueError: If prompt_source is None
+        FileNotFoundError: If file path doesn't exist
+        RuntimeError: If file cannot be read
+        SecurityError: If file path is unsafe (path traversal)
     """
+    if prompt_source is None:
+        raise ValueError("prompt_source cannot be None")
+
     if not prompt_source:
         return ""
 
     # Check if it's a file path
     if prompt_source.startswith("path:"):
         file_path = prompt_source[5:]  # Remove "path:" prefix
+
+        # Security: Check for path traversal attempts
+        import os
+        normalized_path = os.path.normpath(file_path)
+        if normalized_path.startswith("..") or normalized_path.startswith("/"):
+            raise SecurityError(f"Unsafe file path: {file_path}")
+
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read().strip()
+                content = f.read().strip()
+
+                # Validate content length
+                if len(content) > 50000:  # 50KB limit
+                    raise ValueError(f"System prompt too long ({len(content)} chars). Max 50,000 characters.")
+
+                if len(content) < 3:
+                    raise ValueError(f"System prompt too short ({len(content)} chars). Minimum 3 characters.")
+
+                return content
+
         except FileNotFoundError:
             raise FileNotFoundError(f"System prompt file not found: {file_path}")
+        except UnicodeDecodeError as e:
+            raise RuntimeError(f"File encoding error: {file_path}. Use UTF-8 encoding. {str(e)}")
         except Exception as e:
-            raise RuntimeError(f"Error loading system prompt from {file_path}: {e}")
+            raise RuntimeError(f"Error loading system prompt from {file_path}: {str(e)}")
 
     # Return as inline prompt
+    # Validate inline prompt length
+    if len(prompt_source) > 50000:
+        raise ValueError(f"Inline system prompt too long ({len(prompt_source)} chars). Max 50,000 characters.")
+
+    if len(prompt_source) < 3 and len(prompt_source) > 0:
+        raise ValueError(f"Inline system prompt too short ({len(prompt_source)} chars). Minimum 3 characters.")
+
     return prompt_source
 
 
