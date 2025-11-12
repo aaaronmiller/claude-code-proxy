@@ -48,6 +48,13 @@ class ModelSelector:
         self.models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
         self.env_file = os.path.join(os.path.dirname(__file__), "..", ".env")
         self.models_data = None
+        self.enable_openrouter_selection = True  # Default to true
+        # Load config to check if OpenRouter selection is enabled
+        try:
+            from src.core.config import config
+            self.enable_openrouter_selection = config.enable_openrouter_selection
+        except:
+            pass
         self.selections = {
             "big_model": None,
             "middle_model": None,
