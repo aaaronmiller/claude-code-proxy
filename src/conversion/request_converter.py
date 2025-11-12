@@ -237,6 +237,38 @@ def _model_supports_reasoning(model_id: str, model_manager=None) -> bool:
     return False
 
 
+def _get_model_size_from_model_id(model_id: str) -> str:
+    """
+    Determine model size from model ID.
+
+    Args:
+        model_id: The OpenAI model ID
+
+    Returns:
+        "big", "middle", or "small"
+    """
+    model_lower = model_id.lower()
+
+    # Match against configured models
+    if model_lower == config.big_model.lower():
+        return "big"
+    elif model_lower == config.middle_model.lower():
+        return "middle"
+    elif model_lower == config.small_model.lower():
+        return "small"
+
+    # Fallback: infer from model name patterns
+    if any(keyword in model_lower for keyword in ["opus", "gpt-5", "gpt-4.1"]):
+        return "big"
+    elif any(keyword in model_lower for keyword in ["sonnet", "gpt-4"]):
+        return "middle"
+    elif any(keyword in model_lower for keyword in ["haiku", "mini", "gpt-4o-mini"]):
+        return "small"
+
+    # Default to middle
+    return "middle"
+
+
 def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:
     """Convert Claude user message to OpenAI format."""
     if msg.content is None:
