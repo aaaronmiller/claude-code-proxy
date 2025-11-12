@@ -156,14 +156,6 @@ class CrosstalkOrchestrator:
 
         session_id = str(uuid.uuid4())
 
-        # Load system prompts if not provided
-        if system_prompts is None:
-            system_prompts = {}
-            for model in models:
-                prompt = get_model_system_prompt(model, self.config)
-                if prompt:
-                    system_prompts[model] = prompt
-
         session = CrosstalkSession(
             session_id=session_id,
             models=models,
