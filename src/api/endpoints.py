@@ -70,7 +70,7 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             # Streaming response - wrap in error handling
             try:
                 openai_stream = openai_client.create_chat_completion_stream(
-                    openai_request, request_id
+                    openai_request, request_id, config
                 )
                 return StreamingResponse(
                     convert_openai_streaming_to_claude_with_cancellation(
@@ -80,6 +80,7 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
                         http_request,
                         openai_client,
                         request_id,
+                        config,
                     ),
                     media_type="text/event-stream",
                     headers={
