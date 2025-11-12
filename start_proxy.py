@@ -89,6 +89,11 @@ Examples:
 
     args = parser.parse_args()
 
+    # Handle crosstalk operations
+    from src.cli.crosstalk_cli import handle_crosstalk_operations
+    if handle_crosstalk_operations(args):
+        return
+
     # Handle mode operations
     from src.utils.modes import handle_mode_operations
     if handle_mode_operations(args):
