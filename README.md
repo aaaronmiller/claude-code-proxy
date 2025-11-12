@@ -56,7 +56,19 @@ OPENAI_API_KEY="your-openrouter-key"
 OPENAI_BASE_URL="https://openrouter.ai/api/v1"
 BIG_MODEL="openai/gpt-5"
 REASONING_EFFORT="high"
+REASONING_MAX_TOKENS="8000"
 VERBOSITY="high"
+REASONING_EXCLUDE="false"
+```
+
+**Example: Anthropic Claude with Reasoning**
+```bash
+OPENAI_API_KEY="your-openrouter-key"
+OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+BIG_MODEL="anthropic/claude-4.1-sonnet"
+REASONING_EFFORT="high"
+REASONING_MAX_TOKENS="16000"
+REASONING_EXCLUDE="false"
 ```
 
 **Example: Free Local Models (No API costs!)**
@@ -64,6 +76,19 @@ VERBOSITY="high"
 BIG_MODEL="ollama/qwen2.5:72b"
 MIDDLE_MODEL="ollama/llama3.1:70b"
 SMALL_MODEL="ollama/llama3.1:8b"
+REASONING_EFFORT="medium"
+ENABLE_OPENROUTER_SELECTION="false"  # Hide marketplace, show only local
+```
+
+**Example: Local-Only Deployment**
+```bash
+# Hide all OpenRouter models from selector
+ENABLE_OPENROUTER_SELECTION="false"
+
+# Use only local models
+BIG_MODEL="ollama/qwen2.5:72b"
+MIDDLE_MODEL="ollama/llama3.1:70b"
+SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
 REASONING_EFFORT="medium"
 ```
 
