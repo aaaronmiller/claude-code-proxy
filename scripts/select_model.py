@@ -395,8 +395,8 @@ class ModelSelector:
         """Get models that support reasoning (including local models)."""
         all_models = (
             self.models_data.get("local_models", []) +
-            self.models_data.get("reasoning_models", []) +
-            self.models_data.get("verbosity_models", [])
+            (self.models_data.get("reasoning_models", []) if self.enable_openrouter_selection else []) +
+            (self.models_data.get("verbosity_models", []) if self.enable_openrouter_selection else [])
         )
         # Remove duplicates by id
         seen = set()
@@ -411,9 +411,9 @@ class ModelSelector:
         """Get all available models."""
         all_models = (
             self.models_data.get("local_models", []) +
-            self.models_data.get("reasoning_models", []) +
-            self.models_data.get("verbosity_models", []) +
-            self.models_data.get("standard_models", [])
+            (self.models_data.get("reasoning_models", []) if self.enable_openrouter_selection else []) +
+            (self.models_data.get("verbosity_models", []) if self.enable_openrouter_selection else []) +
+            (self.models_data.get("standard_models", []) if self.enable_openrouter_selection else [])
         )
         # Remove duplicates
         seen = set()
