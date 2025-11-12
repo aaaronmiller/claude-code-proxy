@@ -671,11 +671,15 @@ class ModelSelector:
             sys.exit(1)
 
         print(self.color(f"Loaded {self.models_data['summary']['total']} models", Colors.BRIGHT_GREEN))
-        print(self.color(f"  - {self.models_data['summary']['local_count']} local (LMStudio, Ollama)", Colors.BRIGHT_YELLOW))
-        print(self.color(f"  - {self.models_data['summary']['reasoning_count']} with reasoning", Colors.BRIGHT_GREEN))
-        print(self.color(f"  - {self.models_data['summary']['verbosity_count']} with verbosity", Colors.BRIGHT_GREEN))
-        print(self.color(f"  - {self.models_data['summary']['standard_count']} standard", Colors.BRIGHT_GREEN))
-        print(self.color(f"  - {self.models_data['summary']['free_count']} free models", Colors.BRIGHT_YELLOW))
+        if self.enable_openrouter_selection:
+            print(self.color(f"  - {self.models_data['summary']['local_count']} local (LMStudio, Ollama)", Colors.BRIGHT_YELLOW))
+            print(self.color(f"  - {self.models_data['summary']['reasoning_count']} with reasoning", Colors.BRIGHT_GREEN))
+            print(self.color(f"  - {self.models_data['summary']['verbosity_count']} with verbosity", Colors.BRIGHT_GREEN))
+            print(self.color(f"  - {self.models_data['summary']['standard_count']} standard", Colors.BRIGHT_GREEN))
+            print(self.color(f"  - {self.models_data['summary']['free_count']} free models", Colors.BRIGHT_YELLOW))
+        else:
+            print(self.color(f"  - Showing LOCAL models ONLY (OpenRouter selection disabled)", Colors.BRIGHT_YELLOW))
+            print(self.color(f"  - {self.models_data['summary']['local_count']} local models available", Colors.BRIGHT_YELLOW))
 
         # Selection loop
         while True:
