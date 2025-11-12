@@ -257,6 +257,18 @@ REASONING_EXCLUDE="false"        # Show/hide reasoning
 OPENAI_BASE_URL="https://openrouter.ai/api/v1"  # Your provider's base URL
 ```
 
+#### Selector Configuration
+```bash
+ENABLE_OPENROUTER_SELECTION="true"  # Show/hide OpenRouter models in selector
+```
+
+**Selector Configuration Options:**
+
+- **ENABLE_OPENROUTER_SELECTION**: Control which models appear in interactive selector
+  - `true`: Show all models (OpenRouter + local) (default)
+  - `false`: Show local models only (LMStudio, Ollama)
+  - Useful for local-only deployments or when you want to hide marketplace models
+
 #### Server Settings
 ```bash
 HOST="0.0.0.0"                   # Server host
