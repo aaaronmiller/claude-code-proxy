@@ -14,6 +14,16 @@ from src.conversion.response_converter import (
     convert_openai_streaming_to_claude_with_cancellation,
 )
 from src.core.model_manager import model_manager
+from src.conversation.crosstalk import crosstalk_orchestrator
+from src.models.crosstalk import (
+    CrosstalkSetupRequest,
+    CrosstalkSetupResponse,
+    CrosstalkRunResponse,
+    CrosstalkStatusResponse,
+    CrosstalkListResponse,
+    CrosstalkDeleteResponse,
+    CrosstalkError,
+)
 
 router = APIRouter()
 
