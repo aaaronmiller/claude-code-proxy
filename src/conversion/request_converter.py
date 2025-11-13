@@ -168,8 +168,12 @@ def _model_supports_reasoning(model_id: str, model_manager=None) -> bool:
     model_lower = model_id.lower()
 
     # Primary keyword patterns that indicate reasoning support
-    # OpenAI models
-    if any(keyword in model_lower for keyword in ["openai/gpt-5", "openai/o1", "openai/o3"]):
+    # OpenAI models - support both "openai/gpt-5" and "gpt-5" formats
+    if any(keyword in model_lower for keyword in [
+        "openai/gpt-5", "gpt-5",
+        "openai/o1", "o1",
+        "openai/o3", "o3"
+    ]):
         return True
 
     # Anthropic models (explicit support for all reasoning-capable variants)
