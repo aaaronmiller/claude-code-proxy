@@ -127,21 +127,33 @@ def convert_claude_to_openai(
             openai_request["tool_choice"] = "auto"
 
     # Add reasoning configuration if enabled and model supports it
+    # Note: reasoning parameter is only supported by OpenRouter and newer SDK versions
+    # For standard OpenAI API, skip reasoning parameters even if model supports them
     if model_manager.config.reasoning_effort and _model_supports_reasoning(openai_model, model_manager):
-        openai_request["reasoning"] = {
-            "effort": model_manager.config.reasoning_effort,
-            "enabled": True,
-            "exclude": model_manager.config.reasoning_exclude
-        }
-        # Add max_tokens for Anthropic/OpenRouter-style fine-grained control
-        if model_manager.config.reasoning_max_tokens:
-            openai_request["reasoning"]["max_tokens"] = model_manager.config.reasoning_max_tokens
-        logger.debug(f"Added reasoning configuration: {openai_request['reasoning']}")
+        # Check if we're using OpenRouter (which supports reasoning)
+        is_using_openrouter = "openrouter" in model_manager.config.openai_base_url.lower()
+
+        if is_using_openrouter:
+            openai_request["reasoning"] = {
+                "effort": model_manager.config.reasoning_effort,
+                "enabled": True,
+                "exclude": model_manager.config.reasoning_exclude
+            }
+            # Add max_tokens for Anthropic/OpenRouter-style fine-grained control
+            if model_manager.config.reasoning_max_tokens:
+                openai_request["reasoning"]["max_tokens"] = model_manager.config.reasoning_max_tokens
+            logger.debug(f"Added reasoning configuration: {openai_request['reasoning']}")
+        else:
+            logger.debug(f"Skipping reasoning parameter for {openai_model} (not using OpenRouter)")
 
     # Add verbosity if configured (for providers that support it)
     if model_manager.config.verbosity:
-        openai_request["verbosity"] = model_manager.config.verbosity
-        logger.debug(f"Added verbosity configuration: {model_manager.config.verbosity}")
+        is_using_openrouter = "openrouter" in model_manager.config.openai_base_url.lower()
+        if is_using_openrouter:
+            openai_request["verbosity"] = model_manager.config.verbosity
+            logger.debug(f"Added verbosity configuration: {model_manager.config.verbosity}")
+        else:
+            logger.debug(f"Skipping verbosity parameter (not using OpenRouter)")
 
     # Inject custom system prompt if configured
     from src.utils.system_prompt_loader import inject_system_prompt
