@@ -10,6 +10,10 @@ class Config:
         
         # Add Anthropic API key for client validation
         self.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
+        print(f"DEBUG: ANTHROPIC_API_KEY from os.environ.get(): '{self.anthropic_api_key}'")
+        print(f"DEBUG: ANTHROPIC_API_KEY in os.environ: {'ANTHROPIC_API_KEY' in os.environ}")
+        if 'ANTHROPIC_API_KEY' in os.environ:
+            print(f"DEBUG: os.environ['ANTHROPIC_API_KEY'] = '{os.environ['ANTHROPIC_API_KEY']}'")
         if not self.anthropic_api_key:
             print("Warning: ANTHROPIC_API_KEY not set. Client API key validation will be disabled.")
         

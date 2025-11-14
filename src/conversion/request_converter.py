@@ -84,9 +84,7 @@ def convert_claude_to_openai(
         "temperature": claude_request.temperature,
         "stream": claude_request.stream,
     }
-    logger.debug(
-        f"Converted Claude request to OpenAI format: {json.dumps(openai_request, indent=2, ensure_ascii=False)}"
-    )
+    logger.debug(f"Converted request: model={openai_model}, messages={len(openai_messages)}, max_tokens={openai_request['max_tokens']}")
     # Add optional parameters
     if claude_request.stop_sequences:
         openai_request["stop"] = claude_request.stop_sequences
@@ -127,33 +125,45 @@ def convert_claude_to_openai(
             openai_request["tool_choice"] = "auto"
 
     # Add reasoning configuration if enabled and model supports it
-    # Note: reasoning parameter is only supported by OpenRouter and newer SDK versions
+    # Note: reasoning parameter is only supported by OpenRouter via extra_body
     # For standard OpenAI API, skip reasoning parameters even if model supports them
     if model_manager.config.reasoning_effort and _model_supports_reasoning(openai_model, model_manager):
         # Check if we're using OpenRouter (which supports reasoning)
         is_using_openrouter = "openrouter" in model_manager.config.openai_base_url.lower()
 
         if is_using_openrouter:
-            openai_request["reasoning"] = {
+            # OpenRouter requires reasoning params in extra_body, not as top-level params
+            if "extra_body" not in openai_request:
+                openai_request["extra_body"] = {}
+            
+            reasoning_config = {
                 "effort": model_manager.config.reasoning_effort,
-                "enabled": True,
                 "exclude": model_manager.config.reasoning_exclude
             }
+            # Only add 'enabled' if it's actually needed by the provider
+            # Most providers infer enabled=true from presence of effort parameter
+            openai_request["extra_body"]["reasoning"] = reasoning_config
             # Add max_tokens for Anthropic/OpenRouter-style fine-grained control
             if model_manager.config.reasoning_max_tokens:
-                openai_request["reasoning"]["max_tokens"] = model_manager.config.reasoning_max_tokens
-            logger.debug(f"Added reasoning configuration: {openai_request['reasoning']}")
+                openai_request["extra_body"]["reasoning"]["max_tokens"] = model_manager.config.reasoning_max_tokens
+            logger.debug(f"Added reasoning configuration to extra_body: {openai_request['extra_body']['reasoning']}")
         else:
             logger.debug(f"Skipping reasoning parameter for {openai_model} (not using OpenRouter)")
 
     # Add verbosity if configured (for providers that support it)
-    if model_manager.config.verbosity:
+    # Only add verbosity for models that actually support it (reasoning models)
+    if model_manager.config.verbosity and _model_supports_reasoning(openai_model, model_manager):
         is_using_openrouter = "openrouter" in model_manager.config.openai_base_url.lower()
         if is_using_openrouter:
-            openai_request["verbosity"] = model_manager.config.verbosity
-            logger.debug(f"Added verbosity configuration: {model_manager.config.verbosity}")
+            # OpenRouter requires verbosity in extra_body
+            if "extra_body" not in openai_request:
+                openai_request["extra_body"] = {}
+            openai_request["extra_body"]["verbosity"] = model_manager.config.verbosity
+            logger.debug(f"Added verbosity configuration to extra_body: {model_manager.config.verbosity}")
         else:
             logger.debug(f"Skipping verbosity parameter (not using OpenRouter)")
+    elif model_manager.config.verbosity:
+        logger.debug(f"Skipping verbosity parameter for {openai_model} (model doesn't support reasoning)")
 
     # Inject custom system prompt if configured
     from src.utils.system_prompt_loader import inject_system_prompt

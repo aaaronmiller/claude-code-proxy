@@ -41,24 +41,31 @@ openai_client.configure_per_model_clients(config)
 async def validate_api_key(x_api_key: Optional[str] = Header(None), authorization: Optional[str] = Header(None)):
     """Validate the client's API key from either x-api-key header or Authorization header."""
     client_api_key = None
-    
+
     # Extract API key from headers
     if x_api_key:
         client_api_key = x_api_key
+        logger.debug(f"API key from x-api-key header: {client_api_key[:10]}...")
     elif authorization and authorization.startswith("Bearer "):
         client_api_key = authorization.replace("Bearer ", "")
-    
+        logger.debug(f"API key from Authorization header: {client_api_key[:10]}...")
+
     # Skip validation if ANTHROPIC_API_KEY is not set in the environment
     if not config.anthropic_api_key:
+        logger.debug("ANTHROPIC_API_KEY not set, skipping client validation")
         return
-        
+
+    logger.debug(f"Expected ANTHROPIC_API_KEY: {config.anthropic_api_key}")
+
     # Validate the client API key
     if not client_api_key or not config.validate_client_api_key(client_api_key):
-        logger.warning(f"Invalid API key provided by client")
+        logger.warning(f"Invalid API key provided by client. Expected: {config.anthropic_api_key}, Got: {client_api_key[:10] if client_api_key else 'None'}...")
         raise HTTPException(
             status_code=401,
             detail="Invalid API key. Please provide a valid Anthropic API key."
         )
+
+    logger.debug("API key validation passed")
 
 @router.post("/v1/messages")
 async def create_message(request: ClaudeMessagesRequest, http_request: Request, _: None = Depends(validate_api_key)):
@@ -66,23 +73,26 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
         logger.debug(
             f"Processing Claude request: model={request.model}, stream={request.stream}"
         )
-
         # Generate unique request ID for cancellation tracking
         request_id = str(uuid.uuid4())
+        logger.debug(f"Request ID: {request_id}")
 
         # Convert Claude request to OpenAI format
         openai_request = convert_claude_to_openai(request, model_manager)
 
         # Check if client disconnected before processing
         if await http_request.is_disconnected():
+            logger.warning(f"Client disconnected before processing request_id: {request_id}")
             raise HTTPException(status_code=499, detail="Client disconnected")
 
         if request.stream:
             # Streaming response - wrap in error handling
+            logger.debug(f"Starting streaming response for request_id: {request_id}")
             try:
                 openai_stream = openai_client.create_chat_completion_stream(
                     openai_request, request_id, config
                 )
+                logger.debug(f"OpenAI stream created for request_id: {request_id}")
                 return StreamingResponse(
                     convert_openai_streaming_to_claude_with_cancellation(
                         openai_stream,
@@ -103,32 +113,46 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
                 )
             except HTTPException as e:
                 # Convert to proper error response for streaming
-                logger.error(f"Streaming error: {e.detail}")
+                logger.error(f"Streaming HTTPException for request_id {request_id}: status={e.status_code}, detail={e.detail}")
                 import traceback
 
-                logger.error(traceback.format_exc())
+                logger.error(f"Streaming traceback: {traceback.format_exc()}")
                 error_message = openai_client.classify_openai_error(e.detail)
                 error_response = {
                     "type": "error",
                     "error": {"type": "api_error", "message": error_message},
                 }
                 return JSONResponse(status_code=e.status_code, content=error_response)
+            except Exception as e:
+                logger.error(f"Unexpected streaming error for request_id {request_id}: {e}")
+                import traceback
+                logger.error(f"Streaming traceback: {traceback.format_exc()}")
+                error_message = openai_client.classify_openai_error(str(e))
+                error_response = {
+                    "type": "error",
+                    "error": {"type": "api_error", "message": error_message},
+                }
+                return JSONResponse(status_code=500, content=error_response)
         else:
             # Non-streaming response
+            logger.debug(f"Starting non-streaming response for request_id: {request_id}")
             openai_response = await openai_client.create_chat_completion(
                 openai_request, request_id, config
             )
+            logger.debug(f"OpenAI response received for request_id: {request_id}")
             claude_response = convert_openai_to_claude_response(
                 openai_response, request
             )
+            logger.debug(f"Claude response created for request_id: {request_id}")
             return claude_response
-    except HTTPException:
+    except HTTPException as e:
+        logger.error(f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}")
         raise
     except Exception as e:
         import traceback
 
-        logger.error(f"Unexpected error processing request: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(f"Unexpected error processing request {request_id}: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         error_message = openai_client.classify_openai_error(str(e))
         raise HTTPException(status_code=500, detail=error_message)
 
