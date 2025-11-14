@@ -176,6 +176,9 @@ pyrightconfig.json
 # Claude Code Proxy specific
 # =========================
 
+# Build documentation folder
+docs/build/
+
 # Model databases (can be regenerated)
 models/*.json
 models/*.csv
