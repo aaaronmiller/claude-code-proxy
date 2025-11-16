@@ -15,6 +15,8 @@ from src.conversion.response_converter import (
     convert_openai_streaming_to_claude_with_cancellation,
 )
 from src.core.model_manager import model_manager
+from src.utils.request_logger import request_logger
+from src.utils.model_limits import get_model_limits
 from src.conversation.crosstalk import crosstalk_orchestrator
 from src.models.crosstalk import (
     CrosstalkSetupRequest,
@@ -69,16 +71,71 @@ async def validate_api_key(x_api_key: Optional[str] = Header(None), authorizatio
 
 @router.post("/v1/messages")
 async def create_message(request: ClaudeMessagesRequest, http_request: Request, _: None = Depends(validate_api_key)):
+    request_start_time = time.time()
+    request_id = str(uuid.uuid4())
+    
     try:
         logger.debug(
             f"Processing Claude request: model={request.model}, stream={request.stream}"
         )
-        # Generate unique request ID for cancellation tracking
-        request_id = str(uuid.uuid4())
         logger.debug(f"Request ID: {request_id}")
 
-        # Convert Claude request to OpenAI format
+        # Convert Claude request to OpenAI format and extract reasoning config
         openai_request = convert_claude_to_openai(request, model_manager)
+        
+        # Parse model to get routing info and reasoning config
+        routed_model, reasoning_config = model_manager.parse_and_map_model(request.model)
+        
+        # Determine endpoint
+        client = openai_client.get_client_for_model(routed_model, config)
+        endpoint = config.openai_base_url
+        if client == openai_client.big_client:
+            endpoint = config.big_endpoint
+        elif client == openai_client.middle_client:
+            endpoint = config.middle_endpoint
+        elif client == openai_client.small_client:
+            endpoint = config.small_endpoint
+        
+        # Extract input text for token counting
+        input_text = ""
+        if request.system:
+            if isinstance(request.system, str):
+                input_text += request.system
+            elif isinstance(request.system, list):
+                for block in request.system:
+                    if hasattr(block, "text"):
+                        input_text += block.text
+        
+        for msg in request.messages:
+            if isinstance(msg.content, str):
+                input_text += msg.content
+            elif isinstance(msg.content, list):
+                for block in msg.content:
+                    if hasattr(block, "text") and block.text:
+                        input_text += block.text
+        
+        # Log request start with compact format
+        request_logger.log_request_start(
+            request_id=request_id,
+            original_model=request.model,
+            routed_model=routed_model,
+            endpoint=endpoint,
+            reasoning_config=reasoning_config,
+            stream=request.stream,
+            input_text=input_text
+        )
+        
+        # Show context window usage visualization
+        context_limit, output_limit = get_model_limits(routed_model)
+        if context_limit > 0:
+            # Estimate input tokens from text
+            input_tokens = len(input_text) // 4  # Rough estimate
+            request_logger.log_context_window_usage(
+                request_id=request_id,
+                input_tokens=input_tokens,
+                context_limit=context_limit,
+                model_name=routed_model
+            )
 
         # Check if client disconnected before processing
         if await http_request.is_disconnected():
@@ -140,20 +197,68 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
                 openai_request, request_id, config
             )
             logger.debug(f"OpenAI response received for request_id: {request_id}")
+            
+            # Log completion with usage stats
+            duration_ms = (time.time() - request_start_time) * 1000
+            usage = openai_response.get("usage", {})
+            
+            request_logger.log_request_complete(
+                request_id=request_id,
+                usage=usage,
+                duration_ms=duration_ms,
+                status="OK"
+            )
+            
+            # Show output token usage visualization
+            context_limit, output_limit = get_model_limits(routed_model)
+            if output_limit > 0 and usage:
+                output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
+                thinking_tokens = 0
+                
+                # Extract thinking tokens
+                if "thinking_tokens" in usage:
+                    thinking_tokens = usage["thinking_tokens"]
+                elif "reasoning_tokens" in usage:
+                    thinking_tokens = usage["reasoning_tokens"]
+                elif "completion_tokens_details" in usage:
+                    details = usage["completion_tokens_details"]
+                    if isinstance(details, dict):
+                        thinking_tokens = details.get("reasoning_tokens", 0)
+                
+                request_logger.log_output_token_usage(
+                    request_id=request_id,
+                    output_tokens=output_tokens,
+                    output_limit=output_limit,
+                    thinking_tokens=thinking_tokens
+                )
+            
             claude_response = convert_openai_to_claude_response(
                 openai_response, request
             )
             logger.debug(f"Claude response created for request_id: {request_id}")
             return claude_response
     except HTTPException as e:
+        duration_ms = (time.time() - request_start_time) * 1000
+        request_logger.log_request_error(
+            request_id=request_id,
+            error=e.detail,
+            duration_ms=duration_ms
+        )
         logger.error(f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}")
         raise
     except Exception as e:
         import traceback
+        
+        duration_ms = (time.time() - request_start_time) * 1000
+        error_message = openai_client.classify_openai_error(str(e))
+        request_logger.log_request_error(
+            request_id=request_id,
+            error=error_message,
+            duration_ms=duration_ms
+        )
 
         logger.error(f"Unexpected error processing request {request_id}: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        error_message = openai_client.classify_openai_error(str(e))
         raise HTTPException(status_code=500, detail=error_message)
 
 

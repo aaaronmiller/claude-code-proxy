@@ -34,7 +34,19 @@ class ClaudeTool(BaseModel):
     input_schema: Dict[str, Any]
 
 class ClaudeThinkingConfig(BaseModel):
-    enabled: bool = True
+    """
+    Anthropic thinking tokens configuration.
+    
+    Supports extended thinking for Claude 3.7, Claude 4.x models.
+    Budget range: 1024-16000 tokens.
+    """
+    type: Literal["enabled"] = "enabled"
+    budget: Optional[int] = Field(
+        default=None,
+        description="Thinking token budget (1024-16000)",
+        ge=1024,
+        le=16000
+    )
 
 class ClaudeMessagesRequest(BaseModel):
     model: str

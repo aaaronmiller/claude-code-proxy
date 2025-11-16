@@ -20,10 +20,12 @@ Claude Code Proxy is a **drop-in replacement** that enables the official Claude 
 
 - ✅ **Use Claude Code with any provider** - Not just Anthropic's API
 - ✅ **Save money** - Use local models (Ollama/LMStudio) or cheaper providers
-- ✅ **GPT-5 & Advanced Reasoning** - Support for high-reasoning mode
+- ✅ **Advanced Reasoning** - Arbitrary thinking token budgets (50k, 350k, etc.)
+- ✅ **Rich Terminal Output** - Color-coded logs with progress bars
+- ✅ **Token Visualization** - See context window and output usage in real-time
 - ✅ **352+ models** - Browse and configure from our model database
 - ✅ **Smart templates** - One-click setups for common use cases
-- ✅ **Free alternatives** - Find cost-saving model suggestions
+- ✅ **Performance Metrics** - Tokens/sec, latency, thinking token tracking
 - ✅ **Local models** - Run everything on your machine
 
 ---

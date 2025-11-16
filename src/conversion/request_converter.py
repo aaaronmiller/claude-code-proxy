@@ -4,9 +4,124 @@ from venv import logger
 from src.core.constants import Constants
 from src.models.claude import ClaudeMessagesRequest, ClaudeMessage
 from src.core.config import config
+from src.models.reasoning import (
+    OpenAIReasoningConfig,
+    AnthropicThinkingConfig,
+    GeminiThinkingConfig
+)
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_reasoning_config(
+    openai_request: Dict[str, Any],
+    reasoning_config: Any,
+    model_name: str,
+    model_manager
+) -> None:
+    """
+    Apply reasoning configuration to OpenAI request based on provider type.
+    
+    Args:
+        openai_request: OpenAI request dictionary to modify
+        reasoning_config: ReasoningConfig object (OpenAI/Anthropic/Gemini)
+        model_name: Model name for logging
+        model_manager: ModelManager instance for config access
+    """
+    is_using_openrouter = "openrouter" in model_manager.config.openai_base_url.lower()
+    
+    # OpenAI o-series reasoning effort or arbitrary token budget
+    if isinstance(reasoning_config, OpenAIReasoningConfig):
+        if is_using_openrouter:
+            # OpenRouter requires reasoning params in extra_body
+            if "extra_body" not in openai_request:
+                openai_request["extra_body"] = {}
+            
+            reasoning_params = {}
+            if reasoning_config.effort:
+                reasoning_params["effort"] = reasoning_config.effort
+            if reasoning_config.max_tokens:
+                reasoning_params["max_tokens"] = reasoning_config.max_tokens
+            reasoning_params["exclude"] = reasoning_config.exclude
+            
+            openai_request["extra_body"]["reasoning"] = reasoning_params
+            
+            log_msg = f"Applied OpenAI reasoning config for {model_name}: "
+            if reasoning_config.effort:
+                log_msg += f"effort={reasoning_config.effort}"
+            if reasoning_config.max_tokens:
+                log_msg += f" max_tokens={reasoning_config.max_tokens}"
+            log_msg += f" exclude={reasoning_config.exclude}"
+            logger.info(log_msg)
+        else:
+            # For direct OpenAI API, check if Responses API is supported
+            # For now, we'll add it to extra_body as well
+            if "extra_body" not in openai_request:
+                openai_request["extra_body"] = {}
+            
+            reasoning_params = {}
+            if reasoning_config.effort:
+                reasoning_params["effort"] = reasoning_config.effort
+            if reasoning_config.max_tokens:
+                reasoning_params["max_tokens"] = reasoning_config.max_tokens
+            
+            openai_request["extra_body"]["reasoning"] = reasoning_params
+            
+            log_msg = f"Applied OpenAI reasoning config for {model_name}: "
+            if reasoning_config.effort:
+                log_msg += f"effort={reasoning_config.effort}"
+            if reasoning_config.max_tokens:
+                log_msg += f"max_tokens={reasoning_config.max_tokens}"
+            logger.info(log_msg)
+    
+    # Anthropic thinking tokens
+    elif isinstance(reasoning_config, AnthropicThinkingConfig):
+        # Anthropic uses 'thinking' parameter in request body
+        # For OpenRouter, this goes in extra_body
+        if is_using_openrouter:
+            if "extra_body" not in openai_request:
+                openai_request["extra_body"] = {}
+            
+            openai_request["extra_body"]["thinking"] = {
+                "type": reasoning_config.type,
+                "budget": reasoning_config.budget
+            }
+        else:
+            # For direct Anthropic API (if proxying), add to top level
+            openai_request["thinking"] = {
+                "type": reasoning_config.type,
+                "budget": reasoning_config.budget
+            }
+        
+        logger.info(
+            f"Applied Anthropic thinking config for {model_name}: "
+            f"budget={reasoning_config.budget}"
+        )
+    
+    # Gemini thinking budget
+    elif isinstance(reasoning_config, GeminiThinkingConfig):
+        # Gemini uses 'thinking_config' in generation_config
+        if "generation_config" not in openai_request:
+            if "extra_body" not in openai_request:
+                openai_request["extra_body"] = {}
+            openai_request["extra_body"]["generation_config"] = {}
+        
+        if "extra_body" in openai_request and "generation_config" in openai_request["extra_body"]:
+            openai_request["extra_body"]["generation_config"]["thinking_config"] = {
+                "budget": reasoning_config.budget
+            }
+        else:
+            if "generation_config" not in openai_request:
+                openai_request["generation_config"] = {}
+            openai_request["generation_config"]["thinking_config"] = {
+                "budget": reasoning_config.budget
+            }
+        
+        logger.info(
+            f"Applied Gemini thinking config for {model_name}: "
+            f"budget={reasoning_config.budget}"
+        )
 
 
 def convert_claude_to_openai(
@@ -14,8 +129,8 @@ def convert_claude_to_openai(
 ) -> Dict[str, Any]:
     """Convert Claude API request format to OpenAI format."""
 
-    # Map model
-    openai_model = model_manager.map_claude_model_to_openai(claude_request.model)
+    # Parse model name and extract reasoning configuration
+    openai_model, reasoning_config = model_manager.parse_and_map_model(claude_request.model)
 
     # Convert messages
     openai_messages = []
@@ -124,46 +239,17 @@ def convert_claude_to_openai(
         else:
             openai_request["tool_choice"] = "auto"
 
-    # Add reasoning configuration if enabled and model supports it
-    # Note: reasoning parameter is only supported by OpenRouter via extra_body
-    # For standard OpenAI API, skip reasoning parameters even if model supports them
-    if model_manager.config.reasoning_effort and _model_supports_reasoning(openai_model, model_manager):
-        # Check if we're using OpenRouter (which supports reasoning)
-        is_using_openrouter = "openrouter" in model_manager.config.openai_base_url.lower()
-
-        if is_using_openrouter:
-            # OpenRouter requires reasoning params in extra_body, not as top-level params
-            if "extra_body" not in openai_request:
-                openai_request["extra_body"] = {}
-            
-            reasoning_config = {
-                "effort": model_manager.config.reasoning_effort,
-                "exclude": model_manager.config.reasoning_exclude
-            }
-            # Only add 'enabled' if it's actually needed by the provider
-            # Most providers infer enabled=true from presence of effort parameter
-            openai_request["extra_body"]["reasoning"] = reasoning_config
-            # Add max_tokens for Anthropic/OpenRouter-style fine-grained control
-            if model_manager.config.reasoning_max_tokens:
-                openai_request["extra_body"]["reasoning"]["max_tokens"] = model_manager.config.reasoning_max_tokens
-            logger.debug(f"Added reasoning configuration to extra_body: {openai_request['extra_body']['reasoning']}")
-        else:
-            logger.debug(f"Skipping reasoning parameter for {openai_model} (not using OpenRouter)")
-
+    # Apply reasoning configuration if present
+    if reasoning_config:
+        _apply_reasoning_config(openai_request, reasoning_config, openai_model, model_manager)
+    
     # Add verbosity if configured (for providers that support it)
-    # Only add verbosity for models that actually support it (reasoning models)
+    # Note: Not all models support verbosity, and some only support specific values
+    # Skip verbosity to avoid compatibility issues - let the model use its default
     if model_manager.config.verbosity and _model_supports_reasoning(openai_model, model_manager):
-        is_using_openrouter = "openrouter" in model_manager.config.openai_base_url.lower()
-        if is_using_openrouter:
-            # OpenRouter requires verbosity in extra_body
-            if "extra_body" not in openai_request:
-                openai_request["extra_body"] = {}
-            openai_request["extra_body"]["verbosity"] = model_manager.config.verbosity
-            logger.debug(f"Added verbosity configuration to extra_body: {model_manager.config.verbosity}")
-        else:
-            logger.debug(f"Skipping verbosity parameter (not using OpenRouter)")
-    elif model_manager.config.verbosity:
-        logger.debug(f"Skipping verbosity parameter for {openai_model} (model doesn't support reasoning)")
+        # Only add verbosity for models that explicitly support it
+        # Many models don't support this parameter or have restrictions
+        logger.debug(f"Verbosity configured but skipped for {openai_model} to avoid compatibility issues")
 
     # Inject custom system prompt if configured
     from src.utils.system_prompt_loader import inject_system_prompt

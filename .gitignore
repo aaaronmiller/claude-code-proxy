@@ -176,8 +176,20 @@ pyrightconfig.json
 # Claude Code Proxy specific
 # =========================
 
+# Build artifacts and output
+build/
+dist/
+*.egg-info/
+.eggs/
+artifacts/
+output/
+
 # Build documentation folder
 docs/build/
+docs/_build/
+
+# Kiro spec build phases
+.kiro/specs/**/build/
 
 # Model databases (can be regenerated)
 models/*.json
@@ -189,6 +201,7 @@ modes.json
 modes_backup_*.json
 
 # User configurations
+.env
 .env.local
 .env.production
 .env.development
@@ -199,10 +212,42 @@ recommendations_*.json
 # Log files
 logs/
 *.log
+proxy_startup.log
 
 # Temporary files
 tmp/
 temp/
+.tmp/
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+test-results/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# AI IDE configuration folders (personal settings)
+.claude/
+.roo/
+.kilocode/
+.windsurf/
+.cursor/
+.qoder/
+.augment/
+.clinerules/
+.aider/
+
+# Kiro IDE - ignore personal steering rules but keep specs
+.kiro/steering/
+.kiro/.DS_Store
+.kiro/specs/**/.DS_Store
 
 # OS generated files
 .DS_Store
@@ -213,13 +258,16 @@ temp/
 ehthumbs.db
 Thumbs.db
 
+# Git helper scripts (contains tokens)
+.git-push-instructions.sh
+PUSH_TO_GITHUB.md
+
+# Backup files
+backups/
+*.backup
+*.bak
+
+# Context portal (if generated)
+context_portal/
+
 # End of https://www.toptal.com/developers/gitignore/api/python
-n
-.clinerules/byterover-rules.md
-.kilocode/rules/byterover-rules.md
-.roo/rules/byterover-rules.md
-.windsurf/rules/byterover-rules.md
-.cursor/rules/byterover-rules.mdc
-.kiro/steering/byterover-rules.md
-.qoder/rules/byterover-rules.md
-.augment/rules/byterover-rules.md

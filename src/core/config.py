@@ -7,6 +7,12 @@ class Config:
         self.openai_api_key = os.environ.get("OPENAI_API_KEY")
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
+        if self.openai_api_key == "pass" or self.openai_api_key == "your-api-key-here":
+            raise ValueError(
+                "OPENAI_API_KEY is set to a placeholder value. "
+                "Please set it to your actual API key from your provider "
+                "(OpenAI, OpenRouter, Azure, etc.)"
+            )
         
         # Add Anthropic API key for client validation
         self.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -74,18 +80,72 @@ class Config:
         self.middle_system_prompt = os.environ.get("MIDDLE_SYSTEM_PROMPT", "")
         self.small_system_prompt = os.environ.get("SMALL_SYSTEM_PROMPT", "")
 
-        # GPT-5 reasoning configuration
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # REASONING CONFIGURATION
+        # ═══════════════════════════════════════════════════════════════════════════════
+        
+        # Global reasoning effort level for OpenAI o-series models
         # Options: "low", "medium", "high", or None to disable
         self.reasoning_effort = os.environ.get("REASONING_EFFORT")
+        
         # Verbosity setting for responses (affects how detailed the output is)
         self.verbosity = os.environ.get("VERBOSITY")
+        
         # Whether to exclude reasoning tokens from response (default: false)
         self.reasoning_exclude = os.environ.get("REASONING_EXCLUDE", "false").lower() == "true"
-        # Optional: Maximum tokens for reasoning (Anthropic/OpenRouter style)
+        
+        # Maximum tokens for reasoning/thinking (Anthropic/Gemini style)
         # Set to integer (e.g., 2000, 8000) or leave empty for provider default
+        # Valid ranges: Anthropic (1024-16000), Gemini (0-24576)
         reasoning_max_tokens = os.environ.get("REASONING_MAX_TOKENS")
         self.reasoning_max_tokens = int(reasoning_max_tokens) if reasoning_max_tokens else None
         
+        # Per-model reasoning overrides (optional)
+        # These override the global reasoning_effort for specific models
+        self.big_model_reasoning = os.environ.get("BIG_MODEL_REASONING")
+        self.middle_model_reasoning = os.environ.get("MIDDLE_MODEL_REASONING")
+        self.small_model_reasoning = os.environ.get("SMALL_MODEL_REASONING")
+        
+        # Validate reasoning configuration
+        self._validate_reasoning_config()
+        
+    def _validate_reasoning_config(self):
+        """Validate reasoning configuration values"""
+        valid_effort_levels = {'low', 'medium', 'high'}
+        
+        # Validate global reasoning effort
+        if self.reasoning_effort and self.reasoning_effort.lower() not in valid_effort_levels:
+            print(f"Warning: Invalid REASONING_EFFORT '{self.reasoning_effort}'. "
+                  f"Valid options: {', '.join(sorted(valid_effort_levels))}. Ignoring.")
+            self.reasoning_effort = None
+        
+        # Validate per-model reasoning overrides
+        for model_type, reasoning_value in [
+            ('BIG_MODEL_REASONING', self.big_model_reasoning),
+            ('MIDDLE_MODEL_REASONING', self.middle_model_reasoning),
+            ('SMALL_MODEL_REASONING', self.small_model_reasoning)
+        ]:
+            if reasoning_value and reasoning_value.lower() not in valid_effort_levels:
+                print(f"Warning: Invalid {model_type} '{reasoning_value}'. "
+                      f"Valid options: {', '.join(sorted(valid_effort_levels))}. Ignoring.")
+                # Set to None to ignore invalid value
+                if model_type == 'BIG_MODEL_REASONING':
+                    self.big_model_reasoning = None
+                elif model_type == 'MIDDLE_MODEL_REASONING':
+                    self.middle_model_reasoning = None
+                elif model_type == 'SMALL_MODEL_REASONING':
+                    self.small_model_reasoning = None
+        
+        # Validate reasoning_max_tokens range
+        if self.reasoning_max_tokens is not None:
+            if self.reasoning_max_tokens < 0:
+                print(f"Warning: REASONING_MAX_TOKENS {self.reasoning_max_tokens} is negative. "
+                      f"Setting to 0.")
+                self.reasoning_max_tokens = 0
+            elif self.reasoning_max_tokens > 24576:
+                print(f"Warning: REASONING_MAX_TOKENS {self.reasoning_max_tokens} exceeds maximum (24576). "
+                      f"Will be adjusted per provider limits.")
+    
     def validate_api_key(self):
         """Basic API key validation"""
         if not self.openai_api_key:
