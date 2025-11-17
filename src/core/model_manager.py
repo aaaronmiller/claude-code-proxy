@@ -58,17 +58,10 @@ class ModelManager:
     
     def map_claude_model_to_openai(self, claude_model: str) -> str:
         """Map Claude model names to OpenAI model names based on BIG/SMALL pattern"""
-        # If it's already an OpenAI model, return as-is
-        if claude_model.startswith("gpt-") or claude_model.startswith("o1-"):
-            return claude_model
-
-        # If it's other supported models (ARK/Doubao/DeepSeek), return as-is
-        if (claude_model.startswith("ep-") or claude_model.startswith("doubao-") or 
-            claude_model.startswith("deepseek-")):
-            return claude_model
-        
         # Map based on model naming patterns
         model_lower = claude_model.lower()
+        
+        # Only map Claude-specific model names
         if 'haiku' in model_lower:
             return self.config.small_model
         elif 'sonnet' in model_lower:
@@ -76,8 +69,8 @@ class ModelManager:
         elif 'opus' in model_lower:
             return self.config.big_model
         else:
-            # Default to big model for unknown models
-            return self.config.big_model
+            # Pass through all other models as-is (including OpenRouter models, custom models, etc.)
+            return claude_model
     
     def parse_and_map_model(self, claude_model: str) -> Tuple[str, Optional[ReasoningConfig]]:
         """

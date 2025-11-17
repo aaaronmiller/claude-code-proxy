@@ -94,6 +94,12 @@ Examples:
     if handle_crosstalk_operations(args):
         return
 
+    # Handle model selector
+    if args.select_models:
+        from src.cli.model_selector import run_model_selector
+        run_model_selector()
+        return
+    
     # Handle mode operations
     from src.utils.modes import handle_mode_operations
     if handle_mode_operations(args):

@@ -192,9 +192,11 @@ docs/_build/
 .kiro/specs/**/build/
 
 # Model databases (can be regenerated)
-models/*.json
-models/*.csv
+models/
 !models/.gitkeep
+
+# Model usage tracking
+.model_usage.json
 
 # Saved mode configurations
 modes.json
@@ -244,10 +246,9 @@ test-results/
 .clinerules/
 .aider/
 
-# Kiro IDE - ignore personal steering rules but keep specs
-.kiro/steering/
-.kiro/.DS_Store
-.kiro/specs/**/.DS_Store
+# Kiro IDE - ignore personal settings and specs
+.kiro/
+!.kiro/.gitkeep
 
 # OS generated files
 .DS_Store
@@ -267,7 +268,25 @@ backups/
 *.backup
 *.bak
 
-# Context portal (if generated)
+# Context portal (generated database)
 context_portal/
+
+# User mode configurations
+modes.json
+
+# Audit and push helper files (contain tokens)
+*AUDIT*.md
+*PUSH*.md
+SECURITY*.md
+PUSH.sh
+
+# Development/testing files
+test_*.py
+.env.test
+.env.gemini
+switch_provider.sh
+
+# Troubleshooting docs (temporary)
+TROUBLESHOOTING.md
 
 # End of https://www.toptal.com/developers/gitignore/api/python

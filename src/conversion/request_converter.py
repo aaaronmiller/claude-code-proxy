@@ -9,6 +9,7 @@ from src.models.reasoning import (
     AnthropicThinkingConfig,
     GeminiThinkingConfig
 )
+from src.utils.model_filter import model_filter
 import logging
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,9 @@ def convert_claude_to_openai(
 
     # Parse model name and extract reasoning configuration
     openai_model, reasoning_config = model_manager.parse_and_map_model(claude_request.model)
+    
+    # Track model usage
+    model_filter.track_model_usage(openai_model)
 
     # Convert messages
     openai_messages = []

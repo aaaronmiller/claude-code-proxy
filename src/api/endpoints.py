@@ -114,7 +114,11 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
                     if hasattr(block, "text") and block.text:
                         input_text += block.text
         
-        # Log request start with compact format
+        # Get model limits
+        context_limit, output_limit = get_model_limits(routed_model)
+        input_tokens = len(input_text) // 4  # Rough estimate
+        
+        # Log request start with ALL info on ONE line
         request_logger.log_request_start(
             request_id=request_id,
             original_model=request.model,
@@ -122,20 +126,11 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             endpoint=endpoint,
             reasoning_config=reasoning_config,
             stream=request.stream,
-            input_text=input_text
+            input_text=input_text,
+            context_limit=context_limit,
+            output_limit=output_limit,
+            input_tokens=input_tokens
         )
-        
-        # Show context window usage visualization
-        context_limit, output_limit = get_model_limits(routed_model)
-        if context_limit > 0:
-            # Estimate input tokens from text
-            input_tokens = len(input_text) // 4  # Rough estimate
-            request_logger.log_context_window_usage(
-                request_id=request_id,
-                input_tokens=input_tokens,
-                context_limit=context_limit,
-                model_name=routed_model
-            )
 
         # Check if client disconnected before processing
         if await http_request.is_disconnected():
@@ -206,7 +201,8 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
                 request_id=request_id,
                 usage=usage,
                 duration_ms=duration_ms,
-                status="OK"
+                status="OK",
+                model_name=routed_model
             )
             
             # Show output token usage visualization

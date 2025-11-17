@@ -38,7 +38,7 @@ VERBOSITY="high"
 
 ### From shell environment:
 ```bash
-OPENAI_API_KEY=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
+OPENAI_API_KEY=sk-or-v1-YOUR-ACTUAL-KEY-HERE
 ```
 
 ## How It Works

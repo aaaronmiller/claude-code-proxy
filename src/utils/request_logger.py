@@ -7,6 +7,7 @@ model routing, and token usage in 3-5 lines maximum.
 
 import logging
 import os
+import hashlib
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -14,6 +15,7 @@ from datetime import datetime
 try:
     from rich.console import Console
     from rich.text import Text
+    from rich.style import Style
     RICH_AVAILABLE = True
     console = Console()
 except ImportError:
@@ -41,6 +43,26 @@ USE_RICH = RICH_AVAILABLE and LOG_STYLE == "rich" and COLOR_SCHEME != "none"
 
 class RequestLogger:
     """Compact request logger for terminal output with color support."""
+    
+    # Subtle color palette for session differentiation (using shades, not rainbow)
+    SESSION_COLORS = [
+        "bright_blue",      # Bright blue
+        "bright_cyan",      # Bright cyan
+        "bright_magenta",   # Bright magenta
+        "blue",             # Blue
+        "cyan",             # Cyan
+        "magenta",          # Magenta
+        "bright_white",     # Bright white
+        "white",            # White
+    ]
+    
+    @staticmethod
+    def _get_session_color(request_id: str) -> str:
+        """Get a consistent color for a session based on request ID prefix."""
+        # Use first 8 chars of request ID to determine session
+        session_hash = int(hashlib.md5(request_id[:8].encode()).hexdigest()[:8], 16)
+        color_idx = session_hash % len(RequestLogger.SESSION_COLORS)
+        return RequestLogger.SESSION_COLORS[color_idx]
     
     @staticmethod
     def _estimate_tokens(text: str) -> int:
@@ -71,124 +93,97 @@ class RequestLogger:
         endpoint: str,
         reasoning_config: Optional[Any] = None,
         stream: bool = False,
-        input_text: Optional[str] = None
+        input_text: Optional[str] = None,
+        context_limit: int = 0,
+        output_limit: int = 0,
+        input_tokens: int = 0
     ) -> None:
         """
-        Log request start with routing and reasoning info.
+        Log request start with ALL info on ONE line.
         
-        Format (2-4 lines with colors):
-        🔵 REQ abc123 | claude-opus-4:8k → gpt-4o @ openrouter.ai | STREAM
-        🟣 REASONING: Anthropic thinking=8192 tokens
-        📊 INPUT: ~1.2k tokens (4.8k chars)
+        Format (1 line with colors):
+        🔵 abc123 | claude-opus→gpt-4o | openrouter.ai | CTX:1.2k/200k (1%) | OUT:0/16k | THINK:8k
         """
         # Extract endpoint name
         endpoint_name = endpoint.replace("https://", "").replace("http://", "").split("/")[0]
-        mode = "STREAM" if stream else "SYNC"
         
+        # Format token counts
+        def fmt_tokens(count):
+            return f"{count/1000:.1f}k" if count >= 1000 else str(count)
+        
+        # Build ultra-compact single-line output
         if USE_RICH and console:
-            # Rich colored output
-            # Line 1: Request routing (Blue)
-            route_text = Text()
-            route_text.append("🔵 REQ ", style="bold blue")
-            route_text.append(f"{request_id[:8]} ", style="cyan")
-            route_text.append("| ", style="dim")
-            route_text.append(f"{original_model} ", style="yellow")
-            route_text.append("→ ", style="dim")
-            route_text.append(f"{routed_model} ", style="green")
-            route_text.append("@ ", style="dim")
-            route_text.append(f"{endpoint_name} ", style="magenta")
-            route_text.append("| ", style="dim")
-            route_text.append(mode, style="bold cyan" if stream else "cyan")
-            console.print(route_text)
+            # Get session-specific color
+            session_color = RequestLogger._get_session_color(request_id)
             
-            # Line 2: Reasoning config (Purple/Magenta)
+            text = Text()
+            text.append("🔵 ", style=f"bold {session_color}")
+            text.append(f"{request_id[:6]} ", style=session_color)
+            text.append(f"{original_model}→{routed_model} ", style="yellow")
+            text.append(f"@{endpoint_name} ", style="dim")
+            
+            # Context window usage
+            if context_limit > 0 and input_tokens > 0:
+                ctx_pct = (input_tokens / context_limit) * 100
+                ctx_color = "green" if ctx_pct < 50 else "yellow" if ctx_pct < 80 else "red"
+                text.append("| CTX:", style="dim")
+                text.append(f"{fmt_tokens(input_tokens)}/{fmt_tokens(context_limit)} ", style=ctx_color)
+                text.append(f"({ctx_pct:.0f}%) ", style=ctx_color)
+            
+            # Output limit
+            if output_limit > 0:
+                text.append("| OUT:", style="dim")
+                text.append(f"{fmt_tokens(output_limit)} ", style="cyan")
+            
+            # Thinking/reasoning quota
             if reasoning_config:
-                from src.models.reasoning import (
-                    OpenAIReasoningConfig,
-                    AnthropicThinkingConfig,
-                    GeminiThinkingConfig
-                )
-                
-                reasoning_text = Text()
-                reasoning_text.append("🟣 REASONING: ", style="bold magenta")
-                
+                from src.models.reasoning import OpenAIReasoningConfig, AnthropicThinkingConfig, GeminiThinkingConfig
+                text.append("| THINK:", style="dim")
                 if isinstance(reasoning_config, OpenAIReasoningConfig):
-                    if reasoning_config.effort:
-                        reasoning_text.append(f"OpenAI effort=", style="magenta")
-                        reasoning_text.append(f"{reasoning_config.effort}", style="bold magenta")
                     if reasoning_config.max_tokens:
-                        if reasoning_config.effort:
-                            reasoning_text.append(" + ", style="dim")
-                        reasoning_text.append(f"budget=", style="magenta")
-                        reasoning_text.append(f"{reasoning_config.max_tokens:,}", style="bold magenta")
-                        reasoning_text.append(" tokens", style="magenta")
-                    if reasoning_config.exclude:
-                        reasoning_text.append(" (excluded)", style="dim magenta")
+                        text.append(f"{fmt_tokens(reasoning_config.max_tokens)}", style="bold magenta")
+                    elif reasoning_config.effort:
+                        text.append(f"{reasoning_config.effort}", style="bold magenta")
                 elif isinstance(reasoning_config, AnthropicThinkingConfig):
-                    reasoning_text.append(f"Anthropic thinking=", style="magenta")
-                    reasoning_text.append(f"{reasoning_config.budget:,}", style="bold magenta")
-                    reasoning_text.append(" tokens", style="magenta")
+                    text.append(f"{fmt_tokens(reasoning_config.budget)}", style="bold magenta")
                 elif isinstance(reasoning_config, GeminiThinkingConfig):
-                    reasoning_text.append(f"Gemini thinking=", style="magenta")
-                    reasoning_text.append(f"{reasoning_config.budget:,}", style="bold magenta")
-                    reasoning_text.append(" tokens", style="magenta")
-                
-                console.print(reasoning_text)
+                    text.append(f"{fmt_tokens(reasoning_config.budget)}", style="bold magenta")
             
-            # Line 3: Input token count (if available)
-            if SHOW_TOKEN_COUNTS and input_text:
-                input_tokens = RequestLogger._count_tokens_precise(input_text, routed_model)
-                input_chars = len(input_text)
-                
-                input_text_obj = Text()
-                input_text_obj.append("📊 INPUT: ", style="bold blue")
-                input_text_obj.append(f"~{input_tokens/1000:.1f}k" if input_tokens >= 1000 else f"{input_tokens}", style="bold cyan")
-                input_text_obj.append(" tokens ", style="cyan")
-                input_text_obj.append(f"({input_chars/1000:.1f}k chars)" if input_chars >= 1000 else f"({input_chars} chars)", style="dim cyan")
-                console.print(input_text_obj)
+            console.print(text)
         else:
-            # Plain text output (fallback)
-            route_info = f"🔵 REQ {request_id[:8]} | {original_model} → {routed_model} @ {endpoint_name} | {mode}"
-            logger.info(route_info)
+            # Plain text version
+            parts = [f"🔵 {request_id[:6]}", f"{original_model}→{routed_model}", f"@{endpoint_name}"]
+            
+            if context_limit > 0 and input_tokens > 0:
+                ctx_pct = (input_tokens / context_limit) * 100
+                parts.append(f"CTX:{fmt_tokens(input_tokens)}/{fmt_tokens(context_limit)} ({ctx_pct:.0f}%)")
+            
+            if output_limit > 0:
+                parts.append(f"OUT:{fmt_tokens(output_limit)}")
             
             if reasoning_config:
-                from src.models.reasoning import (
-                    OpenAIReasoningConfig,
-                    AnthropicThinkingConfig,
-                    GeminiThinkingConfig
-                )
-                
-                reasoning_info = "🟣 REASONING: "
+                from src.models.reasoning import OpenAIReasoningConfig, AnthropicThinkingConfig, GeminiThinkingConfig
                 if isinstance(reasoning_config, OpenAIReasoningConfig):
-                    if reasoning_config.effort:
-                        reasoning_info += f"OpenAI effort={reasoning_config.effort}"
-                    if reasoning_config.max_tokens:
-                        reasoning_info += f" budget={reasoning_config.max_tokens:,} tokens"
-                elif isinstance(reasoning_config, AnthropicThinkingConfig):
-                    reasoning_info += f"Anthropic thinking={reasoning_config.budget:,} tokens"
-                elif isinstance(reasoning_config, GeminiThinkingConfig):
-                    reasoning_info += f"Gemini thinking={reasoning_config.budget:,} tokens"
-                
-                logger.info(reasoning_info)
+                    think = fmt_tokens(reasoning_config.max_tokens) if reasoning_config.max_tokens else reasoning_config.effort
+                    parts.append(f"THINK:{think}")
+                elif isinstance(reasoning_config, (AnthropicThinkingConfig, GeminiThinkingConfig)):
+                    parts.append(f"THINK:{fmt_tokens(reasoning_config.budget)}")
             
-            if SHOW_TOKEN_COUNTS and input_text:
-                input_tokens = RequestLogger._count_tokens_precise(input_text, routed_model)
-                input_chars = len(input_text)
-                logger.info(f"📊 INPUT: ~{input_tokens:,} tokens ({input_chars:,} chars)")
+            logger.info(" | ".join(parts))
     
     @staticmethod
     def log_request_complete(
         request_id: str,
         usage: Optional[Dict[str, Any]] = None,
         duration_ms: Optional[float] = None,
-        status: str = "OK"
+        status: str = "OK",
+        model_name: Optional[str] = None
     ) -> None:
         """
-        Log request completion with usage stats.
+        Log request completion with ACTUAL usage stats from API response.
         
-        Format (1-2 lines with colors):
-        🟢 REQ abc123 | OK | 2.3s | 45 tok/s | $0.0234
-        📊 IN:1.2k OUT:3.4k THINK:8.0k TOTAL:12.6k
+        Format (1 line with colors):
+        🟢 abc123 1.7s | CTX:132k/400k (33%) | OUT:56/128k | THINK:8k | 24t/s
         """
         def format_tokens(count):
             """Format token count compactly."""
@@ -196,110 +191,84 @@ class RequestLogger:
                 return f"{count/1000:.1f}k"
             return str(count)
         
+        def format_tokens(count):
+            return f"{count/1000:.1f}k" if count >= 1000 else str(count)
+        
+        # Extract token counts
+        input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0)) if usage else 0
+        output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0)) if usage else 0
+        thinking_tokens = 0
+        
+        if usage:
+            if "thinking_tokens" in usage:
+                thinking_tokens = usage["thinking_tokens"]
+            elif "reasoning_tokens" in usage:
+                thinking_tokens = usage["reasoning_tokens"]
+            elif "completion_tokens_details" in usage:
+                details = usage["completion_tokens_details"]
+                if isinstance(details, dict):
+                    thinking_tokens = details.get("reasoning_tokens", 0)
+        
+        # Get model limits for context window display
+        from src.utils.model_limits import get_model_limits
+        context_limit = 0
+        output_limit = 0
+        if model_name:
+            context_limit, output_limit = get_model_limits(model_name)
+        
+        # Single compact line with ACTUAL token counts
         if USE_RICH and console:
-            # Rich colored output
-            completion_text = Text()
+            # Get session-specific color
+            session_color = RequestLogger._get_session_color(request_id)
             
-            # Status icon and color
-            if status == "OK":
-                completion_text.append("🟢 ", style="bold green")
-                status_style = "bold green"
-            else:
-                completion_text.append("🟡 ", style="bold yellow")
-                status_style = "bold yellow"
+            text = Text()
+            icon = "🟢" if status == "OK" else "🔴"
+            text.append(f"{icon} ", style="bold green" if status == "OK" else "bold red")
+            text.append(f"{request_id[:6]} ", style=session_color)
             
-            completion_text.append("REQ ", style=status_style)
-            completion_text.append(f"{request_id[:8]} ", style="cyan")
-            completion_text.append("| ", style="dim")
-            completion_text.append(status, style=status_style)
-            
-            # Duration
             if duration_ms:
-                completion_text.append(" | ", style="dim")
-                duration_s = duration_ms / 1000
-                completion_text.append(f"{duration_s:.2f}s", style="yellow")
+                text.append(f"{duration_ms/1000:.1f}s ", style="yellow")
             
-            # Performance metrics
-            if SHOW_PERFORMANCE and usage and duration_ms:
-                output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
-                if output_tokens > 0 and duration_ms > 0:
-                    tokens_per_sec = output_tokens / (duration_ms / 1000)
-                    completion_text.append(" | ", style="dim")
-                    completion_text.append(f"{tokens_per_sec:.0f} tok/s", style="bold cyan")
-            
-            console.print(completion_text)
-            
-            # Token usage breakdown
             if usage:
-                input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
-                output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
+                # Show context window with ACTUAL input tokens
+                if context_limit > 0 and input_tokens > 0:
+                    ctx_pct = (input_tokens / context_limit) * 100
+                    ctx_color = "green" if ctx_pct < 50 else "yellow" if ctx_pct < 80 else "red"
+                    text.append("| CTX:", style="dim")
+                    text.append(f"{format_tokens(input_tokens)}/{format_tokens(context_limit)} ", style=ctx_color)
+                    text.append(f"({ctx_pct:.0f}%) ", style=ctx_color)
+                else:
+                    text.append(f"| IN:{format_tokens(input_tokens)} ", style="blue")
                 
-                # Check for thinking/reasoning tokens
-                thinking_tokens = 0
-                if "thinking_tokens" in usage:
-                    thinking_tokens = usage["thinking_tokens"]
-                elif "reasoning_tokens" in usage:
-                    thinking_tokens = usage["reasoning_tokens"]
-                elif "completion_tokens_details" in usage:
-                    details = usage["completion_tokens_details"]
-                    if isinstance(details, dict):
-                        thinking_tokens = details.get("reasoning_tokens", 0)
+                # Show output tokens with limit
+                if output_limit > 0:
+                    out_pct = (output_tokens / output_limit) * 100 if output_tokens > 0 else 0
+                    out_color = "green" if out_pct < 50 else "yellow" if out_pct < 80 else "red"
+                    text.append("| OUT:", style="dim")
+                    text.append(f"{format_tokens(output_tokens)}/{format_tokens(output_limit)} ", style=out_color)
+                else:
+                    text.append(f"| OUT:{format_tokens(output_tokens)} ", style="green")
                 
-                total_tokens = usage.get("total_tokens", input_tokens + output_tokens + thinking_tokens)
-                
-                usage_text = Text()
-                usage_text.append("📊 ", style="bold")
-                usage_text.append("IN:", style="blue")
-                usage_text.append(format_tokens(input_tokens), style="bold blue")
-                usage_text.append(" OUT:", style="green")
-                usage_text.append(format_tokens(output_tokens), style="bold green")
-                
+                # Show thinking tokens
                 if thinking_tokens > 0:
-                    usage_text.append(" THINK:", style="magenta")
-                    usage_text.append(format_tokens(thinking_tokens), style="bold magenta")
-                
-                usage_text.append(" TOTAL:", style="cyan")
-                usage_text.append(format_tokens(total_tokens), style="bold cyan")
-                
-                console.print(usage_text)
+                    text.append("| THINK:", style="dim")
+                    text.append(f"{format_tokens(thinking_tokens)} ", style="magenta")
+            
+            if SHOW_PERFORMANCE and output_tokens > 0 and duration_ms:
+                tok_s = output_tokens / (duration_ms / 1000)
+                text.append(f"| {tok_s:.0f}t/s", style="cyan")
+            
+            console.print(text)
         else:
-            # Plain text output (fallback)
-            status_icon = "🟢" if status == "OK" else "🟡"
-            completion_info = f"{status_icon} REQ {request_id[:8]} | {status}"
-            
+            icon = "🟢" if status == "OK" else "🔴"
+            info = f"{icon} {request_id[:8]}"
             if duration_ms:
-                completion_info += f" | {duration_ms/1000:.2f}s"
-            
-            if SHOW_PERFORMANCE and usage and duration_ms:
-                output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
-                if output_tokens > 0:
-                    tokens_per_sec = output_tokens / (duration_ms / 1000)
-                    completion_info += f" | {tokens_per_sec:.0f} tok/s"
-            
-            logger.info(completion_info)
-            
+                info += f" {duration_ms/1000:.1f}s"
             if usage:
-                input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
-                output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
-                
-                thinking_tokens = 0
-                if "thinking_tokens" in usage:
-                    thinking_tokens = usage["thinking_tokens"]
-                elif "reasoning_tokens" in usage:
-                    thinking_tokens = usage["reasoning_tokens"]
-                elif "completion_tokens_details" in usage:
-                    details = usage["completion_tokens_details"]
-                    if isinstance(details, dict):
-                        thinking_tokens = details.get("reasoning_tokens", 0)
-                
-                total_tokens = usage.get("total_tokens", input_tokens + output_tokens + thinking_tokens)
-                
-                usage_info = f"📊 IN:{format_tokens(input_tokens)} OUT:{format_tokens(output_tokens)}"
+                info += f" IN:{format_tokens(input_tokens)} OUT:{format_tokens(output_tokens)}"
                 if thinking_tokens > 0:
-                    usage_info += f" THINK:{format_tokens(thinking_tokens)}"
-                usage_info += f" TOTAL:{format_tokens(total_tokens)}"
-                
-                logger.info(usage_info)
+                    info += f" THINK:{format_tokens(thinking_tokens)}"
+            logger.info(info)
     
     @staticmethod
     def log_request_error(
@@ -319,10 +288,13 @@ class RequestLogger:
             error_msg = error_msg[:77] + "..."
         
         if USE_RICH and console:
+            # Get session-specific color
+            session_color = RequestLogger._get_session_color(request_id)
+            
             error_text = Text()
             error_text.append("🔴 ", style="bold red")
             error_text.append("REQ ", style="bold red")
-            error_text.append(f"{request_id[:8]} ", style="cyan")
+            error_text.append(f"{request_id[:8]} ", style=session_color)
             error_text.append("| ", style="dim")
             error_text.append("ERROR", style="bold red")
             

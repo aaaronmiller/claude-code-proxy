@@ -1,95 +1,82 @@
 """
 Model context window and output limits database.
 
-Provides context limits and max output tokens for various models.
-Data sourced from OpenRouter, OpenAI, Anthropic, and Google documentation.
+Loads model limits from scraped OpenRouter data (CSV/JSON files).
+Falls back to static database if files don't exist.
+
+Run `python scripts/scrape_openrouter_models.py` to update the database.
 """
 
 from typing import Dict, Optional, Tuple
 import logging
+import json
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Static model limits database
-# Format: "model_id": {"context": tokens, "output": tokens}
-MODEL_LIMITS = {
-    # OpenAI Models
-    "gpt-4o": {"context": 128000, "output": 16384},
-    "gpt-4o-mini": {"context": 128000, "output": 16384},
-    "gpt-4-turbo": {"context": 128000, "output": 4096},
-    "gpt-4": {"context": 8192, "output": 4096},
-    "gpt-3.5-turbo": {"context": 16385, "output": 4096},
+# Path to model limits files
+MODELS_DIR = Path(__file__).parent.parent.parent / "models"
+JSON_PATH = MODELS_DIR / "model_limits.json"
+
+# Cache for loaded model limits
+_MODEL_LIMITS_CACHE: Optional[Dict[str, Dict[str, int]]] = None
+
+
+def _load_model_limits() -> Dict[str, Dict[str, int]]:
+    """Load model limits from JSON file or return fallback."""
+    global _MODEL_LIMITS_CACHE
     
-    # OpenAI o-series (reasoning models)
-    "o1-preview": {"context": 128000, "output": 32768},
-    "o1-mini": {"context": 128000, "output": 65536},
-    "o3-mini": {"context": 200000, "output": 100000},
-    "o4-mini": {"context": 200000, "output": 100000},
-    "gpt-5": {"context": 200000, "output": 100000},
+    if _MODEL_LIMITS_CACHE is not None:
+        return _MODEL_LIMITS_CACHE
     
-    # Anthropic Claude Models
-    "claude-3-opus-20240229": {"context": 200000, "output": 4096},
-    "claude-3-sonnet-20240229": {"context": 200000, "output": 4096},
-    "claude-3-haiku-20240307": {"context": 200000, "output": 4096},
-    "claude-3-5-sonnet-20241022": {"context": 200000, "output": 8192},
-    "claude-3-5-haiku-20241022": {"context": 200000, "output": 8192},
+    # Try to load from scraped JSON file
+    if JSON_PATH.exists():
+        try:
+            with open(JSON_PATH, "r") as f:
+                data = json.load(f)
+                _MODEL_LIMITS_CACHE = data
+                logger.info(f"Loaded {len(data)} model limits from {JSON_PATH}")
+                return _MODEL_LIMITS_CACHE
+        except Exception as e:
+            logger.warning(f"Failed to load model limits from {JSON_PATH}: {e}")
     
-    # Anthropic Claude 4.x (with thinking tokens)
-    "claude-opus-4-20250514": {"context": 200000, "output": 16384},
-    "claude-sonnet-4-20250514": {"context": 200000, "output": 16384},
-    "claude-3-7-sonnet-20250219": {"context": 200000, "output": 16384},
-    
-    # Google Gemini Models
-    "gemini-1.5-pro": {"context": 2000000, "output": 8192},
-    "gemini-1.5-flash": {"context": 1000000, "output": 8192},
-    "gemini-2.0-flash": {"context": 1000000, "output": 8192},
-    "gemini-2.5-flash-preview-04-17": {"context": 1000000, "output": 8192},
-    
-    # DeepSeek Models
-    "deepseek-chat": {"context": 64000, "output": 4096},
-    "deepseek-coder": {"context": 16000, "output": 4096},
-    "deepseek-v3": {"context": 64000, "output": 8192},
-    
-    # Qwen Models
-    "qwen-2.5-72b": {"context": 32768, "output": 8192},
-    "qwen-2.5-coder-32b": {"context": 131072, "output": 8192},
-    "qwen3-4b-thinking": {"context": 32768, "output": 8192},
-    
-    # Mistral Models
-    "mistral-large": {"context": 128000, "output": 4096},
-    "mistral-medium": {"context": 32000, "output": 4096},
-    "mistral-small": {"context": 32000, "output": 4096},
-    
-    # Meta Llama Models
-    "llama-3.1-405b": {"context": 128000, "output": 4096},
-    "llama-3.1-70b": {"context": 128000, "output": 4096},
-    "llama-3.1-8b": {"context": 128000, "output": 4096},
-    "llama-3.3-70b": {"context": 128000, "output": 4096},
-    
-    # xAI Grok Models
-    "grok-2": {"context": 131072, "output": 32768},
-    "grok-2-vision": {"context": 32768, "output": 16384},
-    
-    # Cohere Models
-    "command-r-plus": {"context": 128000, "output": 4096},
-    "command-r": {"context": 128000, "output": 4096},
-    
-    # OpenRouter prefixed models
-    "openai/gpt-4o": {"context": 128000, "output": 16384},
-    "openai/gpt-4o-mini": {"context": 128000, "output": 16384},
-    "openai/o1-preview": {"context": 128000, "output": 32768},
-    "openai/o1-mini": {"context": 128000, "output": 65536},
-    "openai/gpt-5": {"context": 200000, "output": 100000},
-    "anthropic/claude-opus-4-20250514": {"context": 200000, "output": 16384},
-    "anthropic/claude-sonnet-4-20250514": {"context": 200000, "output": 16384},
-    "anthropic/claude-3-5-sonnet-20241022": {"context": 200000, "output": 8192},
-    "google/gemini-2.5-flash-preview-04-17": {"context": 1000000, "output": 8192},
-    "google/gemini-2.0-flash": {"context": 1000000, "output": 8192},
-    "meta-llama/llama-3.3-70b": {"context": 128000, "output": 4096},
-    "deepseek/deepseek-v3": {"context": 64000, "output": 8192},
-    "qwen/qwen-2.5-72b": {"context": 32768, "output": 8192},
-    "x-ai/grok-2": {"context": 131072, "output": 32768},
-}
+    # Fallback to static database
+    logger.info("Using static fallback model limits (run scraper to update)")
+    _MODEL_LIMITS_CACHE = _get_fallback_limits()
+    return _MODEL_LIMITS_CACHE
+
+
+def _get_fallback_limits() -> Dict[str, Dict[str, int]]:
+    """Get static fallback model limits."""
+    return {
+        # OpenAI Models
+        "openai/gpt-4o": {"context": 128000, "output": 16384},
+        "openai/gpt-4o-mini": {"context": 128000, "output": 16384},
+        "openai/o1-preview": {"context": 128000, "output": 32768},
+        "openai/o1-mini": {"context": 128000, "output": 65536},
+        "openai/gpt-5": {"context": 200000, "output": 100000},
+        
+        # Anthropic Claude
+        "anthropic/claude-opus-4-20250514": {"context": 200000, "output": 16384},
+        "anthropic/claude-sonnet-4-20250514": {"context": 200000, "output": 16384},
+        "anthropic/claude-3-5-sonnet-20241022": {"context": 200000, "output": 8192},
+        
+        # Google Gemini
+        "google/gemini-2.5-flash-preview-04-17": {"context": 1000000, "output": 8192},
+        "google/gemini-2.0-flash": {"context": 1000000, "output": 8192},
+        
+        # Meta Llama
+        "meta-llama/llama-3.3-70b": {"context": 128000, "output": 4096},
+        
+        # DeepSeek
+        "deepseek/deepseek-v3": {"context": 64000, "output": 8192},
+        
+        # Qwen
+        "qwen/qwen-2.5-72b": {"context": 32768, "output": 8192},
+        
+        # xAI
+        "x-ai/grok-2": {"context": 131072, "output": 32768},
+    }
 
 
 def get_model_limits(model_name: str) -> Tuple[int, int]:
@@ -97,12 +84,14 @@ def get_model_limits(model_name: str) -> Tuple[int, int]:
     Get context window and output limits for a model.
     
     Args:
-        model_name: Model identifier (e.g., "gpt-4o", "claude-opus-4-20250514")
+        model_name: Model identifier (e.g., "gpt-4o", "openai/gpt-5")
         
     Returns:
         Tuple of (context_limit, output_limit) in tokens
-        Returns (0, 0) if model not found
+        Returns (128000, 4096) as conservative defaults if not found
     """
+    MODEL_LIMITS = _load_model_limits()
+    
     # Try exact match first
     if model_name in MODEL_LIMITS:
         limits = MODEL_LIMITS[model_name]
@@ -127,9 +116,18 @@ def get_model_limits(model_name: str) -> Tuple[int, int]:
             limits = MODEL_LIMITS[base_name]
             return limits["context"], limits["output"]
     
+    # Try with provider prefix if not present
+    if "/" not in model_name:
+        for prefix in ["openai/", "anthropic/", "google/", "meta-llama/", "deepseek/", "qwen/", "x-ai/"]:
+            prefixed = f"{prefix}{model_name}"
+            if prefixed in MODEL_LIMITS:
+                limits = MODEL_LIMITS[prefixed]
+                logger.debug(f"Found {model_name} with prefix: {prefixed}")
+                return limits["context"], limits["output"]
+    
     # Default fallback for unknown models
-    logger.warning(f"Model limits not found for {model_name}, using defaults")
-    return 128000, 4096  # Conservative defaults
+    logger.warning(f"Model limits not found for {model_name}, using defaults (128k/4k)")
+    return 128000, 4096
 
 
 def get_context_limit(model_name: str) -> int:
@@ -161,3 +159,16 @@ def format_model_info(model_name: str) -> str:
         return str(count)
     
     return f"{format_tokens(context)} context / {format_tokens(output)} output"
+
+
+def reload_model_limits() -> int:
+    """
+    Reload model limits from file (useful after running scraper).
+    
+    Returns:
+        Number of models loaded
+    """
+    global _MODEL_LIMITS_CACHE
+    _MODEL_LIMITS_CACHE = None
+    limits = _load_model_limits()
+    return len(limits)

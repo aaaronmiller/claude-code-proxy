@@ -48,6 +48,51 @@ def main(env_updates: dict = None):
         print(f"  Claude sonnet/opus models -> {config.big_model}")
         sys.exit(0)
 
+    # Update model limits from OpenRouter
+    print("🔄 Updating model limits from OpenRouter...")
+    try:
+        import asyncio
+        from pathlib import Path
+        import json
+        
+        # Import scraper function
+        scraper_path = Path(__file__).parent.parent / "scripts" / "scrape_openrouter_models.py"
+        sys.path.insert(0, str(scraper_path.parent))
+        
+        from scrape_openrouter_models import fetch_openrouter_models, parse_model_limits
+        
+        # Run scraper
+        models = asyncio.run(fetch_openrouter_models())
+        if models:
+            model_limits = []
+            for model in models:
+                limits = parse_model_limits(model)
+                if limits["model_id"] and limits["context_limit"] > 0:
+                    model_limits.append(limits)
+            
+            # Save JSON
+            models_dir = Path(__file__).parent.parent / "models"
+            models_dir.mkdir(exist_ok=True)
+            json_path = models_dir / "model_limits.json"
+            
+            json_data = {
+                item["model_id"]: {
+                    "context": item["context_limit"],
+                    "output": item["output_limit"],
+                    "name": item["name"]
+                }
+                for item in model_limits
+            }
+            
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(json_data, f, indent=2)
+            
+            print(f"✅ Updated {len(model_limits)} model limits")
+        else:
+            print("⚠️  Failed to fetch models, using cached limits")
+    except Exception as e:
+        print(f"⚠️  Model limits update failed: {e}, using cached limits")
+    
     # Configuration summary
     print("🚀 Claude-to-OpenAI API Proxy v1.0.0")
     print(f"✅ Configuration loaded successfully")
