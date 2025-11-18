@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from datetime import datetime
 import uuid
 import time
+import os
 from typing import Optional
 
 from src.core.config import config
@@ -16,6 +17,10 @@ from src.conversion.response_converter import (
 )
 from src.core.model_manager import model_manager
 from src.utils.request_logger import request_logger
+from src.utils.compact_logger import compact_logger
+from src.utils.usage_tracker import usage_tracker
+from src.utils.json_detector import json_detector
+from src.utils.cost_calculator import calculate_cost
 from src.utils.model_limits import get_model_limits
 from src.conversation.crosstalk import crosstalk_orchestrator
 from src.models.crosstalk import (
@@ -29,6 +34,10 @@ from src.models.crosstalk import (
 )
 
 router = APIRouter()
+
+# Choose logger based on environment variable
+USE_COMPACT_LOGGER = os.getenv("USE_COMPACT_LOGGER", "false").lower() == "true"
+active_logger = compact_logger if USE_COMPACT_LOGGER else request_logger
 
 # Get custom headers from config
 custom_headers = config.get_custom_headers()
@@ -132,9 +141,19 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
         if input_text:
             # Rough estimate: ~4 characters per token
             input_tokens = max(1, len(input_text) // 4)
-        
+
+        # Detect images and tools
+        has_images = False
+        has_tools = bool(request.tools)
+        for msg in request.messages:
+            if isinstance(msg.content, list):
+                for block in msg.content:
+                    if hasattr(block, "type") and block.type == "image":
+                        has_images = True
+                        break
+
         # Log comprehensive request start
-        request_logger.log_request_start(
+        active_logger.log_request_start(
             request_id=request_id,
             original_model=request.model,
             routed_model=routed_model,
@@ -147,6 +166,8 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             input_tokens=input_tokens,
             message_count=message_count,
             has_system=has_system,
+            has_tools=has_tools,
+            has_images=has_images,
             client_info=client_ip
         )
         
@@ -214,19 +235,65 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             # Log comprehensive completion with all metadata
             duration_ms = (time.time() - request_start_time) * 1000
             usage = openai_response.get("usage", {})
-            
-            request_logger.log_request_complete(
+
+            # Detect JSON for TOON analysis
+            has_json_content = False
+            json_size_bytes = 0
+            if input_text:
+                has_json, json_bytes, _ = json_detector.detect_json_in_text(input_text)
+                has_json_content = has_json
+                json_size_bytes = json_bytes
+
+            # Extract provider from endpoint
+            provider = "unknown"
+            if "openrouter" in endpoint.lower():
+                provider = "openrouter"
+            elif "openai" in endpoint.lower():
+                provider = "openai"
+            elif "anthropic" in endpoint.lower():
+                provider = "anthropic"
+            elif "azure" in endpoint.lower():
+                provider = "azure"
+
+            # Calculate cost
+            estimated_cost = calculate_cost(usage, routed_model)
+
+            # Log to active logger
+            active_logger.log_request_complete(
                 request_id=request_id,
                 usage=usage,
                 duration_ms=duration_ms,
                 status="OK",
                 model_name=routed_model,
                 stream=request.stream,
-                message_count=message_count,
-                has_system=has_system,
-                client_info=client_ip
+                has_reasoning=bool(reasoning_config)
             )
-            
+
+            # Track usage if enabled
+            if usage_tracker.enabled:
+                usage_tracker.log_request(
+                    request_id=request_id,
+                    original_model=request.model,
+                    routed_model=routed_model,
+                    provider=provider,
+                    endpoint=endpoint,
+                    input_tokens=usage.get("input_tokens", usage.get("prompt_tokens", 0)),
+                    output_tokens=usage.get("output_tokens", usage.get("completion_tokens", 0)),
+                    thinking_tokens=usage.get("thinking_tokens", 0),
+                    duration_ms=duration_ms,
+                    estimated_cost=estimated_cost,
+                    stream=request.stream,
+                    message_count=message_count,
+                    has_system=has_system,
+                    has_tools=has_tools,
+                    has_images=has_images,
+                    status="success",
+                    session_id=request_id[:8],
+                    client_ip=client_ip,
+                    has_json_content=has_json_content,
+                    json_size_bytes=json_size_bytes
+                )
+
             claude_response = convert_openai_to_claude_response(
                 openai_response, request
             )
@@ -234,23 +301,58 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             return claude_response
     except HTTPException as e:
         duration_ms = (time.time() - request_start_time) * 1000
-        request_logger.log_request_error(
+
+        # Log error
+        active_logger.log_request_error(
             request_id=request_id,
             error=e.detail,
             duration_ms=duration_ms
         )
+
+        # Track error if enabled
+        if usage_tracker.enabled:
+            usage_tracker.log_request(
+                request_id=request_id,
+                original_model=request.model,
+                routed_model=routed_model,
+                provider="unknown",
+                endpoint=endpoint,
+                status="error",
+                error_message=str(e.detail),
+                duration_ms=duration_ms,
+                session_id=request_id[:8],
+                client_ip=client_ip
+            )
+
         logger.error(f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}")
         raise
     except Exception as e:
         import traceback
-        
+
         duration_ms = (time.time() - request_start_time) * 1000
         error_message = openai_client.classify_openai_error(str(e))
-        request_logger.log_request_error(
+
+        # Log error
+        active_logger.log_request_error(
             request_id=request_id,
             error=error_message,
             duration_ms=duration_ms
         )
+
+        # Track error if enabled
+        if usage_tracker.enabled:
+            usage_tracker.log_request(
+                request_id=request_id,
+                original_model=request.model if hasattr(request, 'model') else "unknown",
+                routed_model="unknown",
+                provider="unknown",
+                endpoint="unknown",
+                status="error",
+                error_message=error_message,
+                duration_ms=duration_ms,
+                session_id=request_id[:8],
+                client_ip="unknown"
+            )
 
         logger.error(f"Unexpected error processing request {request_id}: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
