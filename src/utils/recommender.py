@@ -1,4 +1,12 @@
-"""Intelligent model recommender based on usage patterns and correlations."""
+"""
+Intelligent model recommender based on saved configuration patterns.
+
+NOTE: This analyzes SAVED CONFIGURATION MODES (modes.json), not actual API usage.
+The "usage patterns" refer to which models appear in your saved configurations,
+not which models you've actually used in API requests.
+
+For actual API usage tracking, enable usage logging with TRACK_USAGE=true.
+"""
 
 import json
 import os
@@ -8,7 +16,13 @@ from datetime import datetime
 
 
 class ModelRecommender:
-    """Analyze usage patterns and recommend better/free alternatives."""
+    """
+    Analyze saved configuration patterns and recommend better/free alternatives.
+
+    IMPORTANT: This analyzes which models appear in saved configuration modes,
+    NOT actual API request usage. If you haven't saved any modes, there will
+    be no pattern data available.
+    """
 
     MODELS_DB = os.path.join(os.path.dirname(__file__), "..", "..", "models", "openrouter_models.json")
     MODES_DB = os.path.join(os.path.dirname(__file__), "..", "..", "modes.json")
@@ -32,8 +46,13 @@ class ModelRecommender:
                 return data.get("modes", {})
         return {}
 
-    def analyze_usage_patterns(self) -> Dict[str, Any]:
-        """Analyze how models are used together in modes."""
+    def analyze_configuration_patterns(self) -> Dict[str, Any]:
+        """
+        Analyze which models appear together in saved configuration modes.
+
+        NOTE: This does NOT track actual API usage. It only counts how many
+        times each model appears in your saved configuration modes.
+        """
         patterns = {
             "big_models": Counter(),
             "middle_models": Counter(),
@@ -255,9 +274,13 @@ class ModelRecommender:
 
         return result
 
-    def recommend_based_on_usage(self, slot: str = "big") -> List[Dict[str, Any]]:
-        """Recommend models based on usage patterns."""
-        patterns = self.analyze_usage_patterns()
+    def recommend_based_on_configuration(self, slot: str = "big") -> List[Dict[str, Any]]:
+        """
+        Recommend models based on saved configuration patterns.
+
+        NOTE: Based on saved configurations, not actual API usage.
+        """
+        patterns = self.analyze_configuration_patterns()
 
         if slot == "big":
             most_used = patterns["big_models"].most_common(10)
@@ -289,8 +312,12 @@ class ModelRecommender:
         return result
 
     def get_recommendations_summary(self) -> Dict[str, Any]:
-        """Get a summary of all recommendations."""
-        patterns = self.analyze_usage_patterns()
+        """
+        Get a summary of configuration patterns (not actual usage).
+
+        NOTE: Based on saved configurations, not actual API requests.
+        """
+        patterns = self.analyze_configuration_patterns()
 
         return {
             "total_modes": len(self.modes_data),
@@ -339,11 +366,13 @@ def main():
     """Test the recommender."""
     recommender = ModelRecommender()
 
-    print("Model Recommender - Analysis Report")
+    print("Model Recommender - Configuration Pattern Analysis")
+    print("=" * 70)
+    print("NOTE: This analyzes saved configurations, not actual API usage")
     print("=" * 70)
 
-    # Get usage patterns
-    patterns = recommender.analyze_usage_patterns()
+    # Get configuration patterns
+    patterns = recommender.analyze_configuration_patterns()
 
     print(f"\nTotal saved modes: {len(recommender.modes_data)}")
     print(f"\nMost used BIG models:")
