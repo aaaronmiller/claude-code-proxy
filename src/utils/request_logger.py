@@ -288,7 +288,11 @@ class RequestLogger:
         🟢 abc123 15.8s | CTX:43.7k/1840.0k (2%) | OUT:1.3k/64.0k | THINK:920 | 81t/s | 📤 OUTPUT: [░░░░░░░░░░░░░░░░░░░░] 1.3k/64.0k (2%) 🟣 THINKING: [░░░░░░░░░░░░░░░░░░░░] 920/64.0k (1%) | STREAM | 3msg | SYS | 127.0.0.1
         """
         def format_tokens(count):
-            return f"{count/1000:.1f}k" if count >= 1000 else str(count)
+            """Format token count compactly."""
+            if count >= 1000:
+                return f"{count/1000:.1f}k"
+            else:
+                return str(count)
         
         # Extract token counts
         input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0)) if usage else 0

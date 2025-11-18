@@ -155,7 +155,7 @@ class ModeManager:
                 try:
                     dt = datetime.fromisoformat(created)
                     created = dt.strftime('%Y-%m-%d %H:%M')
-                except:
+                except (ValueError, TypeError):
                     pass
 
             print(f"\n[{mode['id']}] {mode['name']}")

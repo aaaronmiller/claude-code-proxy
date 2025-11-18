@@ -30,11 +30,15 @@ from src.models.crosstalk import (
 
 router = APIRouter()
 
+# Get custom headers from config
+custom_headers = config.get_custom_headers()
+
 openai_client = OpenAIClient(
     config.openai_api_key,
     config.openai_base_url,
     config.request_timeout,
     api_version=config.azure_api_version,
+    custom_headers=custom_headers,
 )
 
 # Configure per-model clients for hybrid deployments
