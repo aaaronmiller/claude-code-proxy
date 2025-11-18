@@ -24,7 +24,7 @@ except ImportError:
 
 # Try to import tiktoken for accurate token counting
 try:
-    import tiktoken
+    import tiktoken  # type: ignore
     TIKTOKEN_AVAILABLE = True
 except ImportError:
     TIKTOKEN_AVAILABLE = False

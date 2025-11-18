@@ -9,14 +9,22 @@ from openai._exceptions import APIError, RateLimitError, AuthenticationError, Ba
 class OpenAIClient:
     """Async OpenAI client with cancellation support and multi-endpoint routing."""
 
-    def __init__(self, api_key: str, base_url: str, timeout: int = 90, api_version: Optional[str] = None):
+    def __init__(self, api_key: str, base_url: str, timeout: int = 90, api_version: Optional[str] = None, custom_headers: Optional[Dict[str, str]] = None):
+        # Basic validation for custom headers
+        if custom_headers is not None:
+            if not isinstance(custom_headers, dict):
+                raise ValueError("custom_headers must be a dictionary")
+            if not all(isinstance(k, str) and isinstance(v, str) for k, v in custom_headers.items()):
+                raise ValueError("custom_headers must contain only string keys and values")
+
         self.default_api_key = api_key
         self.default_base_url = base_url
         self.default_api_version = api_version
         self.timeout = timeout
+        self.custom_headers = custom_headers
 
         # Single default client for backward compatibility
-        self.client = self._create_client(api_key, base_url, api_version)
+        self.client = self._create_client(api_key, base_url, api_version, custom_headers)
 
         # Per-model clients for hybrid deployments
         self.big_client = None
@@ -25,20 +33,22 @@ class OpenAIClient:
 
         self.active_requests: Dict[str, asyncio.Event] = {}
 
-    def _create_client(self, api_key: str, base_url: str, api_version: Optional[str] = None):
+    def _create_client(self, api_key: str, base_url: str, api_version: Optional[str] = None, custom_headers: Optional[Dict[str, str]] = None):
         """Create an OpenAI or Azure client."""
         if api_version:
             return AsyncAzureOpenAI(
                 api_key=api_key,
                 azure_endpoint=base_url,
                 api_version=api_version,
-                timeout=self.timeout
+                timeout=self.timeout,
+                default_headers=custom_headers
             )
         else:
             return AsyncOpenAI(
                 api_key=api_key,
                 base_url=base_url,
-                timeout=self.timeout
+                timeout=self.timeout,
+                default_headers=custom_headers
             )
 
     def configure_per_model_clients(self, config):
@@ -48,7 +58,8 @@ class OpenAIClient:
             self.big_client = self._create_client(
                 config.big_api_key,
                 config.big_endpoint,
-                config.azure_api_version if config.big_endpoint == config.openai_base_url else None
+                config.azure_api_version if config.big_endpoint == config.openai_base_url else None,
+                self.custom_headers
             )
 
         # Middle model client
@@ -56,7 +67,8 @@ class OpenAIClient:
             self.middle_client = self._create_client(
                 config.middle_api_key,
                 config.middle_endpoint,
-                config.azure_api_version if config.middle_endpoint == config.openai_base_url else None
+                config.azure_api_version if config.middle_endpoint == config.openai_base_url else None,
+                self.custom_headers
             )
 
         # Small model client
@@ -64,7 +76,8 @@ class OpenAIClient:
             self.small_client = self._create_client(
                 config.small_api_key,
                 config.small_endpoint,
-                config.azure_api_version if config.small_endpoint == config.openai_base_url else None
+                config.azure_api_version if config.small_endpoint == config.openai_base_url else None,
+                self.custom_headers
             )
 
     def get_client_for_model(self, model: str, config=None) -> Any:
