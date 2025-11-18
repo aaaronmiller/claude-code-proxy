@@ -172,30 +172,38 @@ class ModelSelector:
             print(self.color("Invalid selection. Please try again.", Colors.BRIGHT_RED))
 
     def display_recommendations_menu(self):
-        """Display model recommendations based on usage and alternatives."""
+        """Display model recommendations based on saved configuration patterns."""
         from src.utils.recommender import ModelRecommender
 
         print(f"\n{self.color('='*70, Colors.BRIGHT_YELLOW)}")
         print(self.color("║" + " "*17 + "Model Recommendations" + " "*22 + "║", Colors.BRIGHT_YELLOW))
         print(self.color("="*70, Colors.BRIGHT_YELLOW))
 
+        # Important disclaimer
+        print(self.color("\n⚠️  IMPORTANT: Based on saved configurations, NOT actual API usage", Colors.BRIGHT_YELLOW))
+        print(self.color("   These patterns show which models appear in your saved modes.", Colors.DIM))
+        print(self.color("   For actual usage tracking, enable TRACK_USAGE=true in .env\n", Colors.DIM))
+
         recommender = ModelRecommender()
 
-        # Show usage patterns
-        print(self.color("\nUsage Analysis:", Colors.BOLD + Colors.WHITE))
+        # Show configuration patterns
+        print(self.color("\nConfiguration Pattern Analysis:", Colors.BOLD + Colors.WHITE))
+        print(self.color("(Based on saved modes, not actual API requests)", Colors.DIM))
         print(self.color("-" * 70, Colors.DIM))
 
-        patterns = recommender.analyze_usage_patterns()
+        patterns = recommender.analyze_configuration_patterns()
 
         if patterns['big_models']:
-            print(self.color("\nMost Used BIG Models:", Colors.CYAN))
+            print(self.color("\nMost Configured BIG Models:", Colors.CYAN))
+            print(self.color("(Appears in saved modes, not actual usage frequency)", Colors.DIM))
             for model, count in patterns['big_models'].most_common(3):
-                print(f"  {self.color('•', Colors.CYAN)} {model} ({count} modes)")
+                print(f"  {self.color('•', Colors.CYAN)} {model} ({count} saved modes)")
 
         if patterns['reasoning_usage']:
             print(self.color("\nPreferred Reasoning Effort:", Colors.CYAN))
+            print(self.color("(From saved configurations)", Colors.DIM))
             for effort, count in patterns['reasoning_usage'].most_common(3):
-                print(f"  {self.color('•', Colors.CYAN)} {effort} ({count} modes)")
+                print(f"  {self.color('•', Colors.CYAN)} {effort} ({count} saved modes)")
 
         # Show free alternatives
         print(self.color("\n" + "=" * 70, Colors.DIM))

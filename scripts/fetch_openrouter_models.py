@@ -478,9 +478,15 @@ class MultiSourceModelFetcher:
             writer.writerows(filtered_models)
         print(f"✓ Saved to {filename}")
 
-    def display_top_models(self, category: str, models: List[Dict[str, Any]], count: int = 10) -> None:
-        """Display top N models in a category with detailed info."""
-        print(f"\n=== Top {count} {category.title()} Models ===")
+    def display_featured_models(self, category: str, models: List[Dict[str, Any]], count: int = 10) -> None:
+        """
+        Display featured models in a category (not ranked by popularity).
+
+        NOTE: These are just the first N models from each category,
+        not ranked by usage, popularity, or recommendation score.
+        """
+        print(f"\n=== Featured {category.title()} Models ===")
+        print(f"(Showing first {count} - not ranked by usage or popularity)")
         for i, model in enumerate(models[:count], 1):
             print(f"{i}. {model['id']}")
             print(f"   Name: {model['name']}")
@@ -529,14 +535,15 @@ def main():
     fetcher.save_json(json_file)
     fetcher.save_csv(csv_file)
 
-    # Display top models
+    # Display featured models
     print("\n" + "="*70)
     print("FEATURED MODELS (Local providers first)")
+    print("NOTE: Not ranked by popularity or usage - just showing first models from each category")
     print("="*70)
 
-    fetcher.display_top_models("local", fetcher.local_models, 10)
-    fetcher.display_top_models("reasoning", fetcher.reasoning_models, 10)
-    fetcher.display_top_models("verbosity", fetcher.verbosity_models, 5)
+    fetcher.display_featured_models("local", fetcher.local_models, 10)
+    fetcher.display_featured_models("reasoning", fetcher.reasoning_models, 10)
+    fetcher.display_featured_models("verbosity", fetcher.verbosity_models, 5)
 
     print("\n" + "="*70)
     print("Complete! Run select_model.py to configure your models.")
