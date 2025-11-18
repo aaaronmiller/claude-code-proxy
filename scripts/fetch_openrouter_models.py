@@ -310,7 +310,11 @@ class MultiSourceModelFetcher:
         }
 
     def analyze_model_capabilities(self, model: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze a single model's capabilities."""
+        """
+        Analyze a single model's capabilities using API metadata.
+
+        Prioritizes API metadata over keyword matching for accuracy.
+        """
         # First extract metadata
         capabilities = self.extract_detailed_metadata(model)
 
@@ -320,19 +324,30 @@ class MultiSourceModelFetcher:
         description = capabilities["description"].lower()
 
         # Check for reasoning support
-        reasoning_keywords = [
-            "reasoning", "thinking", "o3", "gpt-5", "deep research",
-            "qwen3", "qwen-2.5-thinking", "deepseek v3", "claude haiku"
-        ]
-
-        if any(keyword.lower() in model_id for keyword in reasoning_keywords):
-            capabilities["supports_reasoning"] = True
-        elif any(keyword.lower() in name for keyword in reasoning_keywords):
-            capabilities["supports_reasoning"] = True
-        elif any(keyword.lower() in description for keyword in reasoning_keywords):
-            capabilities["supports_reasoning"] = True
+        # Priority 1: Use API metadata if available
+        if "supported_parameters" in model:
+            params = model.get("supported_parameters", [])
+            if isinstance(params, list):
+                # Check if reasoning parameters are supported
+                capabilities["supports_reasoning"] = any(
+                    p in params for p in ["reasoning", "reasoning_effort", "thinking", "thought"]
+                )
+            else:
+                capabilities["supports_reasoning"] = False
         else:
-            capabilities["supports_reasoning"] = False
+            # Priority 2: Fallback to keyword matching (more accurate now)
+            reasoning_keywords = [
+                "reasoning", "thinking", "o3", "o1", "gpt-5",
+                "qwen3", "qwen-2.5-thinking", "qwen2.5-thinking",
+                "deepseek-v3", "deepseek-r1", "deepseek-reasoning",
+                "extended-thinking", "chain-of-thought"
+            ]
+
+            # Note: Removed "claude haiku" as it doesn't support reasoning
+            capabilities["supports_reasoning"] = any(
+                keyword.lower() in model_id or keyword.lower() in description
+                for keyword in reasoning_keywords
+            )
 
         # Check for verbosity support
         verbosity_keywords = ["verbosity", "verbose", "detailed"]

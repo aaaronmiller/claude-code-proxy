@@ -63,6 +63,8 @@ class ModelSelector:
             "verbosity": None,
             "reasoning_exclude": "false"
         }
+        # Model sorting preference
+        self.sort_preference = "free_first"  # Default: free models first
 
     def color(self, text: str, color: str) -> str:
         """Apply color to text."""
@@ -415,8 +417,16 @@ class ModelSelector:
                 unique_models.append(model)
         return unique_models
 
-    def get_all_models(self) -> List[Dict[str, Any]]:
-        """Get all available models."""
+    def get_all_models(self, sort_by: str = "id") -> List[Dict[str, Any]]:
+        """
+        Get all available models with optional sorting.
+
+        Args:
+            sort_by: Sort criterion - "id", "cost", "context", "free_first"
+
+        Returns:
+            List of models sorted by criterion
+        """
         all_models = (
             self.models_data.get("local_models", []) +
             (self.models_data.get("reasoning_models", []) if self.enable_openrouter_selection else []) +
@@ -430,6 +440,26 @@ class ModelSelector:
             if model['id'] not in seen:
                 seen.add(model['id'])
                 unique_models.append(model)
+
+        # Sort models
+        if sort_by == "cost":
+            # Sort by cost (free first, then ascending price)
+            unique_models.sort(key=lambda m: (
+                not m.get('is_free', False),  # Free first
+                m.get('pricing', {}).get('prompt_numeric', 999999)  # Then by price
+            ))
+        elif sort_by == "context":
+            # Sort by context window (largest first)
+            unique_models.sort(key=lambda m: m.get('context_length', 0), reverse=True)
+        elif sort_by == "free_first":
+            # Free models first, then alphabetically
+            unique_models.sort(key=lambda m: (
+                not m.get('is_free', False),
+                m.get('id', '').lower()
+            ))
+        else:  # Default: alphabetical by ID
+            unique_models.sort(key=lambda m: m.get('id', '').lower())
+
         return unique_models
 
     def get_local_models(self) -> List[Dict[str, Any]]:
@@ -456,6 +486,15 @@ class ModelSelector:
         print(self.color(f"║" + f" Select {model_type} Model ".center(68) + "║", Colors.BRIGHT_CYAN))
         print(self.color("="*70, Colors.BRIGHT_CYAN))
 
+        # Display current sort preference
+        sort_names = {
+            "free_first": "Free models first",
+            "cost": "By cost (low to high)",
+            "context": "By context window (large to small)",
+            "id": "Alphabetically"
+        }
+        print(self.color(f"Current sort: {sort_names.get(self.sort_preference, self.sort_preference)}", Colors.DIM))
+
         # Get appropriate models based on category
         if category == "reasoning":
             available_models = self.get_reasoning_models()
@@ -464,8 +503,7 @@ class ModelSelector:
                 return None
             print(self.color(f"\nShowing models with REASONING support ({len(available_models)} models)", Colors.BRIGHT_GREEN))
         elif category == "all":
-            available_models = self.get_all_models()
-            available_models = sorted(available_models, key=lambda x: x['id'].lower())
+            available_models = self.get_all_models(sort_by=self.sort_preference)
             print(self.color(f"\nShowing all models ({len(available_models)} models)", Colors.BRIGHT_GREEN))
         elif category == "local":
             available_models = self.get_local_models()
@@ -710,6 +748,8 @@ class ModelSelector:
             print(f"{self.color('11.', Colors.YELLOW)} {self.color('Save current config as mode', Colors.YELLOW)}")
             print(f"{self.color('12.', Colors.YELLOW)} {self.color('List all modes', Colors.YELLOW)}")
             print()
+            print(f"{self.color('13.', Colors.CYAN)} {self.color('Change model sorting', Colors.CYAN)} (Current: {self.sort_preference})")
+            print()
             print(f"{self.color('0.', Colors.BRIGHT_RED)} {self.color('Exit', Colors.BRIGHT_RED)}")
 
             choice = input(self.color("\n> Select option: ", Colors.BRIGHT_GREEN)).strip()
@@ -834,6 +874,34 @@ class ModelSelector:
                 from src.utils.modes import ModeManager
                 manager = ModeManager()
                 manager.list_modes()
+                input("\nPress Enter to continue...")
+
+            elif choice == '13':
+                # Change sorting preference
+                print(self.color("\n" + "="*70, Colors.CYAN))
+                print(self.color("Change Model Sorting", Colors.CYAN))
+                print(self.color("="*70, Colors.CYAN))
+
+                print(f"\n{self.color('1.', Colors.CYAN)} Free models first (recommended)")
+                print(f"{self.color('2.', Colors.CYAN)} By cost (low to high)")
+                print(f"{self.color('3.', Colors.CYAN)} By context window (large to small)")
+                print(f"{self.color('4.', Colors.CYAN)} Alphabetically by ID")
+
+                sort_choice = input(self.color("\nSelect sorting (1-4): ", Colors.BRIGHT_GREEN)).strip()
+
+                sort_map = {
+                    "1": "free_first",
+                    "2": "cost",
+                    "3": "context",
+                    "4": "id"
+                }
+
+                if sort_choice in sort_map:
+                    self.sort_preference = sort_map[sort_choice]
+                    print(self.color(f"\n✓ Sorting changed to: {sort_map[sort_choice]}", Colors.BRIGHT_GREEN))
+                else:
+                    print(self.color("\nInvalid selection", Colors.BRIGHT_RED))
+
                 input("\nPress Enter to continue...")
 
             elif choice == '0':
