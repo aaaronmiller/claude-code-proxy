@@ -187,11 +187,6 @@ class RequestLogger:
         """
         def format_tokens(count):
             """Format token count compactly."""
-            if count >= 1000:
-                return f"{count/1000:.1f}k"
-            return str(count)
-        
-        def format_tokens(count):
             return f"{count/1000:.1f}k" if count >= 1000 else str(count)
         
         # Extract token counts

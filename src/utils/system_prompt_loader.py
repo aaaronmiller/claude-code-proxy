@@ -42,13 +42,20 @@ def load_system_prompt(prompt_source: str) -> str:
         file_path = prompt_source[5:]  # Remove "path:" prefix
 
         # Security: Check for path traversal attempts
-        import os
-        normalized_path = os.path.normpath(file_path)
-        if normalized_path.startswith("..") or normalized_path.startswith("/"):
-            raise SecurityError(f"Unsafe file path: {file_path}")
+        try:
+            # Define allowed base directory (project root or specific prompts directory)
+            base_dir = Path(__file__).parent.parent.parent.resolve()
+            file_path_resolved = Path(file_path).resolve()
+
+            # Check if the resolved path is within the allowed base directory
+            file_path_resolved.relative_to(base_dir)
+        except (ValueError, OSError) as e:
+            # ValueError: path is not relative to base_dir
+            # OSError: path resolution failed
+            raise SecurityError(f"Unsafe file path (path traversal attempt): {file_path}")
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path_resolved, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
 
                 # Validate content length

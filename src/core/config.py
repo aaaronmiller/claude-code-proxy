@@ -163,5 +163,5 @@ class Config:
 try:
     config = Config()
 except Exception as e:
-    print(f"=4 Configuration Error: {e}")
+    print(f"Configuration Error: {e}")
     sys.exit(1)

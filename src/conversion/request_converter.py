@@ -1,6 +1,6 @@
 import json
 from typing import Dict, Any, List
-from venv import logger
+import logging
 from src.core.constants import Constants
 from src.models.claude import ClaudeMessagesRequest, ClaudeMessage
 from src.core.config import config
@@ -10,7 +10,6 @@ from src.models.reasoning import (
     GeminiThinkingConfig
 )
 from src.utils.model_filter import model_filter
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -502,7 +501,7 @@ def parse_tool_result_content(content):
                 else:
                     try:
                         result_parts.append(json.dumps(item, ensure_ascii=False))
-                    except:
+                    except (TypeError, ValueError):
                         result_parts.append(str(item))
         return "\n".join(result_parts).strip()
 
@@ -511,10 +510,10 @@ def parse_tool_result_content(content):
             return content.get("text", "")
         try:
             return json.dumps(content, ensure_ascii=False)
-        except:
+        except (TypeError, ValueError):
             return str(content)
 
     try:
         return str(content)
-    except:
+    except Exception:
         return "Unparseable content"
