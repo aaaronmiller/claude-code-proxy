@@ -96,6 +96,11 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
         elif client == openai_client.small_client:
             endpoint = config.small_endpoint
         
+        # Extract request metadata for comprehensive logging
+        message_count = len(request.messages)
+        has_system = bool(request.system)
+        client_ip = http_request.client.host if http_request.client else "unknown"
+        
         # Extract input text for token counting
         input_text = ""
         if request.system:
@@ -114,11 +119,17 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
                     if hasattr(block, "text") and block.text:
                         input_text += block.text
         
-        # Get model limits
+        # Get model limits and token counts for logging
+        from src.utils.model_limits import get_model_limits
         context_limit, output_limit = get_model_limits(routed_model)
-        input_tokens = len(input_text) // 4  # Rough estimate
         
-        # Log request start with ALL info on ONE line
+        # Estimate input tokens
+        input_tokens = 0
+        if input_text:
+            # Rough estimate: ~4 characters per token
+            input_tokens = max(1, len(input_text) // 4)
+        
+        # Log comprehensive request start
         request_logger.log_request_start(
             request_id=request_id,
             original_model=request.model,
@@ -129,9 +140,12 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             input_text=input_text,
             context_limit=context_limit,
             output_limit=output_limit,
-            input_tokens=input_tokens
+            input_tokens=input_tokens,
+            message_count=message_count,
+            has_system=has_system,
+            client_info=client_ip
         )
-
+        
         # Check if client disconnected before processing
         if await http_request.is_disconnected():
             logger.warning(f"Client disconnected before processing request_id: {request_id}")
@@ -193,7 +207,7 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             )
             logger.debug(f"OpenAI response received for request_id: {request_id}")
             
-            # Log completion with usage stats
+            # Log comprehensive completion with all metadata
             duration_ms = (time.time() - request_start_time) * 1000
             usage = openai_response.get("usage", {})
             
@@ -202,31 +216,12 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
                 usage=usage,
                 duration_ms=duration_ms,
                 status="OK",
-                model_name=routed_model
+                model_name=routed_model,
+                stream=request.stream,
+                message_count=message_count,
+                has_system=has_system,
+                client_info=client_ip
             )
-            
-            # Show output token usage visualization
-            context_limit, output_limit = get_model_limits(routed_model)
-            if output_limit > 0 and usage:
-                output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
-                thinking_tokens = 0
-                
-                # Extract thinking tokens
-                if "thinking_tokens" in usage:
-                    thinking_tokens = usage["thinking_tokens"]
-                elif "reasoning_tokens" in usage:
-                    thinking_tokens = usage["reasoning_tokens"]
-                elif "completion_tokens_details" in usage:
-                    details = usage["completion_tokens_details"]
-                    if isinstance(details, dict):
-                        thinking_tokens = details.get("reasoning_tokens", 0)
-                
-                request_logger.log_output_token_usage(
-                    request_id=request_id,
-                    output_tokens=output_tokens,
-                    output_limit=output_limit,
-                    thinking_tokens=thinking_tokens
-                )
             
             claude_response = convert_openai_to_claude_response(
                 openai_response, request

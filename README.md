@@ -96,8 +96,19 @@ REASONING_EFFORT="medium"
 
 ### 3. Start Server
 
+**Option A: Direct Python**
 ```bash
 python start_proxy.py
+```
+
+**Option B: Docker (Recommended for Production)**
+```bash
+# Build and run with Docker Compose
+docker-compose up --build
+
+# Or build and run manually
+docker build -t claude-code-proxy .
+docker run -p 8082:8082 --env-file .env claude-code-proxy
 ```
 
 ### 4. Use with Claude Code
@@ -710,6 +721,92 @@ Pricing:
 
 ---
 
+## 🐳 Docker Deployment
+
+### Quick Start with Docker
+
+**Using Docker Compose (Recommended):**
+```bash
+# 1. Configure environment
+cp .env.example .env
+# Edit .env with your settings
+
+# 2. Build and start
+docker-compose up --build
+
+# 3. Use with Claude Code
+export ANTHROPIC_BASE_URL=http://localhost:8082
+claude "Hello world"
+```
+
+**Manual Docker Build:**
+```bash
+# Build image
+docker build -t claude-code-proxy .
+
+# Run container
+docker run -p 8082:8082 --env-file .env claude-code-proxy
+
+# Or with environment variables
+docker run -p 8082:8082 \
+  -e OPENAI_API_KEY="your-key" \
+  -e OPENAI_BASE_URL="https://openrouter.ai/api/v1" \
+  -e BIG_MODEL="openai/gpt-5" \
+  claude-code-proxy
+```
+
+### Docker Configuration
+
+**Environment Variables:**
+- Mount `.env` file: `-v $(pwd)/.env:/app/.env`
+- Or pass directly: `-e OPENAI_API_KEY="..." -e BIG_MODEL="..."`
+
+**Persistent Configuration:**
+```bash
+# Mount modes.json for persistent configuration
+docker run -p 8082:8082 \
+  -v $(pwd)/.env:/app/.env \
+  -v $(pwd)/modes.json:/app/modes.json \
+  claude-code-proxy
+```
+
+**Dashboard with Docker:**
+```bash
+# Run with dashboard modules
+docker run -p 8082:8082 \
+  -e DASHBOARD_MODULES="performance:dense,activity:sparse" \
+  --env-file .env \
+  claude-code-proxy
+```
+
+### Production Docker Setup
+
+**docker-compose.prod.yml:**
+```yaml
+services:
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - BIG_MODEL=${BIG_MODEL}
+      - REASONING_EFFORT=high
+    volumes:
+      - ./modes.json:/app/modes.json
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+---
+
 ## 🛠️ Development
 
 ### Project Structure
@@ -834,24 +931,345 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 🎉 Features Summary
+## 🎛️ Dashboard System
 
-✅ **352 models** from multiple sources
-✅ **Comprehensive reasoning support** (OpenAI, Anthropic, all providers)
-✅ **Dual reasoning control** (effort + max_tokens)
-✅ **OpenRouter reasoning tokens** with block preservation
-✅ **10 pre-built templates** for quick setup
-✅ **Smart recommendations** with cost optimization
-✅ **99 configuration modes** for flexibility
-✅ **Interactive selector** with beautiful UI + filtering
-✅ **Local-only mode** (hide/show OpenRouter models)
-✅ **HYBRID MODE** - Mix local and remote models simultaneously!
-✅ **Per-model routing** - Each model to different provider
-✅ **Free local models** (Ollama, LMStudio)
-✅ **Multi-provider support** (OpenAI, Azure, OpenRouter, local)
-✅ **Function calling** & streaming support
-✅ **CLI configuration** for automation
-✅ **Comprehensive documentation** & examples  
+### ✅ **FULLY IMPLEMENTED** - Modular Dashboard System
+
+**Interactive Configuration Tool:**
+- ✅ `configure_dashboard.py` - Interactive module selection with previews
+- ✅ Dense vs Sparse display modes for all modules
+- ✅ 1-4 module selection with live previews
+- ✅ Command generation for Claude Code and .zshrc integration
+- ✅ Startup script generation with executable permissions
+
+**Dashboard Manager:**
+- ✅ `src/dashboard/dashboard_manager.py` - Orchestrates multiple modules
+- ✅ Environment variable configuration (`DASHBOARD_MODULES`)
+- ✅ Rich layout system (1-4 modules in grid/split layouts)
+- ✅ Live updating dashboard with configurable refresh rates
+- ✅ Plain text fallback when Rich library unavailable
+
+**Live Dashboard Interface:**
+- ✅ `src/dashboard/live_dashboard.py` - Replaces terminal output
+- ✅ Real-time API monitoring with Rich interface
+- ✅ Integration with existing request logger
+- ✅ Signal handling (Ctrl+C graceful shutdown)
+- ✅ Full-screen dashboard mode
+
+**5 Complete Dashboard Modules:**
+
+1. **✅ Performance Monitor** (`src/dashboard/modules/performance_monitor.py`)
+   - Dense: Full performance panel with progress bars, context usage, thinking tokens
+   - Sparse: Single line with key metrics (duration, tokens, cost, speed)
+   - Real-time session tracking with color coding
+   - Cost estimation and efficiency calculations
+
+2. **✅ Activity Feed** (`src/dashboard/modules/activity_feed.py`)
+   - Dense: Multi-session request history with status icons
+   - Sparse: Compact status summary with request counts
+   - Request pairing (start/complete/error tracking)
+   - Model routing display and performance metrics
+
+3. **✅ Routing Visualizer** (`src/dashboard/modules/routing_visualizer.py`)
+   - Dense: Visual model routing flow with ASCII art
+   - Sparse: Compact routing info with token flow
+   - Context and output token visualization
+   - Performance and cost analysis per routing decision
+
+4. **✅ Analytics Panel** (`src/dashboard/modules/analytics_panel.py`)
+   - Dense: Comprehensive analytics (requests, cost, performance, model usage)
+   - Sparse: Key metrics summary line
+   - Success rate calculation and performance extremes
+   - Hot model tracking and usage patterns
+
+5. **✅ Request Waterfall** (`src/dashboard/modules/request_waterfall.py`)
+   - Dense: Detailed request lifecycle with timing breakdown
+   - Sparse: Compact lifecycle summary
+   - Phase-by-phase timing (Parse→Route→Think→Send→Wait→Recv→Done)
+   - Real-time progress for active requests
+
+**Base Module System:**
+- ✅ `src/dashboard/modules/base_module.py` - Common functionality
+- ✅ Request history management with configurable limits
+- ✅ Token formatting, cost estimation, progress bars
+- ✅ Rich and plain text rendering support
+- ✅ Active/completed request tracking
+
+### 🎯 **DASHBOARD USAGE**
+
+**Quick Setup:**
+```bash
+# 1. Configure your dashboard interactively
+python configure_dashboard.py
+
+# 2. Select modules (e.g., performance:dense,activity:sparse)
+# 3. Copy generated commands to .zshrc or run directly:
+export DASHBOARD_MODULES="performance:dense,activity:sparse"
+
+# 4. Start live dashboard
+python -m src.dashboard.live_dashboard
+```
+
+**Example Configurations:**
+```bash
+# Performance monitoring only
+DASHBOARD_MODULES="performance:dense"
+
+# Multi-module setup
+DASHBOARD_MODULES="performance:sparse,activity:sparse,analytics:dense"
+
+# Full dashboard (4 modules)
+DASHBOARD_MODULES="performance:dense,activity:dense,routing:sparse,waterfall:sparse"
+```
+
+**Generated Commands:**
+- ✅ Environment variable export
+- ✅ Claude Code integration instructions
+- ✅ .zshrc aliases for easy access
+- ✅ Executable startup script (`start_dashboard.sh`)
+
+### 📊 **DASHBOARD PREVIEW EXAMPLES**
+
+**Dense Mode Example (Performance Monitor):**
+```
+┌─ API Performance Monitor ─────────────────────────────────────┐
+│ 🔵 Session abc123 | anthropic/claude-3.5-sonnet→openai/gpt-4o │
+│ ⚡ 15.8s | 📊 CTX: ████████░░ 43.7k/200k (22%) | 82 tok/s    │
+│ 🧠 THINK: ███░░░░░░░ 920 tokens | 💰 $0.0234 estimated       │
+│ 📤 OUT: ██░░░░░░░░ 1.3k/16k | 🌊 STREAMING | 3msg + SYS     │
+└───────────────────────────────────────────────────────────────┘
+```
+
+**Sparse Mode Example (Activity Feed):**
+```
+🔵abc123→OK 🟢def456→OK 🔴ghi789→ERR 🔵jkl012→OK | 4req 3.2s avg
+```
+
+### 🔧 **DASHBOARD INTEGRATION STATUS**
+
+**✅ PHASE 1 COMPLETE - Standalone Dashboard:**
+- Interactive configuration tool with previews
+- All 5 dashboard modules (dense + sparse modes)
+- Dashboard manager with layout system
+- Live dashboard with real-time updates
+- Request logger integration
+- Command generation for setup
+- Environment variable configuration
+- Rich formatting with fallback to plain text
+- Signal handling and graceful shutdown
+
+**✅ TESTED:**
+- Module rendering in both modes
+- Configuration parsing and validation
+- Layout generation for 1-4 modules
+- Request data flow from logger to modules
+- Cost estimation and token formatting
+- Progress bar generation
+- Model name formatting and provider detection
+
+**🔄 PHASE 2 IN DEVELOPMENT - Integrated Proxy Dashboard:**
+- **Terminal output replacement** - Dashboard becomes the proxy interface
+- **Edge-based module positioning** - Modules on top/bottom/left/right edges
+- **Central waterfall display** - Live request flow in center area
+- **Moveable modules** - Drag modules between edges and corners
+- **Layout persistence** - Save/load dashboard arrangements
+- **Resize panels** - Dynamic module sizing
+- **Auto-hide inactive modules** - Clean interface when not needed
+- **Focus mode** - Expand waterfall to full screen
+
+**🔄 PHASE 3 PLANNED:**
+- WebSocket dashboard for browser access
+- Historical data persistence
+- Advanced analytics with trend analysis
+- Custom module creation API
+- Dashboard themes and color schemes
+
+---
+
+## 🎉 Complete Features Summary
+
+### ✅ **CORE PROXY FEATURES (FULLY WORKING)**
+- **352 models** from multiple sources (OpenRouter, Ollama, LMStudio)
+- **Comprehensive reasoning support** (OpenAI, Anthropic, all providers)
+- **Dual reasoning control** (effort + max_tokens)
+- **OpenRouter reasoning tokens** with block preservation
+- **Multi-provider support** (OpenAI, Azure, OpenRouter, local)
+- **Function calling** & streaming support
+- **Claude API compatibility** with full `/v1/messages` endpoint
+- **Smart model mapping** (BIG/MIDDLE/SMALL configuration)
+- **Hybrid mode** - Mix local and remote models simultaneously
+- **Per-model routing** - Each model to different provider
+
+### ✅ **CONFIGURATION SYSTEM (FULLY WORKING)**
+- **10 pre-built templates** for quick setup
+- **Smart recommendations** with cost optimization
+- **99 configuration modes** for flexibility
+- **Interactive selector** with beautiful UI + filtering
+- **Local-only mode** (hide/show OpenRouter models)
+- **CLI configuration** for automation
+- **Environment variable management**
+- **Mode saving/loading system**
+
+### ✅ **DASHBOARD SYSTEM (FULLY WORKING)**
+- **5 complete dashboard modules** with dense/sparse modes
+- **Interactive configuration tool** with live previews
+- **Modular architecture** (1-4 modules, user selectable)
+- **Real-time monitoring** with Rich terminal interface
+- **Request lifecycle tracking** with detailed analytics
+- **Cost and performance monitoring**
+- **Session-based color coding**
+- **Command generation** for integration
+
+### ✅ **MODEL DATABASE (FULLY WORKING)**
+- **352 total models** with complete metadata
+- **140 free models** (local + OpenRouter free tier)
+- **Reasoning support detection** (210+ models)
+- **Vision support tracking** (45+ models)
+- **Pricing information** per 1M tokens
+- **Context window limits** for all models
+- **Provider endpoint mapping**
+
+### ✅ **LOGGING SYSTEM (FULLY WORKING)**
+- **Rich colored terminal output** with session colors
+- **Comprehensive request logging** (start/complete/error)
+- **Token usage visualization** with progress bars
+- **Performance metrics** (tokens/sec, latency)
+- **Cost estimation** with real-time tracking
+- **Context window monitoring** with percentage usage
+- **Thinking token tracking** for reasoning models
+
+### 🔄 **NEXT PHASE: INTEGRATED PROXY DASHBOARD**
+
+**🎯 Terminal Output Replacement (In Development)**
+
+The next major phase will replace the standard proxy terminal output with a **live dashboard interface** that integrates directly with the running proxy server:
+
+**Core Concept:**
+- **Static modules on edges** (top, bottom, left, right) showing persistent info
+- **Central waterfall area** displaying real-time request flow
+- **Moveable module positioning** - drag modules to any edge or corner
+- **Live proxy integration** - dashboard updates as requests flow through proxy
+
+**Planned Layout System:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ [Performance Monitor]     [Analytics Panel]                │ ← Top Edge
+├─────────────────────────────────────────────────────────────┤
+│[Activity] │                                     │ [Routing] │ ← Left/Right
+│  Feed     │        LIVE REQUEST WATERFALL       │Visualizer │   Edges
+│           │                                     │           │
+│           │ 🔵 req_123 Parse→Route→Send→Wait... │           │
+│           │ 🟢 req_122 ──────────────── Done   │           │
+│           │ 🔵 req_124 Parse→Route...           │           │
+│           │ 🔴 req_121 ──── Error: Rate Limit  │           │
+├─────────────────────────────────────────────────────────────┤
+│              [Model Usage Stats]                            │ ← Bottom Edge
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Module Positioning Options:**
+- **Top Edge:** Performance, Analytics, Summary stats
+- **Bottom Edge:** Model usage, Cost tracking, System info  
+- **Left Edge:** Activity feed, Request history, Alerts
+- **Right Edge:** Routing info, Token usage, Performance metrics
+- **Corners:** Compact modules (4 corner positions available)
+
+**Interactive Features (Planned):**
+- ✅ **Module dragging** - Move modules between edges with mouse/keyboard
+- ✅ **Resize panels** - Adjust module sizes dynamically
+- ✅ **Module cycling** - Rotate through different modules in same position
+- ✅ **Layout presets** - Save/load different dashboard arrangements
+- ✅ **Auto-hide** - Modules collapse when inactive
+- ✅ **Focus mode** - Expand waterfall to full screen
+
+**Integration Method:**
+```bash
+# Instead of standard proxy output:
+python start_proxy.py
+
+# New integrated dashboard mode:
+python start_proxy.py --dashboard-mode
+# or
+export PROXY_DASHBOARD_MODE="true"
+python start_proxy.py
+```
+
+**Configuration:**
+```bash
+# Dashboard layout configuration
+DASHBOARD_LAYOUT="performance:top,activity:left,routing:right,analytics:bottom"
+DASHBOARD_WATERFALL_SIZE="60%"  # Central area size
+DASHBOARD_AUTO_HIDE="true"      # Hide inactive modules
+DASHBOARD_REFRESH_RATE="2.0"    # Updates per second
+```
+
+### 🔄 **OTHER FEATURES IN DEVELOPMENT**
+- **WebSocket dashboard** for browser access
+- **Historical data persistence** beyond current session
+- **Advanced trend analysis** with usage patterns
+- **Custom dashboard themes** and color schemes
+- **Dashboard module API** for third-party extensions
+- **Automated model benchmarking**
+- **Cost optimization alerts**
+- **Usage analytics export**
+
+### ❌ **KNOWN LIMITATIONS**
+- Dashboard data is **session-only** (no persistence between restarts)
+- **No web interface** (terminal-only dashboard currently)
+- **Limited to 4 modules** maximum in dashboard
+- **No custom module creation** without code changes
+- **Cost estimates are approximate** (not real-time billing)
+
+### 🔒 **SECURITY NOTES**
+- **No hardcoded secrets** - All API keys via environment variables
+- **Gitignore protection** - Sensitive files excluded from version control
+- **Clean repository** - No development artifacts or temporary files
+
+### 🧪 **TESTING STATUS**
+- ✅ **Core proxy functionality** - Fully tested with multiple providers
+- ✅ **Model selection and configuration** - Tested with all templates
+- ✅ **Dashboard modules** - All 5 modules tested in both modes
+- ✅ **Request logging integration** - Tested with live API calls
+- ✅ **Configuration management** - Mode saving/loading tested
+- ✅ **Interactive tools** - Selector and configurator tested
+- 🔄 **Load testing** - In progress for high-volume scenarios
+- 🔄 **Edge case handling** - Ongoing testing for error conditions
+
+---
+
+## 📋 **AUDIT CHECKLIST**
+
+### ✅ **IMPLEMENTED AND WORKING**
+- [x] Claude API proxy with full compatibility
+- [x] Multi-provider support (OpenAI, Azure, OpenRouter, local)
+- [x] Reasoning token support across all providers
+- [x] 352 model database with metadata
+- [x] Interactive model selector with filtering
+- [x] 10 pre-built configuration templates
+- [x] 99 configuration mode slots
+- [x] Smart model recommendations
+- [x] Hybrid deployment support
+- [x] Rich terminal logging with colors
+- [x] Complete dashboard system (5 modules)
+- [x] Dashboard configuration tool
+- [x] Live dashboard interface
+- [x] Request lifecycle tracking
+- [x] Cost and performance monitoring
+- [x] Session-based analytics
+
+### 🔄 **IN DEVELOPMENT**
+- [ ] WebSocket dashboard for browser
+- [ ] Historical data persistence
+- [ ] Advanced analytics trends
+- [ ] Custom dashboard themes
+- [ ] Module creation API
+
+### ❌ **NOT IMPLEMENTED**
+- [ ] Web-based configuration interface
+- [ ] Real-time billing integration
+- [ ] Automated model benchmarking
+- [ ] Multi-user authentication
+- [ ] Database backend for persistence
 
 ---
 
