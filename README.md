@@ -789,6 +789,161 @@ Pricing:
 
 ---
 
+## 📊 Monitoring & Analytics
+
+### Real-Time Dashboards
+
+**Terminal Dashboard** (Live TUI with Rich):
+```bash
+# Enable terminal dashboard
+python src/main.py --dashboard
+# or
+export ENABLE_DASHBOARD="true"
+python src/main.py
+```
+
+**WebSocket Dashboard** (Browser-based):
+```bash
+# Start proxy normally
+python src/main.py
+
+# Access dashboard in browser
+open http://localhost:8082/dashboard
+```
+
+Features:
+- ⚡ Real-time request waterfall
+- 📈 Performance metrics (latency, tokens/sec)
+- 💰 Cost tracking and estimation
+- 🔄 Live routing visualization
+- ⚠️ Error monitoring with recent errors
+- 🤖 Top model usage statistics
+
+### Analytics API
+
+**Get Usage Summary**:
+```bash
+curl http://localhost:8082/api/analytics/summary?days=7
+```
+
+**Time-Series Data** (for charting):
+```bash
+curl http://localhost:8082/api/analytics/timeseries?days=7&interval=hour
+```
+
+**Cost Breakdown**:
+```bash
+curl http://localhost:8082/api/analytics/cost-breakdown?days=7
+```
+
+**Error Analytics**:
+```bash
+curl http://localhost:8082/api/analytics/errors?days=7
+```
+
+**Export Data**:
+```bash
+curl http://localhost:8082/api/analytics/export?days=30&format=csv -o analytics.csv
+curl http://localhost:8082/api/analytics/export?days=30&format=json -o analytics.json
+```
+
+### Billing Integration
+
+**Check Account Balances**:
+```bash
+curl http://localhost:8082/api/billing/balance
+```
+
+**Get Usage from Providers**:
+```bash
+curl http://localhost:8082/api/billing/usage?days=7
+```
+
+**Provider-Specific Data**:
+```bash
+curl http://localhost:8082/api/billing/provider/openrouter?days=7
+```
+
+### Model Benchmarking
+
+**Run Benchmark**:
+```bash
+curl -X POST "http://localhost:8082/api/benchmarks/run?model_name=gpt-4o&iterations=3"
+```
+
+**Compare Models**:
+```bash
+curl -X POST "http://localhost:8082/api/benchmarks/compare?models=gpt-4o&models=gpt-4o-mini"
+```
+
+**Get Benchmark Results**:
+```bash
+curl http://localhost:8082/api/benchmarks/results
+```
+
+**View Specific Result**:
+```bash
+curl http://localhost:8082/api/benchmarks/results/benchmark_gpt-4o_20250119_123456.json
+```
+
+### Multi-User Management
+
+**Create User**:
+```bash
+curl -X POST http://localhost:8082/api/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john",
+    "email": "john@example.com",
+    "quota_requests": 1000,
+    "quota_tokens": 1000000,
+    "quota_cost": 10.0
+  }'
+```
+
+**Get Current User**:
+```bash
+curl http://localhost:8082/api/users/me \
+  -H "x-api-key: sk-..."
+```
+
+**Check Quota**:
+```bash
+curl http://localhost:8082/api/users/me/quota \
+  -H "x-api-key: sk-..."
+```
+
+**View Usage History**:
+```bash
+curl http://localhost:8082/api/users/me/usage?days=7 \
+  -H "x-api-key: sk-..."
+```
+
+### Configuration
+
+**Enable Usage Tracking**:
+```bash
+# .env
+TRACK_USAGE="true"
+```
+
+**Enable Terminal Dashboard**:
+```bash
+# .env
+ENABLE_DASHBOARD="true"
+DASHBOARD_LAYOUT="default"  # default, compact, detailed
+DASHBOARD_REFRESH="0.5"     # seconds between updates
+DASHBOARD_WATERFALL_SIZE="20"  # number of requests to show
+```
+
+**Compact Logger Mode**:
+```bash
+# Reduce console noise when dashboard is active
+COMPACT_LOGGER="true"
+```
+
+---
+
 ## 🐳 Docker Deployment
 
 ### Quick Start with Docker
@@ -1325,19 +1480,19 @@ DASHBOARD_REFRESH_RATE="2.0"    # Updates per second
 - [x] Cost and performance monitoring
 - [x] Session-based analytics
 
+### ✅ **NEWLY IMPLEMENTED** (Latest Update)
+- [x] **WebSocket dashboard** for browser - Real-time dashboard at `/dashboard`
+- [x] **Historical data persistence** - Analytics API with time-series data
+- [x] **Advanced analytics** - Cost breakdown, error analysis, trend tracking
+- [x] **Real-time billing integration** - Provider API integration (OpenRouter, OpenAI, Anthropic)
+- [x] **Automated model benchmarking** - Standardized tests, performance comparison
+- [x] **Multi-user authentication** - User management with API keys and quotas
+- [x] **Database backend** - Enhanced SQLite with export capabilities
+
 ### 🔄 **IN DEVELOPMENT**
-- [ ] WebSocket dashboard for browser
-- [ ] Historical data persistence
-- [ ] Advanced analytics trends
 - [ ] Custom dashboard themes
 - [ ] Module creation API
-
-### ❌ **NOT IMPLEMENTED**
-- [ ] Web-based configuration interface
-- [ ] Real-time billing integration
-- [ ] Automated model benchmarking
-- [ ] Multi-user authentication
-- [ ] Database backend for persistence
+- [ ] Web-based configuration interface (currently API-only)
 
 ---
 
