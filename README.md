@@ -819,6 +819,73 @@ Features:
 - ⚠️ Error monitoring with recent errors
 - 🤖 Top model usage statistics
 
+### Prompt Injection (Claude Code Context)
+
+**Inject proxy stats into Claude Code prompts** - Give Claude visibility into proxy performance!
+
+**Interactive Configuration**:
+```bash
+# Run the configurator
+python configure_prompt_injection.py
+
+# Select modules, size, and injection mode
+# Generates commands for .zshrc and p10k
+```
+
+**Manual Configuration**:
+```bash
+# Enable prompt injection
+export PROMPT_INJECTION_ENABLED="true"
+export PROMPT_INJECTION_MODULES="status,performance,errors"
+export PROMPT_INJECTION_SIZE="medium"  # large, medium, small
+export PROMPT_INJECTION_MODE="auto"    # auto, always, manual, header
+```
+
+**Size Variants**:
+
+- **Large** (~200-300 tokens): Multi-line boxes with full details
+  ```
+  ┌─ 🔧 Proxy Status ─────────────┐
+  │ Provider: OpenRouter | Proxy  │
+  │ BIG: openai/gpt-5             │
+  │ Reasoning: high | 8000 tokens │
+  └────────────────────────────────┘
+  ```
+
+- **Medium** (~50-100 tokens): Single-line compact [RECOMMENDED]
+  ```
+  🔧 OpenRouter | 🤖 gpt-5 | 🧠 high | 🔒
+  ⚡ 847req | 1234ms | 78t/s | $12.45
+  ```
+
+- **Small** (~20-40 tokens): Ultra-compact icons
+  ```
+  🌐🧠 ⚡847r·78t/s ✓99%
+  ```
+
+**Available Modules**:
+- `status` - Provider, models, reasoning config
+- `performance` - Requests, latency, speed, cost
+- `errors` - Success rate, error types
+- `models` - Top models and usage stats
+
+**Injection Modes**:
+- `auto` - Smart injection (tool calls, streaming) [RECOMMENDED]
+- `always` - Inject on every request
+- `header` - Compact header only
+- `manual` - Programmatic control
+
+**Powerlevel10k Integration**:
+```zsh
+# Add to ~/.p10k.zsh (see examples/p10k_integration.zsh)
+function prompt_custom_proxy_status() {
+  # Shows: 🔧⚡✓🤖 in your prompt
+  ...
+}
+```
+
+**Examples**: See `examples/PROMPT_INJECTION_EXAMPLES.md` for detailed scenarios.
+
 ### Analytics API
 
 **Get Usage Summary**:
