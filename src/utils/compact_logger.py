@@ -159,7 +159,9 @@ class CompactLogger:
         has_system: bool = False,
         has_tools: bool = False,
         has_images: bool = False,
-        client_info: Optional[str] = None
+        client_info: Optional[str] = None,
+        workspace_name: Optional[str] = None,
+        **kwargs  # Accept any additional kwargs to avoid errors
     ) -> None:
         """
         Log request start - SINGLE LINE.

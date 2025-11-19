@@ -114,15 +114,37 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
         has_system = bool(request.system)
         client_ip = http_request.client.host if http_request.client else "unknown"
         
-        # Extract input text for token counting
+        # Extract input text for token counting and workspace detection
         input_text = ""
+        workspace_name = None
+        
         if request.system:
             if isinstance(request.system, str):
                 input_text += request.system
+                # Try to extract workspace from system prompt
+                import re
+                # Look for patterns like "/Users/user/project" or "workspace: project"
+                workspace_match = re.search(r'/([^/]+)/git/([^/\s]+)', request.system)
+                if not workspace_match:
+                    workspace_match = re.search(r'workspace.*?([a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)', request.system, re.IGNORECASE)
+                if workspace_match:
+                    workspace_name = workspace_match.group(2) if len(workspace_match.groups()) > 1 else workspace_match.group(1)
+                    # Shorten if too long
+                    if workspace_name and len(workspace_name) > 20:
+                        workspace_name = workspace_name[:17] + "..."
             elif isinstance(request.system, list):
                 for block in request.system:
                     if hasattr(block, "text"):
                         input_text += block.text
+                        if not workspace_name and block.text:
+                            import re
+                            workspace_match = re.search(r'/([^/]+)/git/([^/\s]+)', block.text)
+                            if not workspace_match:
+                                workspace_match = re.search(r'workspace.*?([a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)', block.text, re.IGNORECASE)
+                            if workspace_match:
+                                workspace_name = workspace_match.group(2) if len(workspace_match.groups()) > 1 else workspace_match.group(1)
+                                if workspace_name and len(workspace_name) > 20:
+                                    workspace_name = workspace_name[:17] + "..."
         
         for msg in request.messages:
             if isinstance(msg.content, str):
@@ -168,7 +190,8 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             has_system=has_system,
             has_tools=has_tools,
             has_images=has_images,
-            client_info=client_ip
+            client_info=client_ip,
+            workspace_name=workspace_name
         )
         
         # Check if client disconnected before processing
