@@ -53,11 +53,24 @@ openai_client = OpenAIClient(
 # Configure per-model clients for hybrid deployments
 openai_client.configure_per_model_clients(config)
 
-async def validate_api_key(x_api_key: Optional[str] = Header(None), authorization: Optional[str] = Header(None)):
-    """Validate the client's API key from either x-api-key header or Authorization header."""
-    client_api_key = None
+async def validate_and_extract_api_key(
+    x_api_key: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
+    openai_api_key: Optional[str] = Header(None, alias="openai-api-key")
+) -> Optional[str]:
+    """
+    Validate and extract API keys based on operating mode.
 
-    # Extract API key from headers
+    Returns:
+        OpenAI API key to use for the request (None in proxy mode)
+
+    Raises:
+        HTTPException: If validation fails
+    """
+    client_api_key = None
+    openai_key = None
+
+    # Extract Anthropic API key from headers (for Claude client validation)
     if x_api_key:
         client_api_key = x_api_key
         logger.debug(f"API key from x-api-key header: {client_api_key[:10]}...")
@@ -65,25 +78,47 @@ async def validate_api_key(x_api_key: Optional[str] = Header(None), authorizatio
         client_api_key = authorization.replace("Bearer ", "")
         logger.debug(f"API key from Authorization header: {client_api_key[:10]}...")
 
-    # Skip validation if ANTHROPIC_API_KEY is not set in the environment
-    if not config.anthropic_api_key:
-        logger.debug("ANTHROPIC_API_KEY not set, skipping client validation")
-        return
+    # Extract OpenAI API key from headers (for passthrough mode)
+    if openai_api_key:
+        openai_key = openai_api_key
+        logger.debug(f"OpenAI API key from header: {openai_key[:10]}...")
 
-    logger.debug(f"Expected ANTHROPIC_API_KEY: {config.anthropic_api_key}")
+    # Passthrough mode: Require OpenAI API key from user
+    if config.passthrough_mode:
+        if not openai_key:
+            raise HTTPException(
+                status_code=401,
+                detail="Passthrough mode: Please provide your OpenAI API key via 'openai-api-key' header"
+            )
 
-    # Validate the client API key
-    if not client_api_key or not config.validate_client_api_key(client_api_key):
-        logger.warning(f"Invalid API key provided by client. Expected: {config.anthropic_api_key}, Got: {client_api_key[:10] if client_api_key else 'None'}...")
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid API key. Please provide a valid Anthropic API key."
-        )
+        # Validate OpenAI API key format
+        if not config.validate_api_key(openai_key):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid OpenAI API key format. Key must start with 'sk-' and be at least 20 characters"
+            )
 
-    logger.debug("API key validation passed")
+        logger.debug("Passthrough mode: OpenAI API key validated")
+        return openai_key
+
+    # Proxy mode: Validate Anthropic client key if configured
+    if config.anthropic_api_key:
+        if not client_api_key or not config.validate_client_api_key(client_api_key):
+            logger.warning(f"Invalid API key provided by client. Expected: {config.anthropic_api_key}, Got: {client_api_key[:10] if client_api_key else 'None'}...")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid API key. Please provide a valid Anthropic API key."
+            )
+        logger.debug("Proxy mode: Anthropic API key validation passed")
+
+    return None  # Proxy mode: use server-configured API key
 
 @router.post("/v1/messages")
-async def create_message(request: ClaudeMessagesRequest, http_request: Request, _: None = Depends(validate_api_key)):
+async def create_message(
+    request: ClaudeMessagesRequest,
+    http_request: Request,
+    openai_api_key: Optional[str] = Depends(validate_and_extract_api_key)
+):
     request_start_time = time.time()
     request_id = str(uuid.uuid4())
     
@@ -204,7 +239,7 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             logger.debug(f"Starting streaming response for request_id: {request_id}")
             try:
                 openai_stream = openai_client.create_chat_completion_stream(
-                    openai_request, request_id, config
+                    openai_request, request_id, config, api_key=openai_api_key
                 )
                 logger.debug(f"OpenAI stream created for request_id: {request_id}")
                 return StreamingResponse(
@@ -251,7 +286,7 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             # Non-streaming response
             logger.debug(f"Starting non-streaming response for request_id: {request_id}")
             openai_response = await openai_client.create_chat_completion(
-                openai_request, request_id, config
+                openai_request, request_id, config, api_key=openai_api_key
             )
             logger.debug(f"OpenAI response received for request_id: {request_id}")
             
@@ -383,7 +418,10 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
 
 
 @router.post("/v1/messages/count_tokens")
-async def count_tokens(request: ClaudeTokenCountRequest, _: None = Depends(validate_api_key)):
+async def count_tokens(
+    request: ClaudeTokenCountRequest,
+    openai_api_key: Optional[str] = Depends(validate_and_extract_api_key)
+):
     try:
         # For token counting, we'll use a simple estimation
         # In a real implementation, you might want to use tiktoken or similar
@@ -437,12 +475,23 @@ async def test_connection():
     """Test API connectivity to OpenAI"""
     try:
         # Simple test request to verify API connectivity
+        # Check if the test model is a newer OpenAI model
+        is_newer_model = model_manager.is_newer_openai_model(config.small_model)
+
+        test_request = {
+            "model": config.small_model,
+            "messages": [{"role": "user", "content": "Hello"}],
+        }
+
+        # Newer OpenAI models (o1, o3, o4, gpt-5) require max_completion_tokens and temperature=1
+        if is_newer_model:
+            test_request["max_completion_tokens"] = 200
+            test_request["temperature"] = 1
+        else:
+            test_request["max_tokens"] = 5
+
         test_response = await openai_client.create_chat_completion(
-            {
-                "model": config.small_model,
-                "messages": [{"role": "user", "content": "Hello"}],
-                "max_tokens": 5,
-            },
+            test_request,
             config=config
         )
 

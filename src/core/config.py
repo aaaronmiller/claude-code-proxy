@@ -5,14 +5,22 @@ import sys
 class Config:
     def __init__(self):
         self.openai_api_key = os.environ.get("OPENAI_API_KEY")
+
+        # Determine operating mode: proxy (default) or passthrough
+        # Proxy mode: Server-configured OPENAI_API_KEY handles all requests
+        # Passthrough mode: Users supply their own OpenAI API keys via headers
+        self.passthrough_mode = False
+
         if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment variables")
-        if self.openai_api_key == "pass" or self.openai_api_key == "your-api-key-here":
-            raise ValueError(
-                "OPENAI_API_KEY is set to a placeholder value. "
-                "Please set it to your actual API key from your provider "
-                "(OpenAI, OpenRouter, Azure, etc.)"
-            )
+            # No server API key configured - enable passthrough mode
+            print("INFO: OPENAI_API_KEY not configured - enabling passthrough mode")
+            print("INFO: Users must provide their own OpenAI API keys via request headers")
+            self.passthrough_mode = True
+        elif self.openai_api_key == "pass" or self.openai_api_key == "your-api-key-here":
+            print("WARNING: OPENAI_API_KEY is set to a placeholder value")
+            print("INFO: Enabling passthrough mode - users must provide their own API keys")
+            self.passthrough_mode = True
+            self.openai_api_key = None
 
         # Set base URL
         self.openai_base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
@@ -142,13 +150,29 @@ class Config:
                 print(f"Warning: REASONING_MAX_TOKENS {self.reasoning_max_tokens} exceeds maximum (24576). "
                       f"Will be adjusted per provider limits.")
     
-    def validate_api_key(self):
-        """Basic API key validation"""
-        if not self.openai_api_key:
+    def validate_api_key(self, api_key: str = None):
+        """
+        Validate OpenAI API key format.
+
+        Args:
+            api_key: API key to validate. If None, uses self.openai_api_key
+
+        Returns:
+            True if valid, False otherwise
+        """
+        key_to_validate = api_key if api_key is not None else self.openai_api_key
+
+        if not key_to_validate:
             return False
+
         # Basic format check for OpenAI API keys
-        if not self.openai_api_key.startswith('sk-'):
+        if not key_to_validate.startswith('sk-'):
             return False
+
+        # Minimum length check (OpenAI keys are typically 48+ characters)
+        if len(key_to_validate) < 20:
+            return False
+
         return True
         
     def validate_client_api_key(self, client_api_key):
