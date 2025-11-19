@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Code Proxy - Configuration</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔧 Claude Code Proxy</h1>
+            <p class="subtitle">Configuration & Monitoring Dashboard</p>
+            <div class="status-bar">
+                <span id="proxy-status" class="status-indicator">●</span>
+                <span id="proxy-status-text">Checking...</span>
+                <span class="separator">|</span>
+                <span id="mode-indicator">Mode: <strong id="current-mode">Loading...</strong></span>
+            </div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-button active" onclick="switchTab('config')">⚙️ Configuration</button>
+            <button class="tab-button" onclick="switchTab('profiles')">📁 Profiles</button>
+            <button class="tab-button" onclick="switchTab('models')">🤖 Models</button>
+            <button class="tab-button" onclick="switchTab('monitor')">📊 Monitor</button>
+        </nav>
+
+        <!-- Configuration Tab -->
+        <div id="config-tab" class="tab-content active">
+            <div class="section">
+                <h2>🔑 API Configuration</h2>
+                <div class="form-group">
+                    <label for="openai-api-key">OpenAI API Key</label>
+                    <input type="password" id="openai-api-key" placeholder="sk-..." />
+                    <small>Leave empty to enable passthrough mode (users provide their own keys)</small>
+                </div>
+                <div class="form-group">
+                    <label for="anthropic-api-key">Anthropic API Key (Client Validation)</label>
+                    <input type="password" id="anthropic-api-key" placeholder="sk-ant-..." />
+                    <small>Optional: Require clients to provide this key</small>
+                </div>
+                <div class="form-group">
+                    <label for="openai-base-url">OpenAI Base URL</label>
+                    <input type="text" id="openai-base-url" placeholder="https://api.openai.com/v1" />
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🎯 Model Configuration</h2>
+                <div class="form-group">
+                    <label for="big-model">BIG Model (Claude Opus)</label>
+                    <input type="text" id="big-model" placeholder="gpt-4o" />
+                </div>
+                <div class="form-group">
+                    <label for="middle-model">MIDDLE Model (Claude Sonnet)</label>
+                    <input type="text" id="middle-model" placeholder="gpt-4o" />
+                </div>
+                <div class="form-group">
+                    <label for="small-model">SMALL Model (Claude Haiku)</label>
+                    <input type="text" id="small-model" placeholder="gpt-4o-mini" />
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🧠 Reasoning Configuration</h2>
+                <div class="form-group">
+                    <label for="reasoning-effort">Reasoning Effort</label>
+                    <select id="reasoning-effort">
+                        <option value="">Not set</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="reasoning-max-tokens">Max Reasoning Tokens</label>
+                    <input type="number" id="reasoning-max-tokens" placeholder="8000" />
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>📈 Monitoring & Logging</h2>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="track-usage" />
+                        Enable Usage Tracking (SQLite)
+                    </label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="compact-logger" />
+                        Use Compact Logger
+                    </label>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" onclick="saveConfig()">💾 Save & Apply</button>
+                <button class="btn btn-secondary" onclick="reloadConfig()">🔄 Reload from Env</button>
+                <button class="btn btn-secondary" onclick="exportConfig()">📥 Export Config</button>
+            </div>
+        </div>
+
+        <!-- Profiles Tab -->
+        <div id="profiles-tab" class="tab-content">
+            <div class="section">
+                <h2>📁 Configuration Profiles</h2>
+                <p>Save and load different configuration sets for quick switching</p>
+
+                <div class="profile-actions">
+                    <input type="text" id="new-profile-name" placeholder="Profile name..." />
+                    <button class="btn btn-primary" onclick="saveProfile()">💾 Save Current as Profile</button>
+                </div>
+
+                <div id="profiles-list" class="profiles-list">
+                    <p class="loading">Loading profiles...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Models Tab -->
+        <div id="models-tab" class="tab-content">
+            <div class="section">
+                <h2>🤖 Available Models</h2>
+                <div class="search-box">
+                    <input type="text" id="model-search" placeholder="Search models..." onkeyup="filterModels()" />
+                    <select id="model-provider-filter" onchange="filterModels()">
+                        <option value="">All Providers</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="anthropic">Anthropic</option>
+                        <option value="google">Google</option>
+                        <option value="meta">Meta</option>
+                        <option value="qwen">Qwen</option>
+                    </select>
+                </div>
+                <div id="models-list" class="models-list">
+                    <p class="loading">Loading models...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monitor Tab -->
+        <div id="monitor-tab" class="tab-content">
+            <div class="section">
+                <h2>📊 Proxy Status</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Requests Today</div>
+                        <div class="stat-value" id="requests-today">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Total Tokens</div>
+                        <div class="stat-value" id="total-tokens">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Est. Cost (24h)</div>
+                        <div class="stat-value" id="est-cost">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Avg Latency</div>
+                        <div class="stat-value" id="avg-latency">-</div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" onclick="refreshStats()">🔄 Refresh Stats</button>
+            </div>
+
+            <div class="section">
+                <h2>🔥 Recent Requests</h2>
+                <div id="recent-requests" class="requests-list">
+                    <p class="loading">Loading recent requests...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

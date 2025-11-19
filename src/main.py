@@ -1,13 +1,41 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from src.api.endpoints import router as api_router
+from src.api.web_ui import router as web_ui_router
 import uvicorn
 import sys
 import os
+from pathlib import Path
 from src.core.config import config
 
 app = FastAPI(title="Claude-to-OpenAI API Proxy", version="1.0.0")
 
+# Include API routers
 app.include_router(api_router)
+app.include_router(web_ui_router)
+
+# Mount static files for web UI
+static_dir = Path(__file__).parent.parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# Serve web UI at root
+@app.get("/")
+async def serve_web_ui():
+    """Serve the web UI at the root path"""
+    index_file = static_dir / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"message": "Claude-to-OpenAI API Proxy", "version": "1.0.0", "web_ui": "not available"}
+
+@app.get("/config")
+async def serve_config_ui():
+    """Serve the web UI at /config path for convenience"""
+    index_file = static_dir / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"message": "Web UI not available"}
 
 
 def main(env_updates: dict = None):
