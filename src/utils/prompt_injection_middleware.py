@@ -6,7 +6,7 @@ based on configuration and request patterns.
 """
 
 from typing import Dict, Any, Optional
-from src.utils.prompt_injector import prompt_injector
+import os
 from src.core.logging import logger
 
 
@@ -14,19 +14,24 @@ class PromptInjectionMiddleware:
     """Middleware to inject proxy status into requests"""
 
     def __init__(self):
-        self.enabled = False
-        self.format = 'single'  # 'expanded', 'single', 'mini'
-        self.modules = ['status', 'performance', 'errors', 'models']
-        self.inject_mode = 'auto'  # 'auto', 'always', 'never', 'compact_only'
+        # Load configuration from environment
+        self.enabled = os.getenv('PROMPT_INJECTION_ENABLED', 'false').lower() == 'true'
+        self.size = os.getenv('PROMPT_INJECTION_SIZE', 'medium')  # 'large', 'medium', 'small'
+
+        # Parse modules from env
+        modules_str = os.getenv('PROMPT_INJECTION_MODULES', 'status,performance')
+        self.modules = [m.strip() for m in modules_str.split(',') if m.strip()]
+
+        self.inject_mode = os.getenv('PROMPT_INJECTION_MODE', 'auto')  # 'auto', 'always', 'manual', 'header'
 
     def configure(self,
                  enabled: bool = True,
-                 format: str = 'single',
+                 size: str = 'medium',
                  modules: list = None,
                  inject_mode: str = 'auto'):
         """Configure injection settings"""
         self.enabled = enabled
-        self.format = format
+        self.size = size
         if modules:
             self.modules = modules
         self.inject_mode = inject_mode
@@ -36,13 +41,13 @@ class PromptInjectionMiddleware:
         if not self.enabled:
             return False
 
-        if self.inject_mode == 'never':
+        if self.inject_mode == 'manual':
             return False
 
         if self.inject_mode == 'always':
             return True
 
-        if self.inject_mode == 'compact_only':
+        if self.inject_mode == 'header':
             return False  # Only inject in headers
 
         # Auto mode: inject based on request characteristics
@@ -67,56 +72,85 @@ class PromptInjectionMiddleware:
         if not self.should_inject(request):
             return request
 
-        # Generate injection content
-        injection = prompt_injector.generate_prompt_context(
-            format=self.format,
-            modules=self.modules
-        )
+        try:
+            from src.dashboard.prompt_modules import prompt_dashboard_renderer
 
-        # Find or create system message
-        messages = request.get('messages', [])
-        system_idx = None
+            # Generate injection content
+            injection = prompt_dashboard_renderer.render(
+                modules=self.modules,
+                size=self.size
+            )
 
-        for i, msg in enumerate(messages):
-            if msg.get('role') == 'system':
-                system_idx = i
-                break
+            if not injection:
+                return request
 
-        if system_idx is not None:
-            # Append to existing system message
-            existing_content = messages[system_idx].get('content', '')
-            messages[system_idx]['content'] = f"{existing_content}\n\n{injection}"
-        else:
-            # Prepend new system message
-            messages.insert(0, {
-                'role': 'system',
-                'content': injection
-            })
+            # Add marker for user visibility
+            injection = f"<!-- Proxy Status (auto-injected) -->\n{injection}"
 
-        request['messages'] = messages
-        logger.debug(f"Injected proxy status ({self.format} format) into request")
+            # Find or create system message
+            messages = request.get('messages', [])
+            system_idx = None
+
+            for i, msg in enumerate(messages):
+                if msg.get('role') == 'system':
+                    system_idx = i
+                    break
+
+            if system_idx is not None:
+                # Append to existing system message
+                existing_content = messages[system_idx].get('content', '')
+                messages[system_idx]['content'] = f"{existing_content}\n\n{injection}"
+            else:
+                # Prepend new system message
+                messages.insert(0, {
+                    'role': 'system',
+                    'content': injection
+                })
+
+            request['messages'] = messages
+            logger.debug(f"Injected proxy status ({self.size} size, {len(self.modules)} modules) into request")
+
+        except Exception as e:
+            logger.warning(f"Failed to inject proxy status: {e}")
 
         return request
 
     def get_compact_header(self) -> str:
         """Get ultra-compact header for all requests"""
-        return prompt_injector.generate_compact_header()
+        try:
+            from src.dashboard.prompt_modules import prompt_dashboard_renderer
+
+            return prompt_dashboard_renderer.render_header(
+                modules=self.modules,
+                size='small'
+            )
+        except Exception as e:
+            logger.warning(f"Failed to generate compact header: {e}")
+            return ""
 
     def inject_into_system_prompt(self, system_prompt: str) -> str:
         """Inject into existing system prompt string"""
         if not self.enabled:
             return system_prompt
 
-        injection = prompt_injector.generate_prompt_context(
-            format=self.format,
-            modules=self.modules
-        )
+        try:
+            from src.dashboard.prompt_modules import prompt_dashboard_renderer
 
-        # Append to system prompt
-        if system_prompt:
-            return f"{system_prompt}\n\n{injection}"
-        else:
-            return injection
+            injection = prompt_dashboard_renderer.render(
+                modules=self.modules,
+                size=self.size
+            )
+
+            if not injection:
+                return system_prompt
+
+            # Append to system prompt
+            if system_prompt:
+                return f"{system_prompt}\n\n<!-- Proxy Status -->\n{injection}"
+            else:
+                return f"<!-- Proxy Status -->\n{injection}"
+        except Exception:
+            return system_prompt
 
 
 # Global middleware instance
