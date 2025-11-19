@@ -413,6 +413,45 @@ class UsageTracker:
             logger.error(f"Failed to export to CSV: {e}")
             return False
 
+    def export_to_json(self, output_file: str, days: int = 30) -> bool:
+        """Export usage data to JSON."""
+        if not self.enabled:
+            return False
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+
+            cursor.execute("""
+                SELECT * FROM api_requests
+                WHERE timestamp >= ?
+                ORDER BY timestamp DESC
+            """, (since,))
+
+            rows = cursor.fetchall()
+
+            if rows:
+                data = [dict(row) for row in rows]
+                with open(output_file, 'w') as f:
+                    json.dump({
+                        "exported_at": datetime.utcnow().isoformat(),
+                        "days": days,
+                        "record_count": len(data),
+                        "records": data
+                    }, f, indent=2)
+
+                logger.info(f"Exported {len(rows)} records to {output_file}")
+
+            conn.close()
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to export to JSON: {e}")
+            return False
+
 
 # Global instance
 usage_tracker = UsageTracker()

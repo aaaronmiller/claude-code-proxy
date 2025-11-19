@@ -3,6 +3,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from src.api.endpoints import router as api_router
 from src.api.web_ui import router as web_ui_router
+from src.api.websocket_dashboard import router as websocket_router
+from src.api.analytics import router as analytics_router
+from src.api.billing import router as billing_router
+from src.api.benchmarks import router as benchmarks_router
+from src.api.users import router as users_router
 import uvicorn
 import sys
 import os
@@ -14,6 +19,11 @@ app = FastAPI(title="Claude-to-OpenAI API Proxy", version="1.0.0")
 # Include API routers
 app.include_router(api_router)
 app.include_router(web_ui_router)
+app.include_router(websocket_router)
+app.include_router(analytics_router)
+app.include_router(billing_router)
+app.include_router(benchmarks_router)
+app.include_router(users_router)
 
 # Mount static files for web UI
 static_dir = Path(__file__).parent.parent / "static"
@@ -47,10 +57,16 @@ def main(env_updates: dict = None):
             env_key = key.replace('CLAUDE_', '')
             os.environ[env_key] = value
 
+    # Check for dashboard flag
+    enable_dashboard = "--dashboard" in sys.argv or config.enable_dashboard
+
     if len(sys.argv) > 1 and sys.argv[1] == "--help":
         print("Claude-to-OpenAI API Proxy v1.0.0")
         print("")
-        print("Usage: python src/main.py")
+        print("Usage: python src/main.py [--dashboard]")
+        print("")
+        print("Options:")
+        print("  --dashboard  Enable terminal dashboard with live metrics")
         print("")
         print("Required environment variables:")
         print("  OPENAI_API_KEY - Your OpenAI API key")
@@ -70,6 +86,14 @@ def main(env_updates: dict = None):
         print(f"  MAX_TOKENS_LIMIT - Token limit (default: 4096)")
         print(f"  MIN_TOKENS_LIMIT - Minimum token limit (default: 100)")
         print(f"  REQUEST_TIMEOUT - Request timeout in seconds (default: 90)")
+        print("")
+        print("Dashboard environment variables:")
+        print(f"  ENABLE_DASHBOARD - Enable terminal dashboard (default: false)")
+        print(f"  DASHBOARD_LAYOUT - Layout: default, compact, detailed (default: default)")
+        print(f"  DASHBOARD_REFRESH - Refresh rate in seconds (default: 0.5)")
+        print(f"  DASHBOARD_WATERFALL_SIZE - Completed requests to show (default: 20)")
+        print(f"  TRACK_USAGE - Enable usage tracking (default: true if dashboard enabled)")
+        print(f"  COMPACT_LOGGER - Reduce console noise (default: true if dashboard enabled)")
         print("")
         print("Model mapping:")
         print(f"  Claude haiku models -> {config.small_model}")
@@ -133,14 +157,40 @@ def main(env_updates: dict = None):
     if log_level not in valid_levels:
         log_level = 'info'
 
+    # Start terminal dashboard if enabled
+    if enable_dashboard:
+        import threading
+        from src.dashboard.terminal_dashboard import terminal_dashboard
+        from src.dashboard.dashboard_hooks import dashboard_hooks
+
+        print("\n🎨 Starting Terminal Dashboard...")
+        print("   Dashboard will display live metrics and request flow")
+        print("   Press Ctrl+C to stop\n")
+
+        # Enable dashboard hooks
+        dashboard_hooks.enable()
+
+        # Start dashboard in separate thread
+        dashboard_thread = threading.Thread(target=terminal_dashboard.start, daemon=True)
+        dashboard_thread.start()
+
+        # Brief delay to let dashboard initialize
+        import time
+        time.sleep(0.5)
+
     # Start server
-    uvicorn.run(
-        "src.main:app",
-        host=config.host,
-        port=config.port,
-        log_level=log_level,
-        reload=False,
-    )
+    try:
+        uvicorn.run(
+            "src.main:app",
+            host=config.host,
+            port=config.port,
+            log_level=log_level,
+            reload=False,
+        )
+    finally:
+        # Cleanup dashboard if running
+        if enable_dashboard:
+            terminal_dashboard.stop()
 
 
 if __name__ == "__main__":

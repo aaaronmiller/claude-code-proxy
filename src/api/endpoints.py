@@ -23,6 +23,7 @@ from src.utils.json_detector import json_detector
 from src.utils.cost_calculator import calculate_cost
 from src.utils.model_limits import get_model_limits
 from src.conversation.crosstalk import crosstalk_orchestrator
+from src.dashboard.dashboard_hooks import dashboard_hooks
 from src.models.crosstalk import (
     CrosstalkSetupRequest,
     CrosstalkSetupResponse,
@@ -228,7 +229,16 @@ async def create_message(
             client_info=client_ip,
             workspace_name=workspace_name
         )
-        
+
+        # Dashboard hook: request start
+        dashboard_hooks.on_request_start(request_id, {
+            'model': routed_model,
+            'stream': request.stream,
+            'has_tools': has_tools,
+            'has_images': has_images,
+            'input_tokens': input_tokens
+        })
+
         # Check if client disconnected before processing
         if await http_request.is_disconnected():
             logger.warning(f"Client disconnected before processing request_id: {request_id}")
@@ -356,6 +366,23 @@ async def create_message(
                 openai_response, request
             )
             logger.debug(f"Claude response created for request_id: {request_id}")
+
+            # Dashboard hook: request complete
+            dashboard_hooks.on_request_complete(request_id, 'completed', {
+                'model': routed_model,
+                'duration_ms': int(duration_ms),
+                'input_tokens': usage.get("input_tokens", usage.get("prompt_tokens", 0)),
+                'output_tokens': usage.get("output_tokens", usage.get("completion_tokens", 0)),
+                'thinking_tokens': usage.get("thinking_tokens", 0),
+                'tokens': usage.get("total_tokens", 0),
+                'cost': estimated_cost,
+                'tokens_per_sec': int(usage.get("total_tokens", 0) / (duration_ms / 1000)) if duration_ms > 0 else 0,
+                'has_tools': has_tools,
+                'has_images': has_images,
+                'context_tokens': input_tokens,
+                'context_limit': context_limit
+            })
+
             return claude_response
     except HTTPException as e:
         duration_ms = (time.time() - request_start_time) * 1000
@@ -381,6 +408,22 @@ async def create_message(
                 session_id=request_id[:8],
                 client_ip=client_ip
             )
+
+        # Dashboard hook: request error
+        error_type = "Unknown"
+        if e.status_code == 401:
+            error_type = "Invalid Key"
+        elif e.status_code == 429:
+            error_type = "Rate Limit"
+        elif e.status_code == 404:
+            error_type = "Model Not Found"
+
+        dashboard_hooks.on_request_complete(request_id, 'error', {
+            'model': routed_model if 'routed_model' in locals() else request.model,
+            'duration_ms': int(duration_ms),
+            'error': str(e.detail),
+            'error_type': error_type
+        })
 
         logger.error(f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}")
         raise
@@ -411,6 +454,14 @@ async def create_message(
                 session_id=request_id[:8],
                 client_ip="unknown"
             )
+
+        # Dashboard hook: request error
+        dashboard_hooks.on_request_complete(request_id, 'error', {
+            'model': routed_model if 'routed_model' in locals() else (request.model if hasattr(request, 'model') else "unknown"),
+            'duration_ms': int(duration_ms),
+            'error': error_message,
+            'error_type': "Unknown"
+        })
 
         logger.error(f"Unexpected error processing request {request_id}: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")

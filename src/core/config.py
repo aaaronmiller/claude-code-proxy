@@ -112,7 +112,29 @@ class Config:
         
         # Validate reasoning configuration
         self._validate_reasoning_config()
-        
+
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # TERMINAL DASHBOARD CONFIGURATION
+        # ═══════════════════════════════════════════════════════════════════════════════
+
+        # Enable terminal dashboard (default: false)
+        self.enable_dashboard = os.environ.get("ENABLE_DASHBOARD", "false").lower() == "true"
+
+        # Dashboard layout: "default", "compact", "detailed"
+        self.dashboard_layout = os.environ.get("DASHBOARD_LAYOUT", "default")
+
+        # Dashboard refresh rate in seconds (default: 0.5 = 2 updates per second)
+        self.dashboard_refresh = float(os.environ.get("DASHBOARD_REFRESH", "0.5"))
+
+        # Dashboard waterfall size (number of completed requests to show)
+        self.dashboard_waterfall_size = int(os.environ.get("DASHBOARD_WATERFALL_SIZE", "20"))
+
+        # Enable usage tracking for dashboard metrics (default: true if dashboard enabled)
+        self.track_usage = os.environ.get("TRACK_USAGE", "true" if self.enable_dashboard else "false").lower() == "true"
+
+        # Compact logger mode - reduce console noise when dashboard is active
+        self.compact_logger = os.environ.get("COMPACT_LOGGER", "true" if self.enable_dashboard else "false").lower() == "true"
+
     def _validate_reasoning_config(self):
         """Validate reasoning configuration values"""
         valid_effort_levels = {'low', 'medium', 'high'}
