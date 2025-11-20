@@ -789,6 +789,228 @@ Pricing:
 
 ---
 
+## 📊 Monitoring & Analytics
+
+### Real-Time Dashboards
+
+**Terminal Dashboard** (Live TUI with Rich):
+```bash
+# Enable terminal dashboard
+python src/main.py --dashboard
+# or
+export ENABLE_DASHBOARD="true"
+python src/main.py
+```
+
+**WebSocket Dashboard** (Browser-based):
+```bash
+# Start proxy normally
+python src/main.py
+
+# Access dashboard in browser
+open http://localhost:8082/dashboard
+```
+
+Features:
+- ⚡ Real-time request waterfall
+- 📈 Performance metrics (latency, tokens/sec)
+- 💰 Cost tracking and estimation
+- 🔄 Live routing visualization
+- ⚠️ Error monitoring with recent errors
+- 🤖 Top model usage statistics
+
+### Prompt Injection (Claude Code Context)
+
+**Inject proxy stats into Claude Code prompts** - Give Claude visibility into proxy performance!
+
+**Interactive Configuration**:
+```bash
+# Run the configurator
+python configure_prompt_injection.py
+
+# Select modules, size, and injection mode
+# Generates commands for .zshrc and p10k
+```
+
+**Manual Configuration**:
+```bash
+# Enable prompt injection
+export PROMPT_INJECTION_ENABLED="true"
+export PROMPT_INJECTION_MODULES="status,performance,errors"
+export PROMPT_INJECTION_SIZE="medium"  # large, medium, small
+export PROMPT_INJECTION_MODE="auto"    # auto, always, manual, header
+```
+
+**Size Variants**:
+
+- **Large** (~200-300 tokens): Multi-line boxes with full details
+  ```
+  ┌─ 🔧 Proxy Status ─────────────┐
+  │ Provider: OpenRouter | Proxy  │
+  │ BIG: openai/gpt-5             │
+  │ Reasoning: high | 8000 tokens │
+  └────────────────────────────────┘
+  ```
+
+- **Medium** (~50-100 tokens): Single-line compact [RECOMMENDED]
+  ```
+  🔧 OpenRouter | 🤖 gpt-5 | 🧠 high | 🔒
+  ⚡ 847req | 1234ms | 78t/s | $12.45
+  ```
+
+- **Small** (~20-40 tokens): Ultra-compact icons
+  ```
+  🌐🧠 ⚡847r·78t/s ✓99%
+  ```
+
+**Available Modules**:
+- `status` - Provider, models, reasoning config
+- `performance` - Requests, latency, speed, cost
+- `errors` - Success rate, error types
+- `models` - Top models and usage stats
+
+**Injection Modes**:
+- `auto` - Smart injection (tool calls, streaming) [RECOMMENDED]
+- `always` - Inject on every request
+- `header` - Compact header only
+- `manual` - Programmatic control
+
+**Powerlevel10k Integration**:
+```zsh
+# Add to ~/.p10k.zsh (see examples/p10k_integration.zsh)
+function prompt_custom_proxy_status() {
+  # Shows: 🔧⚡✓🤖 in your prompt
+  ...
+}
+```
+
+**Examples**: See `examples/PROMPT_INJECTION_EXAMPLES.md` for detailed scenarios.
+
+### Analytics API
+
+**Get Usage Summary**:
+```bash
+curl http://localhost:8082/api/analytics/summary?days=7
+```
+
+**Time-Series Data** (for charting):
+```bash
+curl http://localhost:8082/api/analytics/timeseries?days=7&interval=hour
+```
+
+**Cost Breakdown**:
+```bash
+curl http://localhost:8082/api/analytics/cost-breakdown?days=7
+```
+
+**Error Analytics**:
+```bash
+curl http://localhost:8082/api/analytics/errors?days=7
+```
+
+**Export Data**:
+```bash
+curl http://localhost:8082/api/analytics/export?days=30&format=csv -o analytics.csv
+curl http://localhost:8082/api/analytics/export?days=30&format=json -o analytics.json
+```
+
+### Billing Integration
+
+**Check Account Balances**:
+```bash
+curl http://localhost:8082/api/billing/balance
+```
+
+**Get Usage from Providers**:
+```bash
+curl http://localhost:8082/api/billing/usage?days=7
+```
+
+**Provider-Specific Data**:
+```bash
+curl http://localhost:8082/api/billing/provider/openrouter?days=7
+```
+
+### Model Benchmarking
+
+**Run Benchmark**:
+```bash
+curl -X POST "http://localhost:8082/api/benchmarks/run?model_name=gpt-4o&iterations=3"
+```
+
+**Compare Models**:
+```bash
+curl -X POST "http://localhost:8082/api/benchmarks/compare?models=gpt-4o&models=gpt-4o-mini"
+```
+
+**Get Benchmark Results**:
+```bash
+curl http://localhost:8082/api/benchmarks/results
+```
+
+**View Specific Result**:
+```bash
+curl http://localhost:8082/api/benchmarks/results/benchmark_gpt-4o_20250119_123456.json
+```
+
+### Multi-User Management
+
+**Create User**:
+```bash
+curl -X POST http://localhost:8082/api/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john",
+    "email": "john@example.com",
+    "quota_requests": 1000,
+    "quota_tokens": 1000000,
+    "quota_cost": 10.0
+  }'
+```
+
+**Get Current User**:
+```bash
+curl http://localhost:8082/api/users/me \
+  -H "x-api-key: sk-..."
+```
+
+**Check Quota**:
+```bash
+curl http://localhost:8082/api/users/me/quota \
+  -H "x-api-key: sk-..."
+```
+
+**View Usage History**:
+```bash
+curl http://localhost:8082/api/users/me/usage?days=7 \
+  -H "x-api-key: sk-..."
+```
+
+### Configuration
+
+**Enable Usage Tracking**:
+```bash
+# .env
+TRACK_USAGE="true"
+```
+
+**Enable Terminal Dashboard**:
+```bash
+# .env
+ENABLE_DASHBOARD="true"
+DASHBOARD_LAYOUT="default"  # default, compact, detailed
+DASHBOARD_REFRESH="0.5"     # seconds between updates
+DASHBOARD_WATERFALL_SIZE="20"  # number of requests to show
+```
+
+**Compact Logger Mode**:
+```bash
+# Reduce console noise when dashboard is active
+COMPACT_LOGGER="true"
+```
+
+---
+
 ## 🐳 Docker Deployment
 
 ### Quick Start with Docker
@@ -1135,22 +1357,31 @@ DASHBOARD_MODULES="performance:dense,activity:dense,routing:sparse,waterfall:spa
 - Progress bar generation
 - Model name formatting and provider detection
 
-**🔄 PHASE 2 IN DEVELOPMENT - Integrated Proxy Dashboard:**
-- **Terminal output replacement** - Dashboard becomes the proxy interface
-- **Edge-based module positioning** - Modules on top/bottom/left/right edges
-- **Central waterfall display** - Live request flow in center area
-- **Moveable modules** - Drag modules between edges and corners
-- **Layout persistence** - Save/load dashboard arrangements
-- **Resize panels** - Dynamic module sizing
-- **Auto-hide inactive modules** - Clean interface when not needed
-- **Focus mode** - Expand waterfall to full screen
+**🔄 PHASE 2 COMPLETED - Integrated Proxy Dashboard:**
+- ✅ **Terminal dashboard** - Live Rich-based TUI with real-time updates
+- ✅ **Edge-based module positioning** - Modules on top/bottom/left/right edges
+- ✅ **Central waterfall display** - Live request flow visualization
+- ✅ **WebSocket dashboard** - Browser-based real-time dashboard at `/dashboard`
+- ✅ **Historical data persistence** - Analytics API with time-series data
+- ✅ **Advanced analytics** - Cost breakdown, error analysis, trend tracking
+- ✅ **Dashboard hooks system** - Real-time data flow from proxy to dashboards
 
-**🔄 PHASE 3 PLANNED:**
-- WebSocket dashboard for browser access
-- Historical data persistence
-- Advanced analytics with trend analysis
-- Custom module creation API
-- Dashboard themes and color schemes
+**✅ PHASE 3 COMPLETED - Advanced Features:**
+- ✅ **Prompt injection system** - Inject proxy stats into Claude Code prompts
+- ✅ **Multi-size variants** - Large, medium, small (for token optimization)
+- ✅ **Interactive configurator** - `configure_prompt_injection.py` with live previews
+- ✅ **Powerlevel10k integration** - Show proxy status in your shell prompt
+- ✅ **Real-time billing integration** - Provider API integration (OpenRouter, OpenAI, Anthropic)
+- ✅ **Automated model benchmarking** - Standardized tests, performance comparison
+- ✅ **Multi-user authentication** - User management with API keys and quotas
+- ✅ **Database backend** - Enhanced SQLite with CSV/JSON export
+
+**🔄 PHASE 4 IN DEVELOPMENT:**
+- [ ] Moveable modules in terminal dashboard - Drag modules between edges
+- [ ] Layout persistence - Save/load dashboard arrangements
+- [ ] Resize panels - Dynamic module sizing
+- [ ] Custom dashboard themes and color schemes
+- [ ] Module creation API for extensions
 
 ---
 
@@ -1179,6 +1410,8 @@ DASHBOARD_MODULES="performance:dense,activity:dense,routing:sparse,waterfall:spa
 - **Mode saving/loading system**
 
 ### ✅ **DASHBOARD SYSTEM (FULLY WORKING)**
+- **Terminal dashboard** - Live Rich-based TUI with real-time updates
+- **WebSocket dashboard** - Browser-based dashboard at `/dashboard`
 - **5 complete dashboard modules** with dense/sparse modes
 - **Interactive configuration tool** with live previews
 - **Modular architecture** (1-4 modules, user selectable)
@@ -1206,87 +1439,68 @@ DASHBOARD_MODULES="performance:dense,activity:dense,routing:sparse,waterfall:spa
 - **Context window monitoring** with percentage usage
 - **Thinking token tracking** for reasoning models
 
-### 🔄 **NEXT PHASE: INTEGRATED PROXY DASHBOARD**
+### ✅ **MONITORING & ANALYTICS (FULLY WORKING)**
+- **Historical data persistence** - Analytics API with time-series data
+- **Cost breakdown** - By model, provider, and time period
+- **Error analytics** - Success rates, error types, trends
+- **Data export** - CSV and JSON format export
+- **Real-time billing integration** - OpenRouter, OpenAI, Anthropic APIs
+- **Account balance tracking** - Multi-provider support
+- **Automated benchmarking** - Standardized performance tests
+- **Model comparison** - Side-by-side benchmarking
 
-**🎯 Terminal Output Replacement (In Development)**
+### ✅ **PROMPT INJECTION SYSTEM (FULLY WORKING)**
+- **Claude Code integration** - Inject proxy stats into prompts
+- **3 size variants** - Large (~250 tokens), Medium (~80 tokens), Small (~30 tokens)
+- **4 dashboard modules** - Status, performance, errors, models
+- **Interactive configurator** - `configure_prompt_injection.py` with previews
+- **Smart injection modes** - Auto, always, manual, header
+- **Powerlevel10k integration** - Show status in shell prompt
+- **Nerd Font support** - Beautiful icons: 🔧 ⚡ ⚠️ ✓ 🤖 🧠
+- **Environment variable config** - Easy setup and customization
 
-The next major phase will replace the standard proxy terminal output with a **live dashboard interface** that integrates directly with the running proxy server:
+### ✅ **MULTI-USER SYSTEM (FULLY WORKING)**
+- **User management** - Create users with API keys
+- **Quota enforcement** - Per-user limits (requests, tokens, cost)
+- **Usage tracking** - Daily usage per user
+- **Authentication** - Secure API key validation
+- **User analytics** - Per-user statistics and history
+- **Database storage** - Persistent user data
 
-**Core Concept:**
-- **Static modules on edges** (top, bottom, left, right) showing persistent info
-- **Central waterfall area** displaying real-time request flow
-- **Moveable module positioning** - drag modules to any edge or corner
-- **Live proxy integration** - dashboard updates as requests flow through proxy
+### 🔄 **FUTURE ENHANCEMENTS**
 
-**Planned Layout System:**
-```
-┌─────────────────────────────────────────────────────────────┐
-│ [Performance Monitor]     [Analytics Panel]                │ ← Top Edge
-├─────────────────────────────────────────────────────────────┤
-│[Activity] │                                     │ [Routing] │ ← Left/Right
-│  Feed     │        LIVE REQUEST WATERFALL       │Visualizer │   Edges
-│           │                                     │           │
-│           │ 🔵 req_123 Parse→Route→Send→Wait... │           │
-│           │ 🟢 req_122 ──────────────── Done   │           │
-│           │ 🔵 req_124 Parse→Route...           │           │
-│           │ 🔴 req_121 ──── Error: Rate Limit  │           │
-├─────────────────────────────────────────────────────────────┤
-│              [Model Usage Stats]                            │ ← Bottom Edge
-└─────────────────────────────────────────────────────────────┘
-```
+The following features are planned for future releases:
 
-**Module Positioning Options:**
-- **Top Edge:** Performance, Analytics, Summary stats
-- **Bottom Edge:** Model usage, Cost tracking, System info  
-- **Left Edge:** Activity feed, Request history, Alerts
-- **Right Edge:** Routing info, Token usage, Performance metrics
-- **Corners:** Compact modules (4 corner positions available)
+**Terminal Dashboard Enhancements:**
+- [ ] **Drag-and-drop module positioning** - Interactively move modules between edges
+- [ ] **Dynamic panel resizing** - Adjust module sizes on the fly
+- [ ] **Auto-hide inactive modules** - Clean interface when modules not needed
+- [ ] **Focus mode** - Expand waterfall to full screen
+- [ ] **Layout persistence** - Save and load custom dashboard arrangements
 
-**Interactive Features (Planned):**
-- ✅ **Module dragging** - Move modules between edges with mouse/keyboard
-- ✅ **Resize panels** - Adjust module sizes dynamically
-- ✅ **Module cycling** - Rotate through different modules in same position
-- ✅ **Layout presets** - Save/load different dashboard arrangements
-- ✅ **Auto-hide** - Modules collapse when inactive
-- ✅ **Focus mode** - Expand waterfall to full screen
+**Theming & Customization:**
+- [ ] **Custom color schemes** - Dark, light, and custom themes
+- [ ] **Module creation API** - Build your own dashboard modules
+- [ ] **Plugin system** - Third-party extensions for dashboards
+- [ ] **Configurable refresh rates** - Per-module update frequencies
 
-**Integration Method:**
-```bash
-# Instead of standard proxy output:
-python start_proxy.py
+**Advanced Analytics:**
+- [ ] **Trend prediction** - ML-based cost and usage forecasting
+- [ ] **Anomaly detection** - Automatic alerts for unusual patterns
+- [ ] **Cost optimization recommendations** - Automated suggestions
+- [ ] **A/B testing framework** - Compare model performance
 
-# New integrated dashboard mode:
-python start_proxy.py --dashboard-mode
-# or
-export PROXY_DASHBOARD_MODE="true"
-python start_proxy.py
-```
+**Enterprise Features:**
+- [ ] **Team analytics** - Multi-user usage insights
+- [ ] **Budget management** - Set and enforce spending limits
+- [ ] **Audit logging** - Comprehensive request audit trails
+- [ ] **SSO integration** - Enterprise authentication
 
-**Configuration:**
-```bash
-# Dashboard layout configuration
-DASHBOARD_LAYOUT="performance:top,activity:left,routing:right,analytics:bottom"
-DASHBOARD_WATERFALL_SIZE="60%"  # Central area size
-DASHBOARD_AUTO_HIDE="true"      # Hide inactive modules
-DASHBOARD_REFRESH_RATE="2.0"    # Updates per second
-```
-
-### 🔄 **OTHER FEATURES IN DEVELOPMENT**
-- **WebSocket dashboard** for browser access
-- **Historical data persistence** beyond current session
-- **Advanced trend analysis** with usage patterns
-- **Custom dashboard themes** and color schemes
-- **Dashboard module API** for third-party extensions
-- **Automated model benchmarking**
-- **Cost optimization alerts**
-- **Usage analytics export**
-
-### ❌ **KNOWN LIMITATIONS**
-- Dashboard data is **session-only** (no persistence between restarts)
-- **No web interface** (terminal-only dashboard currently)
-- **Limited to 4 modules** maximum in dashboard
-- **No custom module creation** without code changes
-- **Cost estimates are approximate** (not real-time billing)
+### ⚠️ **KNOWN LIMITATIONS**
+- **Terminal dashboard** - Limited to 4 modules in standalone mode
+- **Cost estimates** - Approximate, not from real-time billing (except OpenRouter)
+- **WebSocket dashboard** - Basic implementation, no advanced filtering yet
+- **Benchmarking** - Background tasks only, no scheduling yet
 
 ### 🔒 **SECURITY NOTES**
 - **No hardcoded secrets** - All API keys via environment variables
@@ -1325,19 +1539,19 @@ DASHBOARD_REFRESH_RATE="2.0"    # Updates per second
 - [x] Cost and performance monitoring
 - [x] Session-based analytics
 
+### ✅ **NEWLY IMPLEMENTED** (Latest Update)
+- [x] **WebSocket dashboard** for browser - Real-time dashboard at `/dashboard`
+- [x] **Historical data persistence** - Analytics API with time-series data
+- [x] **Advanced analytics** - Cost breakdown, error analysis, trend tracking
+- [x] **Real-time billing integration** - Provider API integration (OpenRouter, OpenAI, Anthropic)
+- [x] **Automated model benchmarking** - Standardized tests, performance comparison
+- [x] **Multi-user authentication** - User management with API keys and quotas
+- [x] **Database backend** - Enhanced SQLite with export capabilities
+
 ### 🔄 **IN DEVELOPMENT**
-- [ ] WebSocket dashboard for browser
-- [ ] Historical data persistence
-- [ ] Advanced analytics trends
 - [ ] Custom dashboard themes
 - [ ] Module creation API
-
-### ❌ **NOT IMPLEMENTED**
-- [ ] Web-based configuration interface
-- [ ] Real-time billing integration
-- [ ] Automated model benchmarking
-- [ ] Multi-user authentication
-- [ ] Database backend for persistence
+- [ ] Web-based configuration interface (currently API-only)
 
 ---
 

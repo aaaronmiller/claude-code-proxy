@@ -93,11 +93,27 @@ class OpenAIClient:
         # Fallback to default client
         return self.client
     
-    async def create_chat_completion(self, request: Dict[str, Any], request_id: Optional[str] = None, config=None) -> Dict[str, Any]:
-        """Send chat completion to OpenAI API with cancellation support."""
+    async def create_chat_completion(self, request: Dict[str, Any], request_id: Optional[str] = None, config=None, api_key: Optional[str] = None) -> Dict[str, Any]:
+        """Send chat completion to OpenAI API with cancellation support.
+
+        Args:
+            request: OpenAI request dictionary
+            request_id: Optional request ID for cancellation tracking
+            config: Optional config object
+            api_key: Optional per-request API key (for passthrough mode)
+        """
 
         # Get the appropriate client based on the model
-        client = self.get_client_for_model(request.get('model', ''), config)
+        # If api_key is provided (passthrough mode), create a temporary client
+        if api_key:
+            client = self._create_client(
+                api_key,
+                config.openai_base_url if config else self.default_base_url,
+                config.azure_api_version if config else self.default_api_version,
+                self.custom_headers
+            )
+        else:
+            client = self.get_client_for_model(request.get('model', ''), config)
 
         # Create cancellation token if request_id provided
         if request_id:
@@ -155,11 +171,27 @@ class OpenAIClient:
             if request_id and request_id in self.active_requests:
                 del self.active_requests[request_id]
     
-    async def create_chat_completion_stream(self, request: Dict[str, Any], request_id: Optional[str] = None, config=None) -> AsyncGenerator[str, None]:
-        """Send streaming chat completion to OpenAI API with cancellation support."""
+    async def create_chat_completion_stream(self, request: Dict[str, Any], request_id: Optional[str] = None, config=None, api_key: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """Send streaming chat completion to OpenAI API with cancellation support.
+
+        Args:
+            request: OpenAI request dictionary
+            request_id: Optional request ID for cancellation tracking
+            config: Optional config object
+            api_key: Optional per-request API key (for passthrough mode)
+        """
 
         # Get the appropriate client based on the model
-        client = self.get_client_for_model(request.get('model', ''), config)
+        # If api_key is provided (passthrough mode), create a temporary client
+        if api_key:
+            client = self._create_client(
+                api_key,
+                config.openai_base_url if config else self.default_base_url,
+                config.azure_api_version if config else self.default_api_version,
+                self.custom_headers
+            )
+        else:
+            client = self.get_client_for_model(request.get('model', ''), config)
 
         # Create cancellation token if request_id provided
         if request_id:

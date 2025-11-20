@@ -8,14 +8,36 @@ from src.models.claude import ClaudeMessagesRequest
 def convert_openai_to_claude_response(
     openai_response: dict, original_request: ClaudeMessagesRequest
 ) -> dict:
-    """Convert OpenAI response to Claude format."""
+    """Convert OpenAI response to Claude format with enhanced error handling."""
 
-    # Extract response data
+    # Validate response structure
+    if not isinstance(openai_response, dict):
+        raise HTTPException(
+            status_code=500,
+            detail="Invalid OpenAI response format: expected dictionary"
+        )
+
+    # Extract response data with validation
     choices = openai_response.get("choices", [])
     if not choices:
-        raise HTTPException(status_code=500, detail="No choices in OpenAI response")
+        raise HTTPException(
+            status_code=500,
+            detail="No choices in OpenAI response"
+        )
+
+    if not isinstance(choices, list):
+        raise HTTPException(
+            status_code=500,
+            detail="Invalid choices format in OpenAI response"
+        )
 
     choice = choices[0]
+    if not isinstance(choice, dict):
+        raise HTTPException(
+            status_code=500,
+            detail="Invalid choice format in OpenAI response"
+        )
+
     message = choice.get("message", {})
 
     # Build Claude content blocks
@@ -58,7 +80,20 @@ def convert_openai_to_claude_response(
         "function_call": Constants.STOP_TOOL_USE,
     }.get(finish_reason, Constants.STOP_END_TURN)
 
-    # Build Claude response
+    # Build Claude response with prompt cache support
+    usage = openai_response.get("usage", {})
+    usage_data = {
+        "input_tokens": usage.get("prompt_tokens", 0),
+        "output_tokens": usage.get("completion_tokens", 0),
+    }
+
+    # Add prompt cache tokens if available (OpenAI prompt caching)
+    prompt_tokens_details = usage.get("prompt_tokens_details", {})
+    if prompt_tokens_details:
+        cache_read_input_tokens = prompt_tokens_details.get("cached_tokens", 0)
+        if cache_read_input_tokens > 0:
+            usage_data["cache_read_input_tokens"] = cache_read_input_tokens
+
     claude_response = {
         "id": openai_response.get("id", f"msg_{uuid.uuid4()}"),
         "type": "message",
@@ -67,12 +102,7 @@ def convert_openai_to_claude_response(
         "content": content_blocks,
         "stop_reason": stop_reason,
         "stop_sequence": None,
-        "usage": {
-            "input_tokens": openai_response.get("usage", {}).get("prompt_tokens", 0),
-            "output_tokens": openai_response.get("usage", {}).get(
-                "completion_tokens", 0
-            ),
-        },
+        "usage": usage_data,
     }
 
     return claude_response

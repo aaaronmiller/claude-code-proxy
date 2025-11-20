@@ -1,0 +1,73 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment files (keep .env.example but exclude actual .env)
+.env
+.env.local
+.env.*.local
+
+# Test and development
+tests/
+*.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+dist/
+build/
+*.egg-info/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Logs and databases
+*.log
+*.db
+*.sqlite
+*.sqlite3
+usage_tracking.db
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker files (no need to include in image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Configuration modes
+modes.json
+
+# Scripts (unless needed at runtime)
+scripts/

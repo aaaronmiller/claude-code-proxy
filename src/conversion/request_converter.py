@@ -127,7 +127,20 @@ def _apply_reasoning_config(
 def convert_claude_to_openai(
     claude_request: ClaudeMessagesRequest, model_manager
 ) -> Dict[str, Any]:
-    """Convert Claude API request format to OpenAI format."""
+    """Convert Claude API request format to OpenAI format with enhanced validation."""
+
+    # Validate input request
+    if not claude_request:
+        raise ValueError("Claude request cannot be None")
+
+    if not claude_request.messages:
+        raise ValueError("Claude request must contain at least one message")
+
+    if not isinstance(claude_request.messages, list):
+        raise ValueError("Claude request messages must be a list")
+
+    if claude_request.max_tokens < 1:
+        raise ValueError(f"max_tokens must be at least 1, got {claude_request.max_tokens}")
 
     # Parse model name and extract reasoning configuration
     openai_model, reasoning_config = model_manager.parse_and_map_model(claude_request.model)
@@ -192,17 +205,31 @@ def convert_claude_to_openai(
         i += 1
 
     # Build OpenAI request
+    # Check if this is a newer OpenAI model (o1, o3, o4, gpt-5)
+    is_newer_model = model_manager.is_newer_openai_model(openai_model)
+
+    # Calculate token limit
+    token_limit = min(
+        max(claude_request.max_tokens, config.min_tokens_limit),
+        config.max_tokens_limit,
+    )
+
     openai_request = {
         "model": openai_model,
         "messages": openai_messages,
-        "max_tokens": min(
-            max(claude_request.max_tokens, config.min_tokens_limit),
-            config.max_tokens_limit,
-        ),
-        "temperature": claude_request.temperature,
         "stream": claude_request.stream,
     }
-    logger.debug(f"Converted request: model={openai_model}, messages={len(openai_messages)}, max_tokens={openai_request['max_tokens']}")
+
+    # Newer OpenAI models (o1, o3, o4, gpt-5) require max_completion_tokens instead of max_tokens
+    if is_newer_model:
+        openai_request["max_completion_tokens"] = token_limit
+        # Newer reasoning models require temperature=1
+        openai_request["temperature"] = 1
+        logger.debug(f"Converted request (newer model): model={openai_model}, messages={len(openai_messages)}, max_completion_tokens={token_limit}, temperature=1")
+    else:
+        openai_request["max_tokens"] = token_limit
+        openai_request["temperature"] = claude_request.temperature
+        logger.debug(f"Converted request: model={openai_model}, messages={len(openai_messages)}, max_tokens={token_limit}")
     # Add optional parameters
     if claude_request.stop_sequences:
         openai_request["stop"] = claude_request.stop_sequences

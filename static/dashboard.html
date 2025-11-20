@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Code Proxy - Live Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #0a0e1a;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-rows: auto 1fr auto;
+            gap: 10px;
+            padding: 10px;
+            height: 100vh;
+        }
+
+        .module {
+            background: #1a1f2e;
+            border: 1px solid #2a3f5f;
+            border-radius: 8px;
+            padding: 15px;
+            overflow: auto;
+        }
+
+        .module-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #2a3f5f;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .module-title .emoji {
+            font-size: 18px;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .connection-status.connected {
+            background: #1a3d1a;
+            border: 1px solid #2d5f2d;
+            color: #5fff5f;
+        }
+
+        .connection-status.disconnected {
+            background: #3d1a1a;
+            border: 1px solid #5f2d2d;
+            color: #ff5f5f;
+        }
+
+        .connection-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .connection-status.connected .dot {
+            background: #5fff5f;
+        }
+
+        .connection-status.disconnected .dot {
+            background: #ff5f5f;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #2a3f5f22;
+        }
+
+        .stat-label {
+            color: #8090b0;
+            font-size: 12px;
+        }
+
+        .stat-value {
+            color: #e0e0e0;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .waterfall {
+            grid-column: 2;
+            grid-row: 1 / 4;
+        }
+
+        .waterfall-item {
+            background: #15192a;
+            border-left: 3px solid #3f8fff;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .waterfall-item.completed {
+            border-left-color: #5fff5f;
+        }
+
+        .waterfall-item.error {
+            border-left-color: #ff5f5f;
+        }
+
+        .waterfall-item.active {
+            border-left-color: #5f9fff;
+        }
+
+        .waterfall-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-weight: bold;
+        }
+
+        .waterfall-model {
+            color: #8090b0;
+            font-size: 10px;
+        }
+
+        .waterfall-phase {
+            display: flex;
+            gap: 2px;
+            margin-top: 6px;
+        }
+
+        .phase-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #2a3f5f;
+        }
+
+        .phase-dot.active {
+            background: #5f9fff;
+            animation: pulse 1s infinite;
+        }
+
+        .phase-dot.completed {
+            background: #5fff5f;
+        }
+
+        .top-model {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #2a3f5f22;
+            font-size: 11px;
+        }
+
+        .model-name {
+            color: #e0e0e0;
+            font-weight: bold;
+        }
+
+        .model-stats {
+            color: #8090b0;
+        }
+
+        .error-item {
+            background: #2a1a1a;
+            border-left: 3px solid #ff5f5f;
+            padding: 8px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        .error-time {
+            color: #8090b0;
+            font-size: 10px;
+        }
+
+        .error-message {
+            color: #ff8f8f;
+            margin-top: 4px;
+        }
+
+        .performance {
+            grid-column: 1;
+            grid-row: 1;
+        }
+
+        .routing {
+            grid-column: 3;
+            grid-row: 1;
+        }
+
+        .activity {
+            grid-column: 1;
+            grid-row: 2;
+        }
+
+        .errors {
+            grid-column: 3;
+            grid-row: 2;
+        }
+
+        .models {
+            grid-column: 1;
+            grid-row: 3;
+        }
+
+        .info {
+            grid-column: 3;
+            grid-row: 3;
+        }
+
+        .route-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 11px;
+        }
+
+        .route-label {
+            color: #8090b0;
+        }
+
+        .route-model {
+            color: #e0e0e0;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status disconnected" id="connectionStatus">
+        <span class="dot"></span>
+        <span id="statusText">Connecting...</span>
+    </div>
+
+    <div class="dashboard">
+        <!-- Performance Module -->
+        <div class="module performance">
+            <div class="module-title">
+                <span class="emoji">⚡</span>
+                <span>Performance</span>
+            </div>
+            <div id="performanceStats">
+                <div class="stat-row">
+                    <span class="stat-label">Total Requests</span>
+                    <span class="stat-value" id="totalRequests">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Avg Latency</span>
+                    <span class="stat-value" id="avgLatency">0ms</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Tokens/sec</span>
+                    <span class="stat-value" id="tokensPerSec">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Cost</span>
+                    <span class="stat-value" id="totalCost">$0.00</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Success Rate</span>
+                    <span class="stat-value" id="successRate">100%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Waterfall Module -->
+        <div class="module waterfall">
+            <div class="module-title">
+                <span class="emoji">🌊</span>
+                <span>Request Waterfall</span>
+            </div>
+            <div id="waterfallItems"></div>
+        </div>
+
+        <!-- Routing Module -->
+        <div class="module routing">
+            <div class="module-title">
+                <span class="emoji">🎯</span>
+                <span>Routing</span>
+            </div>
+            <div id="routingInfo">
+                <div class="route-item">
+                    <span class="route-label">Provider:</span>
+                    <span class="route-model" id="provider">Unknown</span>
+                </div>
+                <div class="route-item">
+                    <span class="route-label">BIG:</span>
+                    <span class="route-model" id="bigModel">-</span>
+                </div>
+                <div class="route-item">
+                    <span class="route-label">MIDDLE:</span>
+                    <span class="route-model" id="middleModel">-</span>
+                </div>
+                <div class="route-item">
+                    <span class="route-label">SMALL:</span>
+                    <span class="route-model" id="smallModel">-</span>
+                </div>
+                <div class="route-item">
+                    <span class="route-label">Mode:</span>
+                    <span class="route-model" id="mode">Proxy</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Module -->
+        <div class="module activity">
+            <div class="module-title">
+                <span class="emoji">📊</span>
+                <span>Recent Activity</span>
+            </div>
+            <div id="recentActivity"></div>
+        </div>
+
+        <!-- Errors Module -->
+        <div class="module errors">
+            <div class="module-title">
+                <span class="emoji">⚠️</span>
+                <span>Recent Errors</span>
+            </div>
+            <div id="recentErrors">
+                <div style="color: #5fff5f; font-size: 11px; text-align: center; padding: 20px;">
+                    No errors yet!
+                </div>
+            </div>
+        </div>
+
+        <!-- Models Module -->
+        <div class="module models">
+            <div class="module-title">
+                <span class="emoji">🤖</span>
+                <span>Top Models</span>
+            </div>
+            <div id="topModels"></div>
+        </div>
+
+        <!-- Info Module -->
+        <div class="module info">
+            <div class="module-title">
+                <span class="emoji">ℹ️</span>
+                <span>Info</span>
+            </div>
+            <div id="info">
+                <div class="stat-row">
+                    <span class="stat-label">Connected</span>
+                    <span class="stat-value" id="connectedTime">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Updates</span>
+                    <span class="stat-value" id="updateCount">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectTimeout = null;
+        let updateCount = 0;
+        let connectedTime = null;
+        const waterfallItems = new Map();
+        const maxWaterfallItems = 20;
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/dashboard`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                updateConnectionStatus(true);
+                connectedTime = Date.now();
+                updateConnectedTime();
+
+                // Send ping every 30 seconds
+                setInterval(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send('ping');
+                    }
+                }, 30000);
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                updateCount++;
+                document.getElementById('updateCount').textContent = updateCount;
+
+                handleMessage(message);
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                updateConnectionStatus(false);
+
+                // Reconnect after 3 seconds
+                reconnectTimeout = setTimeout(connect, 3000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connectionStatus');
+            const statusText = document.getElementById('statusText');
+
+            if (connected) {
+                statusEl.className = 'connection-status connected';
+                statusText.textContent = 'Connected';
+            } else {
+                statusEl.className = 'connection-status disconnected';
+                statusText.textContent = 'Disconnected';
+            }
+        }
+
+        function updateConnectedTime() {
+            if (!connectedTime) return;
+
+            const elapsed = Date.now() - connectedTime;
+            const seconds = Math.floor(elapsed / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+
+            let timeStr = '';
+            if (hours > 0) {
+                timeStr = `${hours}h ${minutes % 60}m`;
+            } else if (minutes > 0) {
+                timeStr = `${minutes}m ${seconds % 60}s`;
+            } else {
+                timeStr = `${seconds}s`;
+            }
+
+            document.getElementById('connectedTime').textContent = timeStr;
+
+            setTimeout(updateConnectedTime, 1000);
+        }
+
+        function handleMessage(message) {
+            console.log('Received message:', message.type);
+
+            switch (message.type) {
+                case 'initial_state':
+                    updateDashboard(message.data);
+                    break;
+                case 'request_start':
+                    addWaterfallItem(message.data.request_id, message.data, 'active');
+                    break;
+                case 'request_complete':
+                    updateWaterfallItem(message.data.request_id, message.data, 'completed');
+                    break;
+                case 'request_error':
+                    updateWaterfallItem(message.data.request_id, message.data, 'error');
+                    break;
+                case 'stats_update':
+                    updateStats(message.data);
+                    break;
+            }
+        }
+
+        function updateDashboard(stats) {
+            // Update performance stats
+            document.getElementById('totalRequests').textContent = stats.total_requests || 0;
+            document.getElementById('avgLatency').textContent = `${stats.avg_latency_ms || 0}ms`;
+            document.getElementById('tokensPerSec').textContent = stats.avg_tokens_per_sec || 0;
+            document.getElementById('totalCost').textContent = `$${(stats.total_cost || 0).toFixed(2)}`;
+
+            const successRate = stats.success_count / (stats.success_count + stats.error_count) * 100;
+            document.getElementById('successRate').textContent = `${successRate.toFixed(1)}%`;
+
+            // Update top models
+            updateTopModels(stats.top_models || []);
+
+            // Update errors
+            updateErrors(stats.recent_errors || []);
+        }
+
+        function updateStats(stats) {
+            updateDashboard(stats);
+        }
+
+        function addWaterfallItem(requestId, data, status) {
+            const container = document.getElementById('waterfallItems');
+
+            const item = document.createElement('div');
+            item.className = `waterfall-item ${status}`;
+            item.id = `waterfall-${requestId}`;
+
+            item.innerHTML = `
+                <div class="waterfall-header">
+                    <span>${requestId.substring(0, 8)}</span>
+                    <span id="duration-${requestId}">0ms</span>
+                </div>
+                <div class="waterfall-model">${data.model || 'unknown'}</div>
+                <div class="waterfall-phase" id="phase-${requestId}">
+                    ${['parse', 'route', 'send', 'wait', 'recv', 'done'].map(p =>
+                        `<div class="phase-dot"></div>`
+                    ).join('')}
+                </div>
+            `;
+
+            container.insertBefore(item, container.firstChild);
+
+            waterfallItems.set(requestId, {
+                element: item,
+                startTime: Date.now(),
+                data: data
+            });
+
+            // Limit waterfall items
+            if (waterfallItems.size > maxWaterfallItems) {
+                const oldestKey = Array.from(waterfallItems.keys())[0];
+                const oldItem = waterfallItems.get(oldestKey);
+                if (oldItem && oldItem.element) {
+                    oldItem.element.remove();
+                }
+                waterfallItems.delete(oldestKey);
+            }
+        }
+
+        function updateWaterfallItem(requestId, data, status) {
+            const item = waterfallItems.get(requestId);
+            if (!item) return;
+
+            item.element.className = `waterfall-item ${status}`;
+
+            const duration = data.duration_ms || (Date.now() - item.startTime);
+            const durationEl = document.getElementById(`duration-${requestId}`);
+            if (durationEl) {
+                durationEl.textContent = `${Math.round(duration)}ms`;
+            }
+
+            // Update phase dots
+            const phaseEl = document.getElementById(`phase-${requestId}`);
+            if (phaseEl) {
+                const dots = phaseEl.querySelectorAll('.phase-dot');
+                dots.forEach((dot, i) => {
+                    dot.className = status === 'completed' ? 'phase-dot completed' : 'phase-dot';
+                });
+            }
+        }
+
+        function updateTopModels(models) {
+            const container = document.getElementById('topModels');
+            container.innerHTML = models.slice(0, 5).map((model, i) => `
+                <div class="top-model">
+                    <span class="model-name">#${i + 1} ${model.name.substring(0, 20)}</span>
+                    <span class="model-stats">${model.requests} req</span>
+                </div>
+            `).join('');
+        }
+
+        function updateErrors(errors) {
+            const container = document.getElementById('recentErrors');
+
+            if (errors.length === 0) {
+                container.innerHTML = '<div style="color: #5fff5f; font-size: 11px; text-align: center; padding: 20px;">No errors yet!</div>';
+                return;
+            }
+
+            container.innerHTML = errors.slice(0, 5).map(error => `
+                <div class="error-item">
+                    <div class="error-time">[${error.time}] ${error.type}</div>
+                    <div class="error-message">${error.message}</div>
+                </div>
+            `).join('');
+        }
+
+        // Connect on page load
+        connect();
+    </script>
+</body>
+</html>

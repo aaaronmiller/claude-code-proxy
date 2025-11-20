@@ -55,7 +55,43 @@ REASONING_CAPABLE_MODELS = {
 class ModelManager:
     def __init__(self, config):
         self.config = config
-    
+
+    def is_newer_openai_model(self, model_name: str) -> bool:
+        """
+        Check if the model is a newer OpenAI reasoning model (o1, o3, o4, gpt-5).
+        These models require max_completion_tokens instead of max_tokens and temperature=1.
+
+        Args:
+            model_name: Model name to check
+
+        Returns:
+            True if the model is o1, o3, o4, or gpt-5
+        """
+        model_lower = model_name.lower()
+
+        # Check for o-series models (o1, o3, o4)
+        if any(pattern in model_lower for pattern in ['o1-', 'o1mini', 'o3-', 'o3mini', 'o4-', 'o4mini']):
+            return True
+
+        # Check for gpt-5
+        if 'gpt-5' in model_lower or 'gpt5' in model_lower:
+            return True
+
+        return False
+
+    def is_o3_model(self, model_name: str) -> bool:
+        """
+        Check if the model is an OpenAI o3 model.
+
+        Args:
+            model_name: Model name to check
+
+        Returns:
+            True if the model is an o3 variant
+        """
+        model_lower = model_name.lower()
+        return 'o3-' in model_lower or 'o3mini' in model_lower
+
     def map_claude_model_to_openai(self, claude_model: str) -> str:
         """Map Claude model names to OpenAI model names based on BIG/SMALL pattern"""
         # Map based on model naming patterns
