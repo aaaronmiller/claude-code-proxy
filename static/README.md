@@ -25,11 +25,14 @@
 - **Recent Activity**: See the last 10 requests with full details
 - **Live Status**: Proxy health and mode indicator
 - **Usage Analytics**: When TRACK_USAGE is enabled
+- **WebSocket Dashboard**: Live request waterfall with real-time updates
+- **Performance Charts**: Real-time metrics visualization
 
 ## Access
 
 The Web UI is automatically available at:
-- **http://localhost:8082/** - Main interface
+- **http://localhost:8082/** - Main interface (Configuration & Profiles)
+- **http://localhost:8082/dashboard** - Real-time monitoring dashboard
 - **http://localhost:8082/config** - Direct to config tab
 
 ## Usage
@@ -78,6 +81,18 @@ The Web UI is automatically available at:
 3. See recent requests with details
 4. Click "🔄 Refresh Stats" to update
 
+### 5. Real-Time Dashboard
+
+For live monitoring with WebSocket updates, visit **http://localhost:8082/dashboard**:
+
+1. **Performance Metrics** - Real-time request count, success rate, latency
+2. **Request Waterfall** - Live visualization of requests as they flow through the proxy
+3. **Model Usage** - Top models and usage statistics
+4. **Cost Tracking** - Live cost accumulation and estimates
+5. **Auto-Updates** - Dashboard updates automatically as requests are processed
+
+The dashboard uses WebSocket for real-time updates with no page refresh needed.
+
 ## API Endpoints
 
 The Web UI uses these REST API endpoints:
@@ -96,6 +111,33 @@ The Web UI uses these REST API endpoints:
 ### Models & Stats
 - `GET /api/models` - List available models
 - `GET /api/stats` - Get proxy statistics
+
+### WebSocket (Real-Time)
+- `WS /ws/dashboard` - WebSocket connection for live dashboard updates
+
+### Analytics
+- `GET /api/analytics/summary?days=7` - Get analytics summary for past N days
+- `GET /api/analytics/timeseries?days=7` - Time-series data for charts
+- `GET /api/analytics/errors?days=7` - Error analytics and trends
+- `GET /api/analytics/export?format=csv&days=30` - Export data (CSV/JSON)
+- `GET /api/analytics/cost-breakdown?days=7` - Cost breakdown by model/provider
+
+### Billing
+- `GET /api/billing/usage?start_date=2025-01-01&end_date=2025-01-31` - Fetch provider usage
+- `GET /api/billing/balance` - Get account balances for all providers
+- `GET /api/billing/provider/{name}` - Get provider-specific billing info
+
+### Benchmarking
+- `POST /api/benchmarks/run` - Run benchmark tests for a model
+- `GET /api/benchmarks/results` - List all benchmark results
+- `GET /api/benchmarks/results/{benchmark_id}` - Get specific benchmark result
+- `POST /api/benchmarks/compare` - Compare multiple models
+
+### Users (Multi-User Mode)
+- `POST /api/users` - Create new user with API key
+- `GET /api/users/me` - Get current user info
+- `GET /api/users/me/quota` - Check user quota status
+- `GET /api/users/me/usage?days=7` - Get user usage history
 
 ## Hot Reload
 
