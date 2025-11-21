@@ -38,11 +38,18 @@ def display_startup_config(config):
     provider_table = Table(show_header=False, box=None, padding=(0, 2))
     provider_table.add_column("Key", style="dim")
     provider_table.add_column("Value", style="bright_cyan")
-    
+
     provider_name = _extract_provider_name(config.openai_base_url)
     provider_table.add_row("Provider", f"[bold]{provider_name}[/bold]")
     provider_table.add_row("Endpoint", config.openai_base_url)
-    
+
+    # Show API key status
+    if config.openai_api_key:
+        key_preview = config.openai_api_key[:15] + "..." if len(config.openai_api_key) > 15 else config.openai_api_key
+        provider_table.add_row("API Key", f"[green]{key_preview}[/green]")
+    else:
+        provider_table.add_row("API Key", "[yellow]NOT SET (passthrough mode)[/yellow]")
+
     console.print(Panel(provider_table, title="[bold magenta]Provider[/bold magenta]", border_style="cyan"))
     
     # Model Configuration with Context Windows
@@ -121,6 +128,12 @@ def _display_plain(config):
     print("Provider:")
     print(f"  {_extract_provider_name(config.openai_base_url)}")
     print(f"  {config.openai_base_url}")
+    # Show API key status
+    if config.openai_api_key:
+        key_preview = config.openai_api_key[:15] + "..." if len(config.openai_api_key) > 15 else config.openai_api_key
+        print(f"  API Key: {key_preview}")
+    else:
+        print(f"  API Key: NOT SET (passthrough mode)")
     print()
     print("Models:")
     for tier, model in [("BIG", config.big_model), ("MIDDLE", config.middle_model), ("SMALL", config.small_model)]:
