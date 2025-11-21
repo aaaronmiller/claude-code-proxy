@@ -156,36 +156,41 @@ async def create_message(
 
         def extract_workspace_name(text: str) -> Optional[str]:
             """Extract workspace/project name from system prompt text."""
-            import re
-            import os
+            try:
+                import re
+                import os
 
-            # Try multiple patterns in order of preference
-            patterns = [
-                # Claude Code pattern: "Working directory: /path/to/project"
-                r'Working directory:\s+([^\n]+)',
-                # Git path pattern: /something/git/project-name
-                r'/git/([^/\s]+)',
-                # Generic path pattern: extract last folder name from absolute paths
-                r'/([a-zA-Z0-9_-]+)(?:/[a-zA-Z0-9_.-]+)*\s',
-                # Workspace keyword pattern
-                r'workspace.*?:?\s+([a-zA-Z0-9_-]+)',
-            ]
+                # Try multiple patterns in order of preference
+                patterns = [
+                    # Claude Code pattern: "Working directory: /path/to/project"
+                    r'Working directory:\s+([^\n]+)',
+                    # Git path pattern: /something/git/project-name
+                    r'/git/([^/\s]+)',
+                    # Generic path pattern: extract last folder name from absolute paths
+                    r'/([a-zA-Z0-9_-]+)(?:/[a-zA-Z0-9_.-]+)*\s',
+                    # Workspace keyword pattern
+                    r'workspace.*?:?\s+([a-zA-Z0-9_-]+)',
+                ]
 
-            for pattern in patterns:
-                match = re.search(pattern, text, re.IGNORECASE)
-                if match:
-                    candidate = match.group(1).strip()
-                    # If it's a full path, extract just the last folder name
-                    if '/' in candidate:
-                        candidate = os.path.basename(candidate.rstrip('/'))
-                    # Skip common parent folders
-                    skip_names = ['users', 'home', 'user', 'documents', 'projects', 'git', 'code', 'my_projects', '0my_projects']
-                    if candidate.lower() not in skip_names and len(candidate) > 0:
-                        # Shorten if too long
-                        if len(candidate) > 20:
-                            return candidate[:17] + "..."
-                        return candidate
-            return None
+                for pattern in patterns:
+                    match = re.search(pattern, text, re.IGNORECASE)
+                    if match:
+                        candidate = match.group(1).strip()
+                        # If it's a full path, extract just the last folder name
+                        if '/' in candidate:
+                            candidate = os.path.basename(candidate.rstrip('/'))
+                        # Skip common parent folders
+                        skip_names = ['users', 'home', 'user', 'documents', 'projects', 'git', 'code', 'my_projects', '0my_projects']
+                        if candidate.lower() not in skip_names and len(candidate) > 0:
+                            # Shorten if too long
+                            if len(candidate) > 20:
+                                return candidate[:17] + "..."
+                            return candidate
+                return None
+            except Exception as e:
+                # If workspace extraction fails, just return None - don't break the request
+                logger.debug(f"Workspace name extraction failed: {e}")
+                return None
 
         if request.system:
             if isinstance(request.system, str):
