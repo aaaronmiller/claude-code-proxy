@@ -16,7 +16,7 @@ class Config:
             print("INFO: OPENAI_API_KEY not configured - enabling passthrough mode")
             print("INFO: Users must provide their own OpenAI API keys via request headers")
             self.passthrough_mode = True
-        elif self.openai_api_key == "pass" or self.openai_api_key == "your-api-key-here":
+        elif self.openai_api_key == "pass" or self.openai_api_key == "your-api-key-here" or "your-" in self.openai_api_key.lower() or self.openai_api_key == "sk-your-openai-api-key-here":
             print("WARNING: OPENAI_API_KEY is set to a placeholder value")
             print("INFO: Enabling passthrough mode - users must provide their own API keys")
             self.passthrough_mode = True
