@@ -144,7 +144,16 @@ async def create_message(
             endpoint = config.middle_endpoint
         elif client == openai_client.small_client:
             endpoint = config.small_endpoint
-        
+
+        # Log API configuration for debugging (helps diagnose 401 errors)
+        logger.debug(f"Request {request_id}: Routing to endpoint: {endpoint}")
+        logger.debug(f"Request {request_id}: Using model: {routed_model}")
+        if openai_api_key:
+            logger.debug(f"Request {request_id}: Using passthrough mode with user-provided API key")
+        else:
+            api_key_preview = config.openai_api_key[:15] if config.openai_api_key else "None"
+            logger.debug(f"Request {request_id}: Using proxy mode with server API key: {api_key_preview}...")
+
         # Extract request metadata for comprehensive logging
         message_count = len(request.messages)
         has_system = bool(request.system)
@@ -156,36 +165,41 @@ async def create_message(
 
         def extract_workspace_name(text: str) -> Optional[str]:
             """Extract workspace/project name from system prompt text."""
-            import re
-            import os
+            try:
+                import re
+                import os
 
-            # Try multiple patterns in order of preference
-            patterns = [
-                # Claude Code pattern: "Working directory: /path/to/project"
-                r'Working directory:\s+([^\n]+)',
-                # Git path pattern: /something/git/project-name
-                r'/git/([^/\s]+)',
-                # Generic path pattern: extract last folder name from absolute paths
-                r'/([a-zA-Z0-9_-]+)(?:/[a-zA-Z0-9_.-]+)*\s',
-                # Workspace keyword pattern
-                r'workspace.*?:?\s+([a-zA-Z0-9_-]+)',
-            ]
+                # Try multiple patterns in order of preference
+                patterns = [
+                    # Claude Code pattern: "Working directory: /path/to/project"
+                    r'Working directory:\s+([^\n]+)',
+                    # Git path pattern: /something/git/project-name
+                    r'/git/([^/\s]+)',
+                    # Generic path pattern: extract last folder name from absolute paths
+                    r'/([a-zA-Z0-9_-]+)(?:/[a-zA-Z0-9_.-]+)*\s',
+                    # Workspace keyword pattern
+                    r'workspace.*?:?\s+([a-zA-Z0-9_-]+)',
+                ]
 
-            for pattern in patterns:
-                match = re.search(pattern, text, re.IGNORECASE)
-                if match:
-                    candidate = match.group(1).strip()
-                    # If it's a full path, extract just the last folder name
-                    if '/' in candidate:
-                        candidate = os.path.basename(candidate.rstrip('/'))
-                    # Skip common parent folders
-                    skip_names = ['users', 'home', 'user', 'documents', 'projects', 'git', 'code', 'my_projects', '0my_projects']
-                    if candidate.lower() not in skip_names and len(candidate) > 0:
-                        # Shorten if too long
-                        if len(candidate) > 20:
-                            return candidate[:17] + "..."
-                        return candidate
-            return None
+                for pattern in patterns:
+                    match = re.search(pattern, text, re.IGNORECASE)
+                    if match:
+                        candidate = match.group(1).strip()
+                        # If it's a full path, extract just the last folder name
+                        if '/' in candidate:
+                            candidate = os.path.basename(candidate.rstrip('/'))
+                        # Skip common parent folders
+                        skip_names = ['users', 'home', 'user', 'documents', 'projects', 'git', 'code', 'my_projects', '0my_projects']
+                        if candidate.lower() not in skip_names and len(candidate) > 0:
+                            # Shorten if too long
+                            if len(candidate) > 20:
+                                return candidate[:17] + "..."
+                            return candidate
+                return None
+            except Exception as e:
+                # If workspace extraction fails, just return None - don't break the request
+                logger.debug(f"Workspace name extraction failed: {e}")
+                return None
 
         if request.system:
             if isinstance(request.system, str):
@@ -424,6 +438,22 @@ async def create_message(
                 session_id=request_id[:8],
                 client_ip=client_ip
             )
+
+        # Enhanced error logging for 401 errors
+        if e.status_code == 401:
+            logger.error(f"Authentication failed for request {request_id}")
+            logger.error(f"Endpoint: {endpoint if 'endpoint' in locals() else 'unknown'}")
+            logger.error(f"Model: {routed_model if 'routed_model' in locals() else request.model}")
+            if config.passthrough_mode:
+                logger.error("Running in PASSTHROUGH mode - check client-provided API key")
+            else:
+                logger.error("Running in PROXY mode - check server OPENAI_API_KEY configuration")
+                logger.error("Note: OPENAI_API_KEY is used for ANY provider (OpenRouter, OpenAI, Azure, etc.)")
+                if config.openai_api_key:
+                    logger.error(f"Server API key prefix: {config.openai_api_key[:15]}...")
+                else:
+                    logger.error("Server API key is NOT SET - this will cause 401 errors!")
+            logger.error(f"See docs/TROUBLESHOOTING_401.md for detailed troubleshooting steps")
 
         # Dashboard hook: request error
         error_type = "Unknown"
