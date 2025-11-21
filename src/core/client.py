@@ -240,7 +240,7 @@ class OpenAIClient:
                 del self.active_requests[request_id]
 
     def classify_openai_error(self, error_detail: Any) -> str:
-        """Provide specific error guidance for common OpenAI API issues."""
+        """Provide specific error guidance for common API issues."""
         error_str = str(error_detail).lower()
 
         # Debug logging for error classification
@@ -248,15 +248,15 @@ class OpenAIClient:
 
         # Region/country restrictions
         if "unsupported_country_region_territory" in error_str or "country, region, or territory not supported" in error_str:
-            return "OpenAI API is not available in your region. Consider using a VPN or Azure OpenAI service."
+            return "API is not available in your region. Consider using a VPN or different provider."
 
         # API key issues
         if "invalid_api_key" in error_str or "unauthorized" in error_str or "user not found" in error_str:
-            return "Invalid API key or user not found. Please check your OPENAI_API_KEY configuration and ensure your OpenRouter account is active."
+            return "Invalid API key or user not found. Please check your OPENAI_API_KEY configuration and ensure your provider account is active. Note: OPENAI_API_KEY is used for any provider (OpenRouter, OpenAI, Azure, etc.)"
 
         # Rate limiting
         if "rate_limit" in error_str or "quota" in error_str:
-            return "Rate limit exceeded. Please wait and try again, or upgrade your API plan."
+            return "Rate limit exceeded. Please wait and try again, or upgrade your API plan with your provider."
 
         # Model not found
         if "model" in error_str and ("not found" in error_str or "does not exist" in error_str):
@@ -264,7 +264,7 @@ class OpenAIClient:
 
         # Billing issues
         if "billing" in error_str or "payment" in error_str:
-            return "Billing issue. Please check your OpenAI account billing status."
+            return "Billing issue. Please check your provider account billing status."
 
         # Default: return original message
         return str(error_detail)

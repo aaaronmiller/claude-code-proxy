@@ -448,6 +448,7 @@ async def create_message(
                 logger.error("Running in PASSTHROUGH mode - check client-provided API key")
             else:
                 logger.error("Running in PROXY mode - check server OPENAI_API_KEY configuration")
+                logger.error("Note: OPENAI_API_KEY is used for ANY provider (OpenRouter, OpenAI, Azure, etc.)")
                 if config.openai_api_key:
                     logger.error(f"Server API key prefix: {config.openai_api_key[:15]}...")
                 else:

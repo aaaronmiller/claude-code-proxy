@@ -4,13 +4,23 @@ If you're experiencing 401 authentication errors after updating the Claude Code 
 
 ## Understanding the Error
 
-The error `401 Unauthorized - user not found` comes from OpenRouter (or your API provider), not from the proxy itself. This typically means:
+The error `401 Unauthorized - user not found` comes from your API provider (OpenRouter, OpenAI, Azure, etc.), not from the proxy itself. This typically means:
 
 1. **Invalid API Key**: The API key is not recognized by the provider
 2. **Expired API Key**: The API key has expired or been revoked
 3. **Account Issue**: The account associated with the API key is inactive or suspended
-4. **Wrong API Key**: The wrong API key is being sent (e.g., Anthropic key instead of OpenRouter key)
+4. **Wrong API Key**: The wrong API key is being sent (e.g., Anthropic key instead of provider key)
 5. **Configuration Issue**: The API key is not being loaded correctly from environment variables
+
+## Important Note About `OPENAI_API_KEY`
+
+**The `OPENAI_API_KEY` environment variable is used for ANY provider you connect to**, not just OpenAI:
+- **OpenRouter**: Use your OpenRouter API key (starts with `sk-or-v1-`)
+- **OpenAI**: Use your OpenAI API key (starts with `sk-`)
+- **Azure**: Use your Azure API key
+- **Other providers**: Use whatever API key that provider gives you
+
+The variable is named `OPENAI_API_KEY` for compatibility reasons, but it works with any OpenAI-compatible endpoint.
 
 ## Quick Fixes
 
@@ -44,15 +54,26 @@ Make sure to fully restart the proxy after pulling new changes:
 python start_proxy.py
 ```
 
-### 4. Check Your OpenRouter Account
+### 4. Check Your Provider Account
 
-Verify your OpenRouter account is active:
+Verify your API provider account is active:
 
+**For OpenRouter:**
 1. Go to https://openrouter.ai/
 2. Log in to your account
 3. Check your API key is active
 4. Verify you have sufficient credits
 5. Try regenerating your API key if needed
+
+**For OpenAI:**
+1. Go to https://platform.openai.com/
+2. Check your API key is active
+3. Verify your billing is set up and has credits
+
+**For Azure OpenAI:**
+1. Check your Azure portal
+2. Verify your deployment is active
+3. Confirm your API key and endpoint are correct
 
 ## Detailed Diagnostics
 
@@ -84,14 +105,28 @@ else:
 
 ### Test Your API Key Directly
 
-Test if your API key works directly with OpenRouter:
+Test if your API key works directly with your provider:
 
+**For OpenRouter:**
 ```bash
 curl https://openrouter.ai/api/v1/models \
   -H "Authorization: Bearer $OPENAI_API_KEY"
 ```
 
-If this returns a 401 error, the problem is with your API key or OpenRouter account, not the proxy.
+**For OpenAI:**
+```bash
+curl https://api.openai.com/v1/models \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+
+**For custom endpoints:**
+```bash
+# Replace with your OPENAI_BASE_URL
+curl $OPENAI_BASE_URL/models \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+
+If this returns a 401 error, the problem is with your API key or provider account, not the proxy.
 
 ### Check for Environment Variable Conflicts
 
@@ -112,10 +147,17 @@ Look for any variables that might conflict with `OPENAI_API_KEY`.
 
 **Cause**: `OPENAI_API_KEY` is not set, or is set to "pass" or "your-api-key-here"
 
-**Solution**: Set a valid OpenRouter API key in your `.env` file:
+**Solution**: Set a valid API key in your `.env` file:
 
 ```bash
+# For OpenRouter
 OPENAI_API_KEY="sk-or-v1-YOUR-ACTUAL-KEY-HERE"
+
+# For OpenAI
+OPENAI_API_KEY="sk-YOUR-ACTUAL-KEY-HERE"
+
+# For Azure or other providers
+OPENAI_API_KEY="your-provider-api-key-here"
 ```
 
 ### Issue 2: API Key in Wrong Format
@@ -135,22 +177,44 @@ OPENAI_API_KEY="sk-or-v1-YOUR-ACTUAL-KEY-HERE"
 
 **Cause**: `OPENAI_BASE_URL` is pointing to wrong endpoint
 
-**Solution**: For OpenRouter, use:
+**Solution**: Set the correct base URL for your provider:
 
 ```bash
+# For OpenRouter
 OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+
+# For OpenAI
+OPENAI_BASE_URL="https://api.openai.com/v1"
+
+# For Azure OpenAI
+OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/deployments/your-deployment-name"
+
+# For local models (Ollama, LM Studio, etc.)
+OPENAI_BASE_URL="http://localhost:11434/v1"
 ```
 
 ### Issue 4: Credits Exhausted
 
 **Symptoms**: API worked before but stopped working
 
-**Cause**: OpenRouter account has run out of credits
+**Cause**: API provider account has run out of credits or exceeded quota
 
 **Solution**:
+
+**For OpenRouter:**
 1. Go to https://openrouter.ai/account
 2. Check your credit balance
 3. Add more credits if needed
+
+**For OpenAI:**
+1. Go to https://platform.openai.com/account/billing
+2. Check your usage and billing status
+3. Add a payment method or increase limits if needed
+
+**For Azure:**
+1. Check your Azure portal
+2. Verify your subscription is active
+3. Check quota limits for your deployment
 
 ### Issue 5: API Key Cached
 
@@ -269,9 +333,22 @@ To avoid similar issues in the future:
 
 4. **Monitor API usage**: Regularly check your OpenRouter dashboard to ensure you have credits
 
+## FAQ: Why is it called `OPENAI_API_KEY`?
+
+The environment variable is named `OPENAI_API_KEY` for compatibility with OpenAI's API format, but **it works with ANY OpenAI-compatible provider**:
+
+- **OpenRouter**: Most common use case - proxy OpenAI models through OpenRouter
+- **OpenAI**: Direct OpenAI API access
+- **Azure OpenAI**: Microsoft's Azure-hosted OpenAI models
+- **Local models**: Ollama, LM Studio, vLLM, etc.
+- **Other providers**: Any service with OpenAI-compatible endpoints
+
+The proxy translates Claude API requests to OpenAI-compatible format, then forwards them to whatever endpoint you specify in `OPENAI_BASE_URL`. The naming convention is kept for compatibility, but the key itself is for whatever provider you're using.
+
 ## Related Documentation
 
 - [Configuration Guide](../README.md#configuration)
 - [Terminal Output Configuration](TERMINAL_OUTPUT.md)
 - [API Key Setup](../README.md#api-key-setup)
 - [OpenRouter Documentation](https://openrouter.ai/docs)
+- [OpenAI API Documentation](https://platform.openai.com/docs)
