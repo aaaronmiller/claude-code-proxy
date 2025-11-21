@@ -59,10 +59,19 @@ cp .env.example .env
 # Edit .env with your settings
 ```
 
+> **⚠️ IMPORTANT: New Semantic Variable Names**
+>
+> We've introduced clearer, semantic variable names to eliminate confusion:
+> - `PROVIDER_API_KEY` → Your backend provider's API key (replaces `OPENAI_API_KEY`)
+> - `PROVIDER_BASE_URL` → Your backend provider's URL (replaces `OPENAI_BASE_URL`)
+> - `PROXY_AUTH_KEY` → Proxy client authentication (replaces `ANTHROPIC_API_KEY`)
+>
+> **Legacy names still work** but show deprecation warnings. Use the new semantic names!
+
 **Example: OpenRouter with GPT-5 (High Reasoning)**
 ```bash
-OPENAI_API_KEY="your-openrouter-key"
-OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+PROVIDER_API_KEY="your-openrouter-key"
+PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
 BIG_MODEL="openai/gpt-5"
 REASONING_EFFORT="high"
 REASONING_MAX_TOKENS="8000"
@@ -72,8 +81,8 @@ REASONING_EXCLUDE="false"
 
 **Example: Anthropic Claude with Reasoning**
 ```bash
-OPENAI_API_KEY="your-openrouter-key"
-OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+PROVIDER_API_KEY="your-openrouter-key"
+PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
 BIG_MODEL="anthropic/claude-4.1-sonnet"
 REASONING_EFFORT="high"
 REASONING_MAX_TOKENS="16000"
@@ -269,12 +278,18 @@ Beautiful terminal UI with:
 
 #### Required
 ```bash
-OPENAI_API_KEY="your-api-key"    # Your provider's API key
+PROVIDER_API_KEY="your-api-key"    # Your provider's API key
+
+# Legacy (deprecated, but still works):
+# OPENAI_API_KEY="your-api-key"
 ```
 
 #### Security
 ```bash
-ANTHROPIC_API_KEY="exact-key"    # (Optional) Client must match this
+PROXY_AUTH_KEY="exact-key"    # (Optional) Client must match this
+
+# Legacy (deprecated, but still works):
+# ANTHROPIC_API_KEY="exact-key"
 ```
 
 #### Model Configuration
@@ -316,7 +331,10 @@ REASONING_EXCLUDE="false"        # Show/hide reasoning
 
 #### API Configuration
 ```bash
-OPENAI_BASE_URL="https://openrouter.ai/api/v1"  # Your provider's base URL
+PROVIDER_BASE_URL="https://openrouter.ai/api/v1"  # Your provider's base URL
+
+# Legacy (deprecated, but still works):
+# OPENAI_BASE_URL="https://openrouter.ai/api/v1"
 ```
 
 #### Selector Configuration
@@ -376,9 +394,9 @@ Environment variables with the `CUSTOM_HEADER_` prefix are automatically convert
 ### Usage Example
 
 ```bash
-# Basic configuration
-OPENAI_API_KEY="sk-your-openai-api-key-here"
-OPENAI_BASE_URL="https://api.openai.com/v1"
+# Basic configuration (use semantic names)
+PROVIDER_API_KEY="sk-your-provider-api-key-here"
+PROVIDER_BASE_URL="https://api.openai.com/v1"
 
 # Enable custom headers (uncomment as needed)
 CUSTOM_HEADER_ACCEPT="application/jsonstream"
@@ -403,7 +421,7 @@ BIG_ENDPOINT="http://localhost:11434/v1"
 MIDDLE_ENDPOINT="https://openrouter.ai/api/v1"
 SMALL_ENDPOINT="http://127.0.0.1:1234/v1"
 
-# Per-model API keys (defaults to OPENAI_API_KEY if not set)
+# Per-model API keys (defaults to PROVIDER_API_KEY if not set)
 BIG_API_KEY="sk-or-..."
 MIDDLE_API_KEY=""
 SMALL_API_KEY="dummy"
@@ -413,15 +431,15 @@ SMALL_API_KEY="dummy"
 
 - **ENABLE_BIG_ENDPOINT**: Enable custom endpoint for BIG model (Claude Opus)
   - `true`: Use `BIG_ENDPOINT` and `BIG_API_KEY`
-  - `false`: Use default `OPENAI_BASE_URL` and `OPENAI_API_KEY`
+  - `false`: Use default `PROVIDER_BASE_URL` and `PROVIDER_API_KEY`
 
 - **ENABLE_MIDDLE_ENDPOINT**: Enable custom endpoint for MIDDLE model (Claude Sonnet)
   - `true`: Use `MIDDLE_ENDPOINT` and `MIDDLE_API_KEY`
-  - `false`: Use default `OPENAI_BASE_URL` and `OPENAI_API_KEY`
+  - `false`: Use default `PROVIDER_BASE_URL` and `PROVIDER_API_KEY`
 
 - **ENABLE_SMALL_ENDPOINT**: Enable custom endpoint for SMALL model (Claude Haiku)
   - `true`: Use `SMALL_ENDPOINT` and `SMALL_API_KEY`
-  - `false`: Use default `OPENAI_BASE_URL` and `OPENAI_API_KEY`
+  - `false`: Use default `PROVIDER_BASE_URL` and `PROVIDER_API_KEY`
 
 - **Per-Model Endpoints**: Custom base URLs for different providers
   - Ollama: `http://localhost:11434/v1`
@@ -431,7 +449,7 @@ SMALL_API_KEY="dummy"
   - Azure OpenAI: `https://your-resource.openai.azure.com/openai/deployments/your-deployment`
 
 - **Per-Model API Keys**: Optional per-model authentication
-  - If not set, falls back to main `OPENAI_API_KEY`
+  - If not set, falls back to main `PROVIDER_API_KEY`
   - Useful for different API keys per provider
   - Local models can use dummy values
 
@@ -446,8 +464,8 @@ LOG_LEVEL="info"                 # debug, info, warning, error
 
 #### OpenAI
 ```bash
-OPENAI_API_KEY="sk-..."
-OPENAI_BASE_URL="https://api.openai.com/v1"
+PROVIDER_API_KEY="sk-..."
+PROVIDER_BASE_URL="https://api.openai.com/v1"
 BIG_MODEL="gpt-4o"
 MIDDLE_MODEL="gpt-4o"
 SMALL_MODEL="gpt-4o-mini"
@@ -455,16 +473,16 @@ SMALL_MODEL="gpt-4o-mini"
 
 #### OpenRouter
 ```bash
-OPENAI_API_KEY="sk-or-..."
-OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+PROVIDER_API_KEY="sk-or-..."
+PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
 BIG_MODEL="openai/gpt-5"
 REASONING_EFFORT="high"
 ```
 
 #### Azure OpenAI
 ```bash
-OPENAI_API_KEY="your-azure-key"
-OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/deployments/your-deployment"
+PROVIDER_API_KEY="your-azure-key"
+PROVIDER_BASE_URL="https://your-resource.openai.azure.com/openai/deployments/your-deployment"
 BIG_MODEL="gpt-4"
 MIDDLE_MODEL="gpt-4"
 SMALL_MODEL="gpt-35-turbo"
@@ -472,8 +490,8 @@ SMALL_MODEL="gpt-35-turbo"
 
 #### Local Models (Ollama)
 ```bash
-OPENAI_API_KEY="dummy"  # Required but can be dummy
-OPENAI_BASE_URL="http://localhost:11434/v1"
+PROVIDER_API_KEY="dummy"  # Required but can be dummy
+PROVIDER_BASE_URL="http://localhost:11434/v1"
 BIG_MODEL="ollama/qwen2.5:72b"
 MIDDLE_MODEL="ollama/llama3.1:70b"
 SMALL_MODEL="ollama/llama3.1:8b"
@@ -482,8 +500,8 @@ REASONING_EFFORT="medium"
 
 #### LMStudio
 ```bash
-OPENAI_API_KEY="dummy"  # Required but can be dummy
-OPENAI_BASE_URL="http://127.0.0.1:1234/v1"
+PROVIDER_API_KEY="dummy"  # Required but can be dummy
+PROVIDER_BASE_URL="http://127.0.0.1:1234/v1"
 BIG_MODEL="lmstudio/Meta-Llama-3.1-405B-Instruct"
 MIDDLE_MODEL="lmstudio/Meta-Llama-3.1-70B-Instruct"
 SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
@@ -499,8 +517,8 @@ SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
 
 ```bash
 # Main API config
-OPENAI_API_KEY="your-openrouter-key"
-OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+PROVIDER_API_KEY="your-openrouter-key"
+PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
 
 # BIG model - Local Ollama
 ENABLE_BIG_ENDPOINT="true"
@@ -509,7 +527,7 @@ BIG_API_KEY="dummy"
 BIG_MODEL="ollama/qwen2.5:72b"
 
 # MIDDLE model - OpenRouter
-ENABLE_MIDDLE_ENDPOINT="false"  # Uses default OPENAI_BASE_URL
+ENABLE_MIDDLE_ENDPOINT="false"  # Uses default PROVIDER_BASE_URL
 MIDDLE_MODEL="openai/gpt-5"
 
 # SMALL model - LMStudio
@@ -1037,10 +1055,10 @@ docker build -t claude-code-proxy .
 # Run container
 docker run -p 8082:8082 --env-file .env claude-code-proxy
 
-# Or with environment variables
+# Or with environment variables (use semantic names)
 docker run -p 8082:8082 \
-  -e OPENAI_API_KEY="your-key" \
-  -e OPENAI_BASE_URL="https://openrouter.ai/api/v1" \
+  -e PROVIDER_API_KEY="your-key" \
+  -e PROVIDER_BASE_URL="https://openrouter.ai/api/v1" \
   -e BIG_MODEL="openai/gpt-5" \
   claude-code-proxy
 ```
@@ -1081,8 +1099,8 @@ services:
     ports:
       - "8082:8082"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - PROVIDER_BASE_URL=${PROVIDER_BASE_URL}
       - BIG_MODEL=${BIG_MODEL}
       - REASONING_EFFORT=high
     volumes:

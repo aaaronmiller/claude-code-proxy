@@ -4,29 +4,70 @@ import sys
 # Configuration
 class Config:
     def __init__(self):
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY")
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # SEMANTIC ENVIRONMENT VARIABLE NAMES (NEW)
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # Use semantic names that represent what they actually do:
+        # - PROVIDER_API_KEY: API key for your backend provider (OpenRouter, OpenAI, etc.)
+        # - PROVIDER_BASE_URL: Base URL for your backend provider
+        # - PROXY_AUTH_KEY: Optional authentication key for proxy clients
+        #
+        # Legacy names (OPENAI_API_KEY, OPENAI_BASE_URL, ANTHROPIC_API_KEY) are still
+        # supported for backward compatibility but will show deprecation warnings.
+        # ═══════════════════════════════════════════════════════════════════════════════
+
+        # Check for new semantic variable names first, fall back to legacy names
+        provider_api_key = os.environ.get("PROVIDER_API_KEY")
+        provider_base_url = os.environ.get("PROVIDER_BASE_URL")
+        proxy_auth_key = os.environ.get("PROXY_AUTH_KEY")
+
+        # Legacy variable support with deprecation warnings
+        legacy_openai_key = os.environ.get("OPENAI_API_KEY")
+        legacy_openai_url = os.environ.get("OPENAI_BASE_URL")
+        legacy_anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+
+        # Determine which values to use (new takes precedence)
+        if provider_api_key:
+            self.openai_api_key = provider_api_key
+        elif legacy_openai_key:
+            self.openai_api_key = legacy_openai_key
+            print("⚠️  DEPRECATION WARNING: OPENAI_API_KEY is deprecated. Use PROVIDER_API_KEY instead.")
+            print("   This variable name is misleading - it works with ANY provider, not just OpenAI.")
+        else:
+            self.openai_api_key = None
+
+        if provider_base_url:
+            self.openai_base_url = provider_base_url
+        elif legacy_openai_url:
+            self.openai_base_url = legacy_openai_url
+            print("⚠️  DEPRECATION WARNING: OPENAI_BASE_URL is deprecated. Use PROVIDER_BASE_URL instead.")
+        else:
+            self.openai_base_url = "https://api.openai.com/v1"
+
+        if proxy_auth_key:
+            self.anthropic_api_key = proxy_auth_key
+        elif legacy_anthropic_key:
+            self.anthropic_api_key = legacy_anthropic_key
+            print("⚠️  DEPRECATION WARNING: ANTHROPIC_API_KEY is deprecated. Use PROXY_AUTH_KEY instead.")
+            print("   This variable is for proxy authentication, NOT for Anthropic's API.")
+        else:
+            self.anthropic_api_key = None
 
         # Determine operating mode: proxy (default) or passthrough
-        # Proxy mode: Server-configured OPENAI_API_KEY handles all requests
-        # Passthrough mode: Users supply their own OpenAI API keys via headers
+        # Proxy mode: Server-configured PROVIDER_API_KEY handles all requests
+        # Passthrough mode: Users supply their own API keys via headers
         self.passthrough_mode = False
 
         if not self.openai_api_key:
             # No server API key configured - enable passthrough mode
-            print("INFO: OPENAI_API_KEY not configured - enabling passthrough mode")
-            print("INFO: Users must provide their own OpenAI API keys via request headers")
+            print("INFO: PROVIDER_API_KEY not configured - enabling passthrough mode")
+            print("INFO: Users must provide their own API keys via request headers")
             self.passthrough_mode = True
         elif self.openai_api_key == "pass" or self.openai_api_key == "your-api-key-here" or "your-" in self.openai_api_key.lower() or self.openai_api_key == "sk-your-openai-api-key-here":
-            print("WARNING: OPENAI_API_KEY is set to a placeholder value")
+            print("WARNING: PROVIDER_API_KEY is set to a placeholder value")
             print("INFO: Enabling passthrough mode - users must provide their own API keys")
             self.passthrough_mode = True
             self.openai_api_key = None
-
-        # Set base URL
-        self.openai_base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        
-        # Add Anthropic API key for client validation
-        self.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
         
         self.azure_api_version = os.environ.get("AZURE_API_VERSION")  # For Azure OpenAI
         self.host = os.environ.get("HOST", "0.0.0.0")

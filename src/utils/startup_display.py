@@ -43,12 +43,12 @@ def display_startup_config(config):
     provider_table.add_row("Provider", f"[bold]{provider_name}[/bold]")
     provider_table.add_row("Endpoint", config.openai_base_url)
 
-    # Show API key status
+    # Show API key status (with semantic naming hint)
     if config.openai_api_key:
         key_preview = config.openai_api_key[:15] + "..." if len(config.openai_api_key) > 15 else config.openai_api_key
-        provider_table.add_row("API Key", f"[green]{key_preview}[/green]")
+        provider_table.add_row("Provider Key", f"[green]{key_preview}[/green]")
     else:
-        provider_table.add_row("API Key", "[yellow]NOT SET (passthrough mode)[/yellow]")
+        provider_table.add_row("Provider Key", "[yellow]NOT SET (passthrough mode)[/yellow]")
 
     console.print(Panel(provider_table, title="[bold magenta]Provider[/bold magenta]", border_style="cyan"))
     
@@ -109,9 +109,9 @@ def display_startup_config(config):
     server_table.add_row("Log Level", config.log_level.split()[0].upper())
     server_table.add_row("Timeout", f"{config.request_timeout}s")
     server_table.add_row("Max Tokens", _format_tokens(config.max_tokens_limit))
-    
+
     auth_status = "[green]Enabled[/green]" if config.anthropic_api_key else "[dim]Disabled[/dim]"
-    server_table.add_row("Client Auth", auth_status)
+    server_table.add_row("Proxy Auth", auth_status)
     
     console.print(Panel(server_table, title="[bold magenta]Server[/bold magenta]", border_style="cyan"))
     
@@ -128,12 +128,12 @@ def _display_plain(config):
     print("Provider:")
     print(f"  {_extract_provider_name(config.openai_base_url)}")
     print(f"  {config.openai_base_url}")
-    # Show API key status
+    # Show API key status (with semantic naming hint)
     if config.openai_api_key:
         key_preview = config.openai_api_key[:15] + "..." if len(config.openai_api_key) > 15 else config.openai_api_key
-        print(f"  API Key: {key_preview}")
+        print(f"  Provider Key: {key_preview}")
     else:
-        print(f"  API Key: NOT SET (passthrough mode)")
+        print(f"  Provider Key: NOT SET (passthrough mode)")
     print()
     print("Models:")
     for tier, model in [("BIG", config.big_model), ("MIDDLE", config.middle_model), ("SMALL", config.small_model)]:
