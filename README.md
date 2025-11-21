@@ -1,468 +1,164 @@
 <div align="center">
 
-# Claude Code Proxy
+# 🔄 Claude Code Proxy
 
-**Use Claude Code with any OpenAI-compatible provider**
+**Use Claude Code CLI with any OpenAI-compatible provider**
+
+Stop being locked into Anthropic. Use OpenRouter, Gemini, local models, or any provider you want.
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
+
+[Quick Start](#-quick-start) • [Features](#-features) • [Configuration](docs/CONFIGURATION.md) • [Examples](docs/EXAMPLES.md)
 
 </div>
 
 ---
 
-## 🎯 What is this?
+## 📖 What It Does
 
-Claude Code Proxy is a **drop-in replacement** that enables the official Claude Code CLI to work with **any OpenAI-compatible API provider** (OpenAI, OpenRouter, Azure OpenAI, local models via Ollama/LMStudio, and more).
+Claude Code Proxy sits between Claude Code CLI and your chosen API provider. Claude Code thinks it's talking to Anthropic, but you're actually using whatever provider you want—OpenRouter, Gemini, OpenAI, local models, etc.
 
-### Why use it?
+**Why use this?**
+- 💰 **Save money** - Use free or cheaper models instead of paid Anthropic API
+- 🏠 **Run locally** - Use Ollama or LM Studio for 100% free, offline operation
+- 🌐 **Multi-provider** - Route different model tiers to different providers
+- 🧠 **Extended reasoning** - Access thinking tokens for reasoning models (GPT-5, Claude 4+, Gemini 2+)
+- 📊 **Rich monitoring** - Terminal dashboards, usage tracking, performance metrics
+- 🎛️ **Full control** - Configure everything via .env, Web UI, or interactive wizards
 
-- ✅ **Use Claude Code with any provider** - Not just Anthropic's API
-- ✅ **Save money** - Use local models (Ollama/LMStudio) or cheaper providers
-- ✅ **Advanced Reasoning** - Arbitrary thinking token budgets (50k, 350k, etc.)
-- ✅ **Rich Terminal Output** - Color-coded logs with progress bars
-- ✅ **Token Visualization** - See context window and output usage in real-time
-- ✅ **352+ models** - Browse and configure from our model database
-- ✅ **Smart templates** - One-click setups for common use cases
-- ✅ **Performance Metrics** - Tokens/sec, latency, thinking token tracking
-- ✅ **Local models** - Run everything on your machine
-
-- **Full Claude API Compatibility**: Complete `/v1/messages` endpoint support
-- **Multiple Provider Support**: OpenAI, Azure OpenAI, local models (Ollama), and any OpenAI-compatible API
-- **Smart Model Mapping**: Configure BIG and SMALL models via environment variables
-- **Function Calling**: Complete tool use support with proper conversion
-- **Streaming Responses**: Real-time SSE streaming support
-- **Image Support**: Base64 encoded image input
-- **Custom Headers**: Automatic injection of custom HTTP headers for API requests
-- **Error Handling**: Comprehensive error handling and logging
+---
 
 ## 🚀 Quick Start
 
-### 1. Clone & Install
+### 1. First-Time Setup Wizard (Recommended)
 
 ```bash
-git clone https://github.com/yourusername/claude-code-proxy.git
+git clone https://github.com/aaaronmiller/claude-code-proxy.git
 cd claude-code-proxy
-
-# Using UV (recommended)
 uv sync
-
-# Or using pip
-pip install -r requirements.txt
+python setup_wizard.py
 ```
 
-### 2. Configure
+The wizard will guide you through:
+- Provider selection (OpenRouter, Gemini, OpenAI, Azure, Ollama, LM Studio)
+- Model configuration (BIG/MIDDLE/SMALL mapping)
+- Optional features (reasoning, dashboard, terminal output, crosstalk, etc.)
+- Profile management (save/load different configurations)
+
+### 2. Manual Setup
 
 ```bash
+git clone https://github.com/aaaronmiller/claude-code-proxy.git
+cd claude-code-proxy
+uv sync
 cp .env.example .env
-# Edit .env with your settings
+nano .env  # Add your PROVIDER_API_KEY and PROVIDER_BASE_URL
 ```
 
-> **⚠️ IMPORTANT: New Semantic Variable Names**
->
-> We've introduced clearer, semantic variable names to eliminate confusion:
-> - `PROVIDER_API_KEY` → Your backend provider's API key (replaces `OPENAI_API_KEY`)
-> - `PROVIDER_BASE_URL` → Your backend provider's URL (replaces `OPENAI_BASE_URL`)
-> - `PROXY_AUTH_KEY` → Proxy client authentication (replaces `ANTHROPIC_API_KEY`)
->
-> **Legacy names still work** but show deprecation warnings. Use the new semantic names!
+### 3. Start the Proxy
 
-**Example: OpenRouter with GPT-5 (High Reasoning)**
-```bash
-PROVIDER_API_KEY="your-openrouter-key"
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
-BIG_MODEL="openai/gpt-5"
-REASONING_EFFORT="high"
-REASONING_MAX_TOKENS="8000"
-VERBOSITY="high"
-REASONING_EXCLUDE="false"
-```
-
-**Example: Anthropic Claude with Reasoning**
-```bash
-PROVIDER_API_KEY="your-openrouter-key"
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
-BIG_MODEL="anthropic/claude-4.1-sonnet"
-REASONING_EFFORT="high"
-REASONING_MAX_TOKENS="16000"
-REASONING_EXCLUDE="false"
-```
-
-**Example: Free Local Models (No API costs!)**
-```bash
-BIG_MODEL="ollama/qwen2.5:72b"
-MIDDLE_MODEL="ollama/llama3.1:70b"
-SMALL_MODEL="ollama/llama3.1:8b"
-REASONING_EFFORT="medium"
-ENABLE_OPENROUTER_SELECTION="false"  # Hide marketplace, show only local
-```
-
-**Example: Local-Only Deployment**
-```bash
-# Hide all OpenRouter models from selector
-ENABLE_OPENROUTER_SELECTION="false"
-
-# Use only local models
-BIG_MODEL="ollama/qwen2.5:72b"
-MIDDLE_MODEL="ollama/llama3.1:70b"
-SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
-REASONING_EFFORT="medium"
-```
-
-### 3. Start Server
-
-**Option A: Direct Python**
 ```bash
 python start_proxy.py
 ```
 
-**Option B: Docker (Recommended for Production)**
-```bash
-# Build and run with Docker Compose
-docker-compose up --build
+### 4. Use Claude Code
 
-# Or build and run manually
-docker build -t claude-code-proxy .
-docker run -p 8082:8082 --env-file .env claude-code-proxy
-```
-
-### 4. Use with Claude Code
+In another terminal:
 
 ```bash
-# Set the base URL
 export ANTHROPIC_BASE_URL=http://localhost:8082
-
-# Use Claude Code normally
-claude "Write a Python function to calculate fibonacci numbers"
+claude "write a fibonacci function"
 ```
+
+Done! Claude Code now uses your configured provider.
 
 ---
 
-## ✨ Features
+## 🧩 Core Concepts
 
-### Core Features
+### How It Works
 
-| Feature | Description |
-|---------|-------------|
-| **Full Claude API Compatibility** | Complete `/v1/messages` endpoint support with all Claude features |
-| **Multi-Provider Support** | OpenAI, Azure, OpenRouter, local (Ollama/LMStudio), any OpenAI-compatible API |
-| **Smart Model Mapping** | Configure BIG, MIDDLE, SMALL models via environment variables |
-| **Function Calling** | Full tool/function calling support with proper conversion |
-| **Streaming Responses** | Real-time Server-Sent Events (SSE) streaming |
-| **Image Support** | Handle base64 encoded image inputs |
-| **Error Handling** | Comprehensive error handling with detailed logging |
-
-### Advanced Features
-
-#### 🤖 GPT-5 & Advanced Reasoning
-
-Full support for reasoning-capable models across all providers via OpenRouter's unified API:
-
-```bash
-REASONING_EFFORT="high"        # low, medium, high
-REASONING_MAX_TOKENS="8000"    # Optional: fine-grained token control
-VERBOSITY="high"               # Response detail level
-REASONING_EXCLUDE="false"      # Show/hide reasoning tokens
+```
+Claude Code → Proxy → Your Provider
+     ↓                      ↓
+  Claude API           OpenAI API
+    format              format
 ```
 
-**Comprehensive reasoning support:**
-
-**OpenAI Models:**
-- GPT-5 family (openai/gpt-5)
-- o1 series (openai/o1, openai/o1-mini)
-- o3 series (openai/o3, openai/o3-mini)
-
-**Anthropic Models:**
-- Claude 3.7 Sonnet/Opus/Haiku
-- Claude 4.x series
-- Claude 4.1 series
-
-**OpenRouter & Other Providers:**
-- Qwen3 and Qwen-2.5 thinking models
-- DeepSeek V3, V3.1, and R1 variants
-- xAI Grok with reasoning
-- MiniMax M2 thinking models
-- Kimi K2 thinking models
-- Local models (Ollama Qwen 2.5, DeepSeek V2.5)
-
-**Unified Reasoning Control:**
-- Uses OpenRouter's `reasoning` object for cross-provider compatibility
-- Supports both `effort` (OpenAI-style) and `max_tokens` (Anthropic-style)
-- Auto-detects reasoning-capable models from model metadata
-- Preserves reasoning blocks in responses for tool-calling workflows
-
-#### 📦 Mode Templates (10 Pre-Built Configurations)
-
-One-click setups for common use cases:
-
-1. **Free Tier** - Completely free local models
-2. **Development** - Cost-effective setup
-3. **Production** - Premium GPT-5 setup
-4. **Reasoning Intensive** - For complex analysis
-5. **Vision & Multimodal** - Image processing
-6. **Fast Inference** - Speed optimized
-7. **Local Reasoning** - Free local with reasoning
-8. **Budget Conscious** - Ultra-low cost
-9. **LMStudio** - GUI-based local models
-10. **Research** - High context models
-
-#### 🎯 Smart Model Recommender
-
-Intelligent suggestions based on your usage:
-
-- **Find free alternatives** to expensive models
-- **Usage pattern analysis** - see what works for you
-- **Correlation tracking** - find models used together
-- **Cost optimization** - discover cheaper alternatives
-
-#### 📊 Model Database
-
-**352 models** from multiple sources:
-
-- **OpenRouter** - 340+ models
-- **LMStudio** - 5 local models (port 1234)
-- **Ollama** - 7 local models (port 11434)
-- **140 free models** - All listed and easy to find
-
-**Detailed metadata for each model:**
-- Pricing per 1M tokens
-- Context window size
-- Reasoning support
-- Vision support
-- Provider information
-- Endpoint URLs
-
-#### 💾 Configuration Modes
-
-Save and load different configurations:
-
-- **99 mode slots** (ID 1-99)
-- **Load by name or ID**
-- **Case-insensitive lookup**
-- **JSON persistence**
-- **Export/import ready**
-
-#### 🎨 Interactive Selector
-
-Beautiful terminal UI with:
-
-- **Color-coded interface** - 16-color palette
-- **ASCII art headers** - Professional appearance
-- **Browse by capability** - Filter by reasoning, vision, free, local
-- **Search functionality** - Find specific models
-- **Local models filter** - Show only LMStudio/Ollama models (Option 6)
-- **OpenRouter toggle** - Hide/show marketplace models via config
-- **Template system** - One-click apply 10 pre-built configurations (Option 7)
-- **Smart recommendations** - Find free alternatives (Option 8)
-- **Visual feedback** - Clear status messages
-
-**Interactive selector features:**
-
-- **Option 1-3**: Select BIG/MIDDLE/SMALL models
-- **Option 4**: Configure reasoning settings (effort, max_tokens, exclude)
-- **Option 5**: View current selections
-- **Option 6**: Browse LOCAL models only (LMStudio, Ollama)
-- **Option 7**: Use Template (pre-built configurations)
-- **Option 8**: Get Recommendations (find free alternatives)
-- **Option 9**: Save and apply configuration
-- **Option 10**: Load saved mode
-- **Option 11**: Save current as mode
-- **Option 12**: List all modes
-
----
-
-## 🛠️ Configuration
-
-### Environment Variables
-
-#### Required
-```bash
-PROVIDER_API_KEY="your-api-key"    # Your provider's API key
-
-# Legacy (deprecated, but still works):
-# OPENAI_API_KEY="your-api-key"
-```
-
-#### Security
-```bash
-PROXY_AUTH_KEY="exact-key"    # (Optional) Client must match this
-
-# Legacy (deprecated, but still works):
-# ANTHROPIC_API_KEY="exact-key"
-```
-
-#### Model Configuration
-```bash
-BIG_MODEL="openai/gpt-5"         # Claude Opus requests
-MIDDLE_MODEL="openai/gpt-5"      # Claude Sonnet requests  
-SMALL_MODEL="gpt-4o-mini"        # Claude Haiku requests
-```
-
-#### Reasoning Configuration
-```bash
-REASONING_EFFORT="high"          # low, medium, high
-REASONING_MAX_TOKENS="8000"      # Optional: max tokens for reasoning
-VERBOSITY="high"                 # Response detail
-REASONING_EXCLUDE="false"        # Show/hide reasoning
-```
-
-**Reasoning Configuration Options:**
-
-- **REASONING_EFFORT**: Controls reasoning intensity
-  - `low`: ~20% of tokens for reasoning (faster)
-  - `medium`: ~50% of tokens (balanced)
-  - `high`: ~80% of tokens (best quality)
-  - Empty/None: Disable reasoning
-
-- **REASONING_MAX_TOKENS**: Fine-grained control (Anthropic/OpenRouter style)
-  - Integer value (e.g., `2000`, `8000`, `16000`)
-  - Directly specifies maximum tokens for reasoning
-  - Works with Anthropic and OpenRouter models
-  - Leave empty to use provider default
-
-- **REASONING_EXCLUDE**: Control reasoning token visibility
-  - `false`: Include reasoning tokens in response (default)
-  - `true`: Use reasoning internally but exclude from response
-
-- **VERBOSITY**: Response detail level
-  - `high`: More detailed responses
-  - `default` or empty: Standard detail
-
-#### API Configuration
-```bash
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"  # Your provider's base URL
-
-# Legacy (deprecated, but still works):
-# OPENAI_BASE_URL="https://openrouter.ai/api/v1"
-```
-
-#### Selector Configuration
-```bash
-ENABLE_OPENROUTER_SELECTION="true"  # Show/hide OpenRouter models in selector
-```
-
-**Selector Configuration Options:**
-
-- **ENABLE_OPENROUTER_SELECTION**: Control which models appear in interactive selector
-  - `true`: Show all models (OpenRouter + local) (default)
-  - `false`: Show local models only (LMStudio, Ollama)
-  - Useful for local-only deployments or when you want to hide marketplace models
-**Custom Headers:**
-
-- `CUSTOM_HEADER_*` - Custom headers for API requests (e.g., `CUSTOM_HEADER_ACCEPT`, `CUSTOM_HEADER_AUTHORIZATION`)
-  - Uncomment in `.env` file to enable custom headers
-
-### Custom Headers Configuration
-
-Add custom headers to your API requests by setting environment variables with the `CUSTOM_HEADER_` prefix:
-
-```bash
-# Uncomment to enable custom headers
-# CUSTOM_HEADER_ACCEPT="application/jsonstream"
-# CUSTOM_HEADER_CONTENT_TYPE="application/json"
-# CUSTOM_HEADER_USER_AGENT="your-app/1.0.0"
-# CUSTOM_HEADER_AUTHORIZATION="Bearer your-token"
-# CUSTOM_HEADER_X_API_KEY="your-api-key"
-# CUSTOM_HEADER_X_CLIENT_ID="your-client-id"
-# CUSTOM_HEADER_X_CLIENT_VERSION="1.0.0"
-# CUSTOM_HEADER_X_REQUEST_ID="unique-request-id"
-# CUSTOM_HEADER_X_TRACE_ID="trace-123"
-# CUSTOM_HEADER_X_SESSION_ID="session-456"
-```
-
-### Header Conversion Rules
-
-Environment variables with the `CUSTOM_HEADER_` prefix are automatically converted to HTTP headers:
-
-- Environment variable: `CUSTOM_HEADER_ACCEPT`
-- HTTP Header: `ACCEPT`
-
-- Environment variable: `CUSTOM_HEADER_X_API_KEY`
-- HTTP Header: `X-API-KEY`
-
-- Environment variable: `CUSTOM_HEADER_AUTHORIZATION`
-- HTTP Header: `AUTHORIZATION`
-
-### Supported Header Types
-
-- **Content Type**: `ACCEPT`, `CONTENT-TYPE`
-- **Authentication**: `AUTHORIZATION`, `X-API-KEY`
-- **Client Identification**: `USER-AGENT`, `X-CLIENT-ID`, `X-CLIENT-VERSION`
-- **Tracking**: `X-REQUEST-ID`, `X-TRACE-ID`, `X-SESSION-ID`
-
-### Usage Example
-
-```bash
-# Basic configuration (use semantic names)
-PROVIDER_API_KEY="sk-your-provider-api-key-here"
-PROVIDER_BASE_URL="https://api.openai.com/v1"
-
-# Enable custom headers (uncomment as needed)
-CUSTOM_HEADER_ACCEPT="application/jsonstream"
-CUSTOM_HEADER_CONTENT_TYPE="application/json"
-CUSTOM_HEADER_USER_AGENT="my-app/1.0.0"
-CUSTOM_HEADER_AUTHORIZATION="Bearer my-token"
-```
-
-The proxy will automatically include these headers in all API requests to the target LLM provider.
+The proxy transparently converts between API formats:
+1. Claude Code sends requests to `ANTHROPIC_BASE_URL` (the proxy)
+2. Proxy converts Claude API format → OpenAI API format
+3. Proxy routes request to your configured provider
+4. Provider responds in OpenAI format
+5. Proxy converts response → Claude API format
+6. Claude Code receives response and can't tell the difference
 
 ### Model Mapping
 
-#### Hybrid Mode Configuration (Per-Model Routing)
+Claude Code requests models by name. The proxy maps them to your configured models:
+
+| Claude Code Requests | Routes To | Environment Variable |
+|---------------------|-----------|---------------------|
+| `claude-opus-4` | Your BIG model | `BIG_MODEL` |
+| `claude-sonnet-4` | Your MIDDLE model | `MIDDLE_MODEL` |
+| `claude-haiku-4` | Your SMALL model | `SMALL_MODEL` |
+
+**Why?** **Flexibility.** You decide what model handles each tier:
+
 ```bash
-# Enable per-model endpoints (set to "true" to enable)
-ENABLE_BIG_ENDPOINT="true"
-ENABLE_MIDDLE_ENDPOINT="true"
-ENABLE_SMALL_ENDPOINT="true"
+# Example 1: All same model
+BIG_MODEL="gpt-4o"
+MIDDLE_MODEL="gpt-4o"
+SMALL_MODEL="gpt-4o"
 
-# Per-model endpoints (if enabled above)
-BIG_ENDPOINT="http://localhost:11434/v1"
-MIDDLE_ENDPOINT="https://openrouter.ai/api/v1"
-SMALL_ENDPOINT="http://127.0.0.1:1234/v1"
+# Example 2: Cost optimization
+BIG_MODEL="anthropic/claude-sonnet-4"    # Expensive tasks
+MIDDLE_MODEL="google/gemini-pro-1.5"     # Medium tasks
+SMALL_MODEL="google/gemini-flash-1.5"    # Cheap tasks (free!)
 
-# Per-model API keys (defaults to PROVIDER_API_KEY if not set)
-BIG_API_KEY="sk-or-..."
-MIDDLE_API_KEY=""
-SMALL_API_KEY="dummy"
+# Example 3: Hybrid local + cloud
+BIG_MODEL="qwen2.5:72b"                  # Local Ollama (free!)
+MIDDLE_MODEL="openai/gpt-4o"             # Cloud (fast)
+SMALL_MODEL="google/gemini-flash-1.5"    # Cloud (free!)
 ```
 
-**Hybrid Mode Options:**
+See [Hybrid Mode](#-hybrid-mode-multi-provider-routing) for routing different tiers to different providers.
 
-- **ENABLE_BIG_ENDPOINT**: Enable custom endpoint for BIG model (Claude Opus)
-  - `true`: Use `BIG_ENDPOINT` and `BIG_API_KEY`
-  - `false`: Use default `PROVIDER_BASE_URL` and `PROVIDER_API_KEY`
+---
 
-- **ENABLE_MIDDLE_ENDPOINT**: Enable custom endpoint for MIDDLE model (Claude Sonnet)
-  - `true`: Use `MIDDLE_ENDPOINT` and `MIDDLE_API_KEY`
-  - `false`: Use default `PROVIDER_BASE_URL` and `PROVIDER_API_KEY`
+## 🌐 Provider Setup
 
-- **ENABLE_SMALL_ENDPOINT**: Enable custom endpoint for SMALL model (Claude Haiku)
-  - `true`: Use `SMALL_ENDPOINT` and `SMALL_API_KEY`
-  - `false`: Use default `PROVIDER_BASE_URL` and `PROVIDER_API_KEY`
+### Google Gemini (Free)
 
-- **Per-Model Endpoints**: Custom base URLs for different providers
-  - Ollama: `http://localhost:11434/v1`
-  - LMStudio: `http://127.0.0.1:1234/v1`
-  - OpenRouter: `https://openrouter.ai/api/v1`
-  - OpenAI: `https://api.openai.com/v1`
-  - Azure OpenAI: `https://your-resource.openai.azure.com/openai/deployments/your-deployment`
+Best for: Development, testing, free tier usage
 
-- **Per-Model API Keys**: Optional per-model authentication
-  - If not set, falls back to main `PROVIDER_API_KEY`
-  - Useful for different API keys per provider
-  - Local models can use dummy values
-
-#### Server Settings
 ```bash
-HOST="0.0.0.0"                   # Server host
-PORT="8082"                      # Server port
-LOG_LEVEL="info"                 # debug, info, warning, error
+PROVIDER_API_KEY="your-gemini-key"
+PROVIDER_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
+BIG_MODEL="gemini-3-pro-preview-11-2025"
 ```
 
-### Provider Examples
+Get key: https://makersuite.google.com/app/apikey
 
-#### OpenAI
+### OpenRouter (352+ models, free tier)
+
+Best for: Experimentation, model variety, generous free tier
+
+```bash
+PROVIDER_API_KEY="sk-or-v1-..."
+PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_MODEL="anthropic/claude-sonnet-4"
+MIDDLE_MODEL="google/gemini-pro-1.5"
+SMALL_MODEL="x-ai/grok-beta:free"  # Free model!
+```
+
+Get key: https://openrouter.ai/keys
+
+### OpenAI (Official API)
+
+Best for: Production, GPT-5/o-series access, reliability
+
 ```bash
 PROVIDER_API_KEY="sk-..."
 PROVIDER_BASE_URL="https://api.openai.com/v1"
@@ -471,1112 +167,646 @@ MIDDLE_MODEL="gpt-4o"
 SMALL_MODEL="gpt-4o-mini"
 ```
 
-#### OpenRouter
-```bash
-PROVIDER_API_KEY="sk-or-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
-BIG_MODEL="openai/gpt-5"
-REASONING_EFFORT="high"
-```
+Get key: https://platform.openai.com/api-keys
 
-#### Azure OpenAI
+### Azure OpenAI
+
+Best for: Enterprise, regional compliance, OpenAI access in restricted regions
+
 ```bash
 PROVIDER_API_KEY="your-azure-key"
 PROVIDER_BASE_URL="https://your-resource.openai.azure.com/openai/deployments/your-deployment"
+AZURE_API_VERSION="2024-03-01-preview"
 BIG_MODEL="gpt-4"
 MIDDLE_MODEL="gpt-4"
 SMALL_MODEL="gpt-35-turbo"
 ```
 
-#### Local Models (Ollama)
+### Ollama (100% free, runs on your machine)
+
+Best for: Privacy, offline work, zero cost, learning
+
 ```bash
-PROVIDER_API_KEY="dummy"  # Required but can be dummy
+PROVIDER_API_KEY="dummy"  # Any value works for local models
 PROVIDER_BASE_URL="http://localhost:11434/v1"
-BIG_MODEL="ollama/qwen2.5:72b"
-MIDDLE_MODEL="ollama/llama3.1:70b"
-SMALL_MODEL="ollama/llama3.1:8b"
-REASONING_EFFORT="medium"
+BIG_MODEL="qwen2.5:72b"
+MIDDLE_MODEL="qwen2.5:72b"
+SMALL_MODEL="qwen2.5:14b"
 ```
 
-#### LMStudio
+Install Ollama: https://ollama.ai
+
+### LM Studio (Local models with GUI)
+
+Best for: Local models, GUI management, easy setup
+
 ```bash
-PROVIDER_API_KEY="dummy"  # Required but can be dummy
+PROVIDER_API_KEY="dummy"
 PROVIDER_BASE_URL="http://127.0.0.1:1234/v1"
-BIG_MODEL="lmstudio/Meta-Llama-3.1-405B-Instruct"
-MIDDLE_MODEL="lmstudio/Meta-Llama-3.1-70B-Instruct"
-SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
+BIG_MODEL="local-model"  # Set in LM Studio
 ```
 
-### Hybrid Mode - Mix Local & Remote Models
+Install LM Studio: https://lmstudio.ai
 
-**The project NOW supports TRUE hybrid deployments!** Route each model (BIG/MIDDLE/SMALL) to different providers simultaneously:
+---
 
-#### Hybrid Mode Examples
+## ✨ Features
 
-**Example 1: BIG=Local Ollama, MIDDLE=OpenRouter, SMALL=LMStudio**
+### 🎯 Model Configuration
+
+Control exactly which models handle which requests.
+
+**Basic Setup:**
+```bash
+BIG_MODEL="gpt-4o"           # Claude Opus requests
+MIDDLE_MODEL="gpt-4o"        # Claude Sonnet requests
+SMALL_MODEL="gpt-4o-mini"    # Claude Haiku requests
+```
+
+**Model Name Formats:**
+
+Different providers use different naming:
 
 ```bash
-# Main API config
-PROVIDER_API_KEY="your-openrouter-key"
+# OpenRouter (provider/model)
+BIG_MODEL="anthropic/claude-sonnet-4"
+BIG_MODEL="openai/gpt-4o"
+BIG_MODEL="google/gemini-pro-1.5"
+
+# Ollama (simple names)
+BIG_MODEL="qwen2.5:72b"
+BIG_MODEL="llama3.1:70b"
+
+# OpenAI (model IDs)
+BIG_MODEL="gpt-4o"
+BIG_MODEL="o1-preview"
+
+# Gemini (official names)
+BIG_MODEL="gemini-3-pro-preview-11-2025"
+```
+
+### 🧠 Reasoning & Extended Thinking
+
+Enable extended thinking for reasoning models (GPT-5, Claude 4+, Gemini 2+, o-series).
+
+**OpenAI Reasoning Effort (GPT-5, o1, o3, o4-mini):**
+
+```bash
+REASONING_EFFORT="high"  # Options: low, medium, high
+```
+
+- **low**: ~20% of max tokens for thinking
+- **medium**: ~50% of max tokens for thinking
+- **high**: ~80% of max tokens for thinking
+
+**Anthropic/Gemini Token Budget:**
+
+```bash
+REASONING_MAX_TOKENS="16000"  # Exact token count for thinking
+```
+
+Ranges:
+- **Anthropic Claude**: 1024-16000 tokens
+- **Google Gemini**: 0-24576 tokens
+
+**Per-Model Overrides:**
+
+```bash
+BIG_MODEL_REASONING="high"      # Override for BIG model
+MIDDLE_MODEL_REASONING="medium" # Override for MIDDLE model
+SMALL_MODEL_REASONING="low"     # Override for SMALL model
+```
+
+**Model Name Suffix Notation:**
+
+Specify reasoning directly in model names:
+
+```bash
+# OpenAI (effort levels or arbitrary token budgets)
+BIG_MODEL="o4-mini:high"          # High effort
+BIG_MODEL="o4-mini:50000"         # 50k thinking tokens
+BIG_MODEL="gpt-5:100k"            # 102,400 tokens (k-notation)
+
+# Anthropic
+BIG_MODEL="claude-opus-4-20250514:8k"     # 8192 thinking tokens
+BIG_MODEL="claude-opus-4-20250514:16000"  # 16000 tokens (exact)
+
+# Gemini
+BIG_MODEL="gemini-2.5-flash:16000"        # 16000 thinking tokens
+```
+
+Suffix notation overrides environment variables.
+
+**Other Options:**
+
+```bash
+REASONING_EXCLUDE="true"  # Hide reasoning tokens in response (OpenAI only)
+VERBOSITY="high"          # Response detail level (provider-specific)
+```
+
+### 🔀 Hybrid Mode (Multi-Provider Routing)
+
+Route different model tiers to different providers simultaneously!
+
+**Example: Local for BIG, Cloud for MIDDLE/SMALL**
+
+```bash
+# Default provider (for MIDDLE/SMALL)
+PROVIDER_API_KEY="sk-or-v1-..."
 PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
 
-# BIG model - Local Ollama
+# Override BIG model to use local Ollama
 ENABLE_BIG_ENDPOINT="true"
 BIG_ENDPOINT="http://localhost:11434/v1"
 BIG_API_KEY="dummy"
-BIG_MODEL="ollama/qwen2.5:72b"
+BIG_MODEL="qwen2.5:72b"
 
-# MIDDLE model - OpenRouter
-ENABLE_MIDDLE_ENDPOINT="false"  # Uses default PROVIDER_BASE_URL
-MIDDLE_MODEL="openai/gpt-5"
-
-# SMALL model - LMStudio
-ENABLE_SMALL_ENDPOINT="true"
-SMALL_ENDPOINT="http://127.0.0.1:1234/v1"
-SMALL_API_KEY="dummy"
-SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
+# MIDDLE and SMALL use default OpenRouter
+MIDDLE_MODEL="google/gemini-pro-1.5"
+SMALL_MODEL="google/gemini-flash-1.5:free"
 ```
 
-**Example 2: All Different Providers**
+**Full Hybrid Configuration:**
 
 ```bash
-# BIG - GPT-5 on OpenRouter
+# Enable per-model routing
 ENABLE_BIG_ENDPOINT="true"
-BIG_ENDPOINT="https://openrouter.ai/api/v1"
-BIG_API_KEY="sk-or-..."
-BIG_MODEL="openai/gpt-5"
-
-# MIDDLE - Azure OpenAI
 ENABLE_MIDDLE_ENDPOINT="true"
-MIDDLE_ENDPOINT="https://your-resource.openai.azure.com/openai/deployments/your-deployment"
-MIDDLE_API_KEY="your-azure-key"
-MIDDLE_MODEL="gpt-4"
-MIDDLE_AZURE_API_VERSION="2024-03-01-preview"
-
-# SMALL - Local LMStudio
 ENABLE_SMALL_ENDPOINT="true"
+
+# BIG: Local Ollama
+BIG_ENDPOINT="http://localhost:11434/v1"
+BIG_API_KEY="dummy"
+BIG_MODEL="qwen2.5:72b"
+
+# MIDDLE: OpenRouter
+MIDDLE_ENDPOINT="https://openrouter.ai/api/v1"
+MIDDLE_API_KEY="sk-or-v1-..."
+MIDDLE_MODEL="anthropic/claude-sonnet-4"
+
+# SMALL: LM Studio
 SMALL_ENDPOINT="http://127.0.0.1:1234/v1"
 SMALL_API_KEY="dummy"
-SMALL_MODEL="lmstudio/Meta-Llama-3.1-8B-Instruct"
+SMALL_MODEL="llama3.1:8b"
 ```
 
-**How It Works:**
+**Why?** Cost optimization, privacy, redundancy, experimentation.
 
-1. **Enable per-model routing**: Set `ENABLE_BIG_ENDPOINT="true"`, etc.
-2. **Configure endpoint**: Set `BIG_ENDPOINT`, `MIDDLE_ENDPOINT`, `SMALL_ENDPOINT`
-3. **Optional API key**: Set per-model API keys or use main `OPENAI_API_KEY`
-4. **Automatic routing**: Proxy automatically routes each request to the correct provider
+### 🛠️ Built-in Tools
 
-**Benefits:**
+#### Setup Wizard
 
-- ✅ **Cost optimization**: Use free local models for simple tasks
-- ✅ **Best-of-breed**: Pick the best model for each tier
-- ✅ **Failover**: If one provider is down, others still work
-- ✅ **Privacy**: Route sensitive requests to local models
-- ✅ **Performance**: Use local models for speed, cloud for complexity
-
-### OpenRouter Reasoning Tokens
-
-OpenRouter provides unified reasoning support across all providers. Claude Code Proxy implements full compatibility with OpenRouter's reasoning tokens specification.
-
-**Reasoning Token Features:**
-
-1. **Preserving Reasoning Blocks**: Automatically preserves reasoning tokens when `REASONING_EXCLUDE="false"`
-   - Reasoning appears in `choices[].message.reasoning` field
-   - Enables tool-calling workflows with continued reasoning
-   - Maintains conversation integrity across multiple API calls
-
-2. **Unified Control**: Single configuration works across all reasoning-capable models:
-   - OpenAI (GPT-5, o1, o3)
-   - Anthropic (Claude 3.7, 4.x)
-   - Qwen, DeepSeek, xAI Grok, MiniMax, Kimi
-
-3. **Dual Control Modes**:
-   - **Effort-based**: `REASONING_EFFORT="high/medium/low"`
-     - OpenAI-style proportional reasoning
-     - ~20%/50%/80% of max_tokens for reasoning
-
-   - **Token-based**: `REASONING_MAX_TOKENS="8000"`
-     - Anthropic/OpenRouter-style direct control
-     - Exact token budget for reasoning
-     - Capped at 32,000 tokens max, 1,024 tokens min
-
-**Example: Tool Calling with Reasoning**
-
-```python
-# First request with reasoning
-response = client.chat.completions.create(
-    model="openai/gpt-5",
-    messages=[{"role": "user", "content": "What's 9.9 vs 9.11?"}],
-    extra_body={
-        "reasoning": {
-            "effort": "high",
-            "exclude": False
-        }
-    }
-)
-
-# Reasoning is preserved in response
-reasoning = response.choices[0].message.reasoning
-content = response.choices[0].message.content
-
-# Pass reasoning back for continued reasoning
-response2 = client.chat.completions.create(
-    model="openai/gpt-5",
-    messages=[
-        {"role": "user", "content": f"Context: {reasoning}"},
-        {"role": "user", "content": "Explain this comparison"}
-    ],
-    extra_body={
-        "reasoning": {
-            "effort": "high",
-            "exclude": False
-        }
-    }
-)
-```
-
----
-
-## 💡 Usage Examples
-
-### Interactive Model Selection
-
-**Browse and configure models visually:**
+Interactive first-time configuration:
 
 ```bash
-# Step 1: Fetch latest models (optional, updates monthly)
-python scripts/fetch_openrouter_models.py
-
-# Step 2: Launch interactive selector
-python scripts/select_model.py
-```
-
-**Features:**
-- Browse 352 models with filtering
-- Apply templates (one-click setup)
-- Get recommendations (find free alternatives)
-- Configure BIG/MIDDLE/SMALL models
-- Set reasoning parameters
-- Save as mode for later
-
-### CLI Configuration
-
-**Start with specific models:**
-Test proxy functionality:
-
-```bash
-# Use GPT-5 with high reasoning
-python start_proxy.py \
-  --big-model openai/gpt-5 \
-  --reasoning-effort high \
-  --verbosity high
-
-# Use local models
-python start_proxy.py \
-  --big-model ollama/qwen2.5:72b \
-  --reasoning-effort medium
-```
-
-**Manage modes:**
-
-```bash
-# Save current config as mode
-python start_proxy.py --save-mode production
-
-# List all saved modes
-python start_proxy.py --list-modes
-
-# Load a mode
-python start_proxy.py --load-mode production
-
-# Delete a mode
-python start_proxy.py --delete-mode production
-
-# Save with parameters (shorthand)
-python start_proxy.py \
-  --big-model gpt-5 \
-  --reasoning-effort high \
-  --mode premium
-```
-
-### Programmatic Usage
-
-**Apply a template:**
-
-```python
-from src.utils.templates import ModeTemplates
-
-config = ModeTemplates.get_config("free-tier")
-# Returns: {'BIG_MODEL': 'ollama/qwen2.5:72b', ...}
-```
-
-**Find free alternatives:**
-
-```python
-from src.utils.recommender import ModelRecommender
-
-recommender = ModelRecommender()
-alternatives = recommender.find_model_alternatives("openai/gpt-5", "free")
-
-for alt in alternatives[:3]:
-    print(f"{alt['model']['id']}: score={alt['score']}")
-    for reason in alt['reasons'][:2]:
-        print(f"  - {reason}")
-```
-
----
-
-## 🔌 API Reference
-
-### Endpoints
-
-#### POST /v1/messages
-
-Main Claude API endpoint. Converts Claude requests to OpenAI format.
-
-**Request:**
-```json
-{
-  "model": "claude-3-5-sonnet-20241022",
-  "max_tokens": 100,
-  "messages": [
-    {"role": "user", "content": "Hello!"}
-  ]
-}
-```
-
-**Response:**
-```json
-{
-  "id": "msg_...",
-  "object": "message",
-  "content": [...],
-  "model": "openai/gpt-5"
-}
-```
-
-### Model Mapping
-
-| Claude Model | Maps To | Config Variable |
-|--------------|---------|-----------------|
-| `claude-3-opus-*` | BIG_MODEL | `BIG_MODEL` |
-| `claude-3-sonnet-*` | MIDDLE_MODEL | `MIDDLE_MODEL` |
-| `claude-3-5-sonnet-*` | MIDDLE_MODEL | `MIDDLE_MODEL` |
-| `claude-3-haiku-*` | SMALL_MODEL | `SMALL_MODEL` |
-
----
-
-## 📊 Model Database
-
-### Statistics
-
-```
-Total Models: 352
-├─ Local Models: 12 (at TOP)
-│  ├─ LMStudio: 5 models
-│  └─ Ollama: 7 models
-│
-├─ OpenRouter Models: 340
-│  ├─ Reasoning Support: 210 (62%)
-│  ├─ Vision Support: 45 (13%)
-│  └─ Standard: 85 (25%)
-│
-Pricing:
-├─ Free Models: 140 (40%)
-│  └─ All 12 local + 128 OpenRouter
-│
-└─ Paid Models: 212 (60%)
-```
-
-### Top Free Models (No API costs!)
-
-1. **ollama/qwen2.5:72b** - 131K context, Reasoning ✓
-2. **ollama/deepseek-v2.5:236b** - 131K context, Reasoning ✓
-3. **ollama/llama3.1:70b** - 131K context
-4. **ollama/mistral-nemo:12b** - 131K context
-5. **lmstudio/Meta-Llama-3.1-405B-Instruct** - 131K context
-
-### Top Reasoning Models
-
-1. **openai/gpt-5** - Premium reasoning
-2. **openai/o3-mini** - Fast reasoning
-3. **qwen/qwen-2.5-thinking-32b** - Open source
-4. **ollama/qwen2.5:72b** - Free local
-5. **amazon/nova-premier-v1** - 1M context
-
----
-
-## 📊 Monitoring & Analytics
-
-### Real-Time Dashboards
-
-**Terminal Dashboard** (Live TUI with Rich):
-```bash
-# Enable terminal dashboard
-python src/main.py --dashboard
-# or
-export ENABLE_DASHBOARD="true"
-python src/main.py
-```
-
-**WebSocket Dashboard** (Browser-based):
-```bash
-# Start proxy normally
-python src/main.py
-
-# Access dashboard in browser
-open http://localhost:8082/dashboard
+python setup_wizard.py
 ```
 
 Features:
-- ⚡ Real-time request waterfall
-- 📈 Performance metrics (latency, tokens/sec)
-- 💰 Cost tracking and estimation
-- 🔄 Live routing visualization
-- ⚠️ Error monitoring with recent errors
-- 🤖 Top model usage statistics
+- Provider selection (OpenRouter, Gemini, OpenAI, Azure, Ollama, LM Studio, custom)
+- Model configuration with suggestions
+- Feature-based setup (reasoning, dashboard, terminal, crosstalk, prompts, tracking, hybrid)
+- Profile management (save/load/switch configurations)
 
-### Prompt Injection (Claude Code Context)
+#### Interactive Model Selector
 
-**Inject proxy stats into Claude Code prompts** - Give Claude visibility into proxy performance!
+Browse and search 352+ models:
 
-**Interactive Configuration**:
 ```bash
-# Run the configurator
+python -m src.cli.model_selector
+```
+
+Features:
+- Real-time search and filtering
+- Model metadata (context size, pricing, capabilities)
+- Direct .env updates
+- OpenRouter integration
+
+#### Crosstalk Mode (Multi-Agent)
+
+Enable multiple agents to collaborate on complex tasks:
+
+```bash
+python -m src.cli.crosstalk_cli
+```
+
+Or create `crosstalk.yaml` config files for different agent setups.
+
+#### Terminal Output Configurator
+
+Interactive terminal display customization:
+
+```bash
+python configure_terminal_output.py
+```
+
+Configure:
+- Display mode (minimal, normal, detailed, debug)
+- Color schemes (auto, vibrant, subtle, mono)
+- Toggles (workspace, context%, task type, speed, cost, duration colors)
+- Session colors
+
+#### Prompt Injection Configurator
+
+Interactive custom system prompt setup:
+
+```bash
 python configure_prompt_injection.py
-
-# Select modules, size, and injection mode
-# Generates commands for .zshrc and p10k
 ```
 
-**Manual Configuration**:
+Configure custom prompts for BIG/MIDDLE/SMALL models from files or inline.
+
+#### Web UI
+
+Visual configuration editor and monitoring dashboard:
+
+```
+http://localhost:8082
+```
+
+Features:
+- Real-time configuration editing (no restart required!)
+- Profile management (save/load/delete)
+- Model browser with search
+- Live request monitoring
+- Usage analytics (when TRACK_USAGE enabled)
+- Performance metrics
+
+### 🎨 Terminal Output Customization
+
+Rich terminal output with extensive customization.
+
+**Display Modes:**
+
 ```bash
-# Enable prompt injection
-export PROMPT_INJECTION_ENABLED="true"
-export PROMPT_INJECTION_MODULES="status,performance,errors"
-export PROMPT_INJECTION_SIZE="medium"  # large, medium, small
-export PROMPT_INJECTION_MODE="auto"    # auto, always, manual, header
+TERMINAL_DISPLAY_MODE="detailed"  # minimal, normal, detailed, debug
 ```
 
-**Size Variants**:
+**Feature Toggles:**
 
-- **Large** (~200-300 tokens): Multi-line boxes with full details
-  ```
-  ┌─ 🔧 Proxy Status ─────────────┐
-  │ Provider: OpenRouter | Proxy  │
-  │ BIG: openai/gpt-5             │
-  │ Reasoning: high | 8000 tokens │
-  └────────────────────────────────┘
-  ```
-
-- **Medium** (~50-100 tokens): Single-line compact [RECOMMENDED]
-  ```
-  🔧 OpenRouter | 🤖 gpt-5 | 🧠 high | 🔒
-  ⚡ 847req | 1234ms | 78t/s | $12.45
-  ```
-
-- **Small** (~20-40 tokens): Ultra-compact icons
-  ```
-  🌐🧠 ⚡847r·78t/s ✓99%
-  ```
-
-**Available Modules**:
-- `status` - Provider, models, reasoning config
-- `performance` - Requests, latency, speed, cost
-- `errors` - Success rate, error types
-- `models` - Top models and usage stats
-
-**Injection Modes**:
-- `auto` - Smart injection (tool calls, streaming) [RECOMMENDED]
-- `always` - Inject on every request
-- `header` - Compact header only
-- `manual` - Programmatic control
-
-**Powerlevel10k Integration**:
-```zsh
-# Add to ~/.p10k.zsh (see examples/p10k_integration.zsh)
-function prompt_custom_proxy_status() {
-  # Shows: 🔧⚡✓🤖 in your prompt
-  ...
-}
-```
-
-**Examples**: See `examples/PROMPT_INJECTION_EXAMPLES.md` for detailed scenarios.
-
-### Analytics API
-
-**Get Usage Summary**:
 ```bash
-curl http://localhost:8082/api/analytics/summary?days=7
+TERMINAL_SHOW_WORKSPACE="true"          # Show project/workspace name
+TERMINAL_SHOW_CONTEXT_PCT="true"        # Show context window percentage
+TERMINAL_SHOW_TASK_TYPE="true"          # Show task icons (🧠 REASON, 🔧 TOOLS, 📝 TEXT)
+TERMINAL_SHOW_SPEED="true"              # Show tokens/sec
+TERMINAL_SHOW_COST="true"               # Show cost estimates
+TERMINAL_SHOW_DURATION_COLORS="true"    # Color-code duration (green/yellow/red)
 ```
 
-**Time-Series Data** (for charting):
+**Color Schemes:**
+
 ```bash
-curl http://localhost:8082/api/analytics/timeseries?days=7&interval=hour
+TERMINAL_COLOR_SCHEME="auto"  # auto, vibrant, subtle, mono
+TERMINAL_SESSION_COLORS="true"  # Different color per Claude Code session
 ```
 
-**Cost Breakdown**:
+**Log Styles:**
+
 ```bash
-curl http://localhost:8082/api/analytics/cost-breakdown?days=7
+LOG_STYLE="rich"           # rich (colored, progress bars), plain, compact
+COMPACT_LOGGER="false"     # Single-line logs with emojis
+COLOR_SCHEME="auto"        # auto (detect terminal), dark, light, none
+SHOW_TOKEN_COUNTS="true"   # Show input/output/thinking tokens
+SHOW_PERFORMANCE="true"    # Show tokens/sec, latency
 ```
 
-**Error Analytics**:
+### 📊 Usage Tracking & Analytics
+
+Local SQLite database for usage analytics (privacy-first, no data sent anywhere).
+
+**Enable Tracking:**
+
 ```bash
-curl http://localhost:8082/api/analytics/errors?days=7
-```
-
-**Export Data**:
-```bash
-curl http://localhost:8082/api/analytics/export?days=30&format=csv -o analytics.csv
-curl http://localhost:8082/api/analytics/export?days=30&format=json -o analytics.json
-```
-
-### Billing Integration
-
-**Check Account Balances**:
-```bash
-curl http://localhost:8082/api/billing/balance
-```
-
-**Get Usage from Providers**:
-```bash
-curl http://localhost:8082/api/billing/usage?days=7
-```
-
-**Provider-Specific Data**:
-```bash
-curl http://localhost:8082/api/billing/provider/openrouter?days=7
-```
-
-### Model Benchmarking
-
-**Run Benchmark**:
-```bash
-curl -X POST "http://localhost:8082/api/benchmarks/run?model_name=gpt-4o&iterations=3"
-```
-
-**Compare Models**:
-```bash
-curl -X POST "http://localhost:8082/api/benchmarks/compare?models=gpt-4o&models=gpt-4o-mini"
-```
-
-**Get Benchmark Results**:
-```bash
-curl http://localhost:8082/api/benchmarks/results
-```
-
-**View Specific Result**:
-```bash
-curl http://localhost:8082/api/benchmarks/results/benchmark_gpt-4o_20250119_123456.json
-```
-
-### Multi-User Management
-
-**Create User**:
-```bash
-curl -X POST http://localhost:8082/api/users \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "john",
-    "email": "john@example.com",
-    "quota_requests": 1000,
-    "quota_tokens": 1000000,
-    "quota_cost": 10.0
-  }'
-```
-
-**Get Current User**:
-```bash
-curl http://localhost:8082/api/users/me \
-  -H "x-api-key: sk-..."
-```
-
-**Check Quota**:
-```bash
-curl http://localhost:8082/api/users/me/quota \
-  -H "x-api-key: sk-..."
-```
-
-**View Usage History**:
-```bash
-curl http://localhost:8082/api/users/me/usage?days=7 \
-  -H "x-api-key: sk-..."
-```
-
-### Configuration
-
-**Enable Usage Tracking**:
-```bash
-# .env
 TRACK_USAGE="true"
+USAGE_DB_PATH="usage_tracking.db"  # Database location
 ```
 
-**Enable Terminal Dashboard**:
+**Data Stored:**
+- Model used
+- Token counts (input, output, thinking)
+- Request duration
+- Cost estimates
+- Request counts
+- Performance metrics
+
+**Privacy:** Message content is **never** stored. Only metadata.
+
+**Access Analytics:**
+- Web UI: http://localhost:8082/analytics
+- Database queries: SQLite CLI or any SQLite tool
+
+### 📈 Dashboard & Monitoring
+
+Live terminal dashboard with real-time metrics.
+
+**Enable Dashboard:**
+
 ```bash
-# .env
 ENABLE_DASHBOARD="true"
-DASHBOARD_LAYOUT="default"  # default, compact, detailed
-DASHBOARD_REFRESH="0.5"     # seconds between updates
-DASHBOARD_WATERFALL_SIZE="20"  # number of requests to show
+DASHBOARD_LAYOUT="default"      # default, compact, detailed
+DASHBOARD_REFRESH="0.5"         # Refresh interval (seconds)
+DASHBOARD_WATERFALL_SIZE="20"   # Number of recent requests to show
 ```
 
-**Compact Logger Mode**:
+**Dashboard Features:**
+- Active requests with progress
+- Request waterfall (recent activity)
+- Performance metrics (tokens/sec, latency)
+- Cost tracking
+- Model usage distribution
+
+### ✏️ Custom System Prompts
+
+Override system prompts per model tier.
+
+**Enable Custom Prompts:**
+
 ```bash
-# Reduce console noise when dashboard is active
-COMPACT_LOGGER="true"
+ENABLE_CUSTOM_BIG_PROMPT="true"
+ENABLE_CUSTOM_MIDDLE_PROMPT="true"
+ENABLE_CUSTOM_SMALL_PROMPT="true"
 ```
 
----
+**From Files:**
 
-## 🐳 Docker Deployment
-
-### Quick Start with Docker
-
-**Using Docker Compose (Recommended):**
 ```bash
-# 1. Configure environment
-cp .env.example .env
-# Edit .env with your settings
+BIG_SYSTEM_PROMPT_FILE="/path/to/big_prompt.txt"
+MIDDLE_SYSTEM_PROMPT_FILE="/path/to/middle_prompt.txt"
+SMALL_SYSTEM_PROMPT_FILE="/path/to/small_prompt.txt"
+```
 
-# 2. Build and start
-docker-compose up --build
+**Inline:**
 
-# 3. Use with Claude Code
+```bash
+BIG_SYSTEM_PROMPT="You are a helpful assistant specialized in..."
+MIDDLE_SYSTEM_PROMPT="You are a helpful assistant..."
+SMALL_SYSTEM_PROMPT="You are a helpful assistant..."
+```
+
+Files take precedence over inline prompts.
+
+**Use Cases:**
+- Domain-specific behavior (code review, writing, analysis)
+- Different personalities per model tier
+- Custom guardrails or constraints
+- A/B testing different prompt strategies
+
+### 🔐 Security & Authentication
+
+**Proxy Authentication:**
+
+Require clients to authenticate with the proxy:
+
+```bash
+PROXY_AUTH_KEY="your-secret-key"
+```
+
+Clients must provide this key:
+
+```bash
+export ANTHROPIC_API_KEY="your-secret-key"  # Same as PROXY_AUTH_KEY
 export ANTHROPIC_BASE_URL=http://localhost:8082
-claude "Hello world"
 ```
 
-**Manual Docker Build:**
+**Note:** This is for securing YOUR proxy, not for Anthropic's API.
+
+### 🔧 Advanced Configuration
+
+**Server Settings:**
+
 ```bash
-# Build image
-docker build -t claude-code-proxy .
-
-# Run container
-docker run -p 8082:8082 --env-file .env claude-code-proxy
-
-# Or with environment variables (use semantic names)
-docker run -p 8082:8082 \
-  -e PROVIDER_API_KEY="your-key" \
-  -e PROVIDER_BASE_URL="https://openrouter.ai/api/v1" \
-  -e BIG_MODEL="openai/gpt-5" \
-  claude-code-proxy
+HOST="0.0.0.0"         # Listen on all interfaces
+PORT="8082"            # Port number
+LOG_LEVEL="INFO"       # DEBUG, INFO, WARNING, ERROR, CRITICAL
 ```
 
-### Docker Configuration
+**Performance:**
 
-**Environment Variables:**
-- Mount `.env` file: `-v $(pwd)/.env:/app/.env`
-- Or pass directly: `-e OPENAI_API_KEY="..." -e BIG_MODEL="..."`
-
-**Persistent Configuration:**
 ```bash
-# Mount modes.json for persistent configuration
-docker run -p 8082:8082 \
-  -v $(pwd)/.env:/app/.env \
-  -v $(pwd)/modes.json:/app/modes.json \
-  claude-code-proxy
+REQUEST_TIMEOUT="90"        # Request timeout (seconds)
+MAX_RETRIES="2"             # Retries for failed requests
+MAX_TOKENS_LIMIT="4096"     # Max tokens per request
+MIN_TOKENS_LIMIT="100"      # Min tokens per request
 ```
 
-**Dashboard with Docker:**
+**Model Selection:**
+
 ```bash
-# Run with dashboard modules
-docker run -p 8082:8082 \
-  -e DASHBOARD_MODULES="performance:dense,activity:sparse" \
-  --env-file .env \
-  claude-code-proxy
+ENABLE_OPENROUTER_SELECTION="true"  # Show OpenRouter models in selector
 ```
 
-### Production Docker Setup
+Set to `false` to hide OpenRouter marketplace (show only local models).
 
-**docker-compose.prod.yml:**
-```yaml
-services:
-  proxy:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "8082:8082"
-    environment:
-      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
-      - PROVIDER_BASE_URL=${PROVIDER_BASE_URL}
-      - BIG_MODEL=${BIG_MODEL}
-      - REASONING_EFFORT=high
-    volumes:
-      - ./modes.json:/app/modes.json
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+**Custom Headers:**
+
+Inject custom headers into API requests:
+
+```bash
+CUSTOM_HEADER_USER_AGENT="my-app/1.0"
+CUSTOM_HEADER_X_API_KEY="..."
+CUSTOM_HEADER_AUTHORIZATION="Bearer ..."
+CUSTOM_HEADER_X_CUSTOM="value"
 ```
+
+Headers are automatically formatted:
+- `CUSTOM_HEADER_USER_AGENT` → `User-Agent: my-app/1.0`
+- `CUSTOM_HEADER_X_API_KEY` → `X-API-KEY: ...`
 
 ---
 
-## 🛠️ Development
+## 📚 Configuration Reference
 
-### Project Structure
+### Environment Variables (Semantic Names)
 
-```
-claude-code-proxy/
-├── src/
-│   ├── main.py                 # FastAPI server
-│   ├── core/
-│   │   ├── config.py           # Configuration
-│   │   └── model_manager.py    # Model mapping
-│   ├── conversion/
-│   │   └── request_converter.py # Claude → OpenAI conversion
-│   ├── api/
-│   │   └── endpoints.py        # API routes
-│   ├── utils/
-│   │   ├── modes.py            # Configuration modes
-│   │   ├── templates.py        # 10 pre-built templates
-│   │   └── recommender.py      # Smart recommendations
-│   └── client.py               # OpenAI client
-├── scripts/
-│   ├── fetch_openrouter_models.py  # Model database fetcher
-│   └── select_model.py             # Interactive selector
-├── models/                     # Model databases
-│   ├── openrouter_models.json  # 352 models
-│   └── openrouter_models.csv   # Spreadsheet format
-├── .env.example                # Config template
-├── .gitignore                  # Git ignore rules
-├── start_proxy.py              # Startup script
-└── README.md                   # This file
-```
-
-### Development Setup
+**Recommended:** Use semantic names for clarity.
 
 ```bash
-# Install dependencies
-uv sync
-
-# Run server in development
-uv run python start_proxy.py
-
-# Format code
-uv run black src/
-uv run isort src/
-
-# Type checking
-uv run mypy src/
-
-# Run tests
-uv run pytest
+PROVIDER_API_KEY="..."     # Your backend provider's API key
+PROVIDER_BASE_URL="..."    # Your backend provider's base URL
+PROXY_AUTH_KEY="..."       # Optional auth key for proxy clients
 ```
 
-### Adding New Features
+### Legacy Names (Deprecated)
 
-**Add a new model source:**
+These still work but show deprecation warnings:
 
-1. Add models to `scripts/fetch_openrouter_models.py`
-2. Add endpoint in `get_local_providers()`
-3. Update model selector in `scripts/select_model.py`
+```bash
+OPENAI_API_KEY="..."       # Use PROVIDER_API_KEY instead
+OPENAI_BASE_URL="..."      # Use PROVIDER_BASE_URL instead
+ANTHROPIC_API_KEY="..."    # Use PROXY_AUTH_KEY instead
+```
 
-**Add a new template:**
+**Why deprecated?**
+- `OPENAI_API_KEY` works with ANY provider, not just OpenAI
+- `ANTHROPIC_API_KEY` is for proxy auth, NOT Anthropic's API (confusing!)
 
-1. Edit `src/utils/templates.py`
-2. Add template to `TEMPLATES` dict
-3. Include config, description, requirements
+### Complete Configuration
 
-**Extend recommender:**
-
-1. Edit `src/utils/recommender.py`
-2. Add new recommendation algorithm
-3. Update scoring logic
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for comprehensive reference of all 50+ environment variables.
 
 ---
 
-## 📈 Performance
+## 🎓 Examples
 
-- **Async/await** for high concurrency
-- **Connection pooling** for efficiency
-- **Streaming support** for real-time responses
-- **Configurable timeouts** and retries
-- **Smart error handling** with detailed logging
-- **Automatic model detection** for reasoning parameters
+### Cost Optimization
+
+Use free models for cheap tasks, paid for expensive:
+
+```bash
+# OpenRouter free models
+PROVIDER_API_KEY="sk-or-v1-..."
+PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+
+BIG_MODEL="anthropic/claude-sonnet-4"    # Paid, powerful
+MIDDLE_MODEL="google/gemini-flash-1.5"   # Free!
+SMALL_MODEL="x-ai/grok-beta:free"        # Free!
+```
+
+### Privacy & Local-First
+
+Everything runs on your machine:
+
+```bash
+PROVIDER_API_KEY="dummy"
+PROVIDER_BASE_URL="http://localhost:11434/v1"
+
+BIG_MODEL="qwen2.5:72b"
+MIDDLE_MODEL="qwen2.5:14b"
+SMALL_MODEL="llama3.1:8b"
+
+TRACK_USAGE="true"  # Local SQLite, no data sent anywhere
+```
+
+### Maximum Reasoning Power
+
+Configure for reasoning-optimized models:
+
+```bash
+# Use GPT-5 with high reasoning effort
+PROVIDER_API_KEY="sk-..."
+PROVIDER_BASE_URL="https://api.openai.com/v1"
+
+BIG_MODEL="gpt-5:high"           # High reasoning effort
+MIDDLE_MODEL="o4-mini:50000"     # 50k thinking tokens
+SMALL_MODEL="gpt-4o"             # Standard model
+
+REASONING_EFFORT="high"
+REASONING_MAX_TOKENS="16000"
+VERBOSITY="high"
+```
+
+### Multi-Provider Hybrid
+
+Different providers for different use cases:
+
+```bash
+# Default: OpenRouter
+PROVIDER_API_KEY="sk-or-v1-..."
+PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+
+# BIG: Local Ollama (privacy + free)
+ENABLE_BIG_ENDPOINT="true"
+BIG_ENDPOINT="http://localhost:11434/v1"
+BIG_API_KEY="dummy"
+BIG_MODEL="qwen2.5:72b"
+
+# MIDDLE: Gemini (free, fast)
+ENABLE_MIDDLE_ENDPOINT="true"
+MIDDLE_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/openai/"
+MIDDLE_API_KEY="your-gemini-key"
+MIDDLE_MODEL="gemini-3-pro-preview-11-2025"
+
+# SMALL: OpenRouter free tier
+SMALL_MODEL="x-ai/grok-beta:free"
+```
+
+More examples: [docs/EXAMPLES.md](docs/EXAMPLES.md)
+
+---
+
+## 🐛 Troubleshooting
+
+### 401 "user not found" Error
+
+**Cause:** Negative balance on OpenRouter (even $-0.01 locks ALL models, including free ones)
+
+**Fix:**
+1. Check balance: https://openrouter.ai/settings/credits
+2. Add credits or switch to free models:
+   ```bash
+   BIG_MODEL="x-ai/grok-beta:free"
+   MIDDLE_MODEL="google/gemini-flash-1.5:free"
+   ```
+
+### API Key Not Working
+
+**Check:**
+1. Correct variable name:
+   ```bash
+   PROVIDER_API_KEY="..."  # NOT OPENAI_API_KEY (deprecated)
+   ```
+2. API key has no quotes or extra spaces
+3. Proxy shows API key status on startup
+
+### Model Not Found
+
+**OpenRouter users:** Use `provider/model` format:
+```bash
+BIG_MODEL="anthropic/claude-sonnet-4"  # NOT "claude-sonnet-4"
+```
+
+**List available models:**
+```bash
+python -m src.cli.model_selector
+```
+
+### Thinking Tokens Not Working
+
+**Requirements:**
+1. Model must support extended thinking (GPT-5, Claude 4+, Gemini 2+, o-series)
+2. Set `REASONING_EFFORT` or `REASONING_MAX_TOKENS`
+3. Or use suffix notation: `o4-mini:high`, `claude-opus-4:8k`
+
+### Connection Refused
+
+**Check:**
+1. Proxy is running: `python start_proxy.py`
+2. Correct URL: `export ANTHROPIC_BASE_URL=http://localhost:8082`
+3. Port not in use: `lsof -i :8082`
+
+More troubleshooting: [docs/TROUBLESHOOTING_401.md](docs/TROUBLESHOOTING_401.md)
+
+---
+
+## 📖 Documentation
+
+- **[Configuration Guide](docs/CONFIGURATION.md)** - Complete reference for all environment variables
+- **[Examples](docs/EXAMPLES.md)** - Common setups and use cases
+- **[Troubleshooting](docs/TROUBLESHOOTING_401.md)** - Fix common issues
+- **[API Reference](docs/API.md)** - HTTP API endpoints and schemas
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-### Ways to contribute:
-
-- 🐛 Report bugs
-- 💡 Suggest features
-- 📚 Improve documentation
-- 🔧 Submit pull requests
-- ⭐ Star the repository
+Contributions welcome! Please:
+1. Fork the repo
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
 ---
 
-## 📝 License
+## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- [Anthropic](https://anthropic.com) for Claude Code
-- [OpenAI](https://openai.com) for the API
-- [OpenRouter](https://openrouter.ai) for model aggregation
-- [FastAPI](https://fastapi.tiangolo.com) for the web framework
-- [Ollama](https://ollama.com) for local model serving
-- [LMStudio](https://lmstudio.ai) for the GUI
-
----
-
-## 📞 Support
-
-- 📖 [Documentation](https://github.com/yourusername/claude-code-proxy/wiki)
-- 🐛 [Issues](https://github.com/yourusername/claude-code-proxy/issues)
-- 💬 [Discussions](https://github.com/yourusername/claude-code-proxy/discussions)
-
----
-
-## 🎛️ Dashboard System
-
-### ✅ **FULLY IMPLEMENTED** - Modular Dashboard System
-
-**Interactive Configuration Tool:**
-- ✅ `configure_dashboard.py` - Interactive module selection with previews
-- ✅ Dense vs Sparse display modes for all modules
-- ✅ 1-4 module selection with live previews
-- ✅ Command generation for Claude Code and .zshrc integration
-- ✅ Startup script generation with executable permissions
-
-**Dashboard Manager:**
-- ✅ `src/dashboard/dashboard_manager.py` - Orchestrates multiple modules
-- ✅ Environment variable configuration (`DASHBOARD_MODULES`)
-- ✅ Rich layout system (1-4 modules in grid/split layouts)
-- ✅ Live updating dashboard with configurable refresh rates
-- ✅ Plain text fallback when Rich library unavailable
-
-**Live Dashboard Interface:**
-- ✅ `src/dashboard/live_dashboard.py` - Replaces terminal output
-- ✅ Real-time API monitoring with Rich interface
-- ✅ Integration with existing request logger
-- ✅ Signal handling (Ctrl+C graceful shutdown)
-- ✅ Full-screen dashboard mode
-
-**5 Complete Dashboard Modules:**
-
-1. **✅ Performance Monitor** (`src/dashboard/modules/performance_monitor.py`)
-   - Dense: Full performance panel with progress bars, context usage, thinking tokens
-   - Sparse: Single line with key metrics (duration, tokens, cost, speed)
-   - Real-time session tracking with color coding
-   - Cost estimation and efficiency calculations
-
-2. **✅ Activity Feed** (`src/dashboard/modules/activity_feed.py`)
-   - Dense: Multi-session request history with status icons
-   - Sparse: Compact status summary with request counts
-   - Request pairing (start/complete/error tracking)
-   - Model routing display and performance metrics
-
-3. **✅ Routing Visualizer** (`src/dashboard/modules/routing_visualizer.py`)
-   - Dense: Visual model routing flow with ASCII art
-   - Sparse: Compact routing info with token flow
-   - Context and output token visualization
-   - Performance and cost analysis per routing decision
-
-4. **✅ Analytics Panel** (`src/dashboard/modules/analytics_panel.py`)
-   - Dense: Comprehensive analytics (requests, cost, performance, model usage)
-   - Sparse: Key metrics summary line
-   - Success rate calculation and performance extremes
-   - Hot model tracking and usage patterns
-
-5. **✅ Request Waterfall** (`src/dashboard/modules/request_waterfall.py`)
-   - Dense: Detailed request lifecycle with timing breakdown
-   - Sparse: Compact lifecycle summary
-   - Phase-by-phase timing (Parse→Route→Think→Send→Wait→Recv→Done)
-   - Real-time progress for active requests
-
-**Base Module System:**
-- ✅ `src/dashboard/modules/base_module.py` - Common functionality
-- ✅ Request history management with configurable limits
-- ✅ Token formatting, cost estimation, progress bars
-- ✅ Rich and plain text rendering support
-- ✅ Active/completed request tracking
-
-### 🎯 **DASHBOARD USAGE**
-
-**Quick Setup:**
-```bash
-# 1. Configure your dashboard interactively
-python configure_dashboard.py
-
-# 2. Select modules (e.g., performance:dense,activity:sparse)
-# 3. Copy generated commands to .zshrc or run directly:
-export DASHBOARD_MODULES="performance:dense,activity:sparse"
-
-# 4. Start live dashboard
-python -m src.dashboard.live_dashboard
-```
-
-**Example Configurations:**
-```bash
-# Performance monitoring only
-DASHBOARD_MODULES="performance:dense"
-
-# Multi-module setup
-DASHBOARD_MODULES="performance:sparse,activity:sparse,analytics:dense"
-
-# Full dashboard (4 modules)
-DASHBOARD_MODULES="performance:dense,activity:dense,routing:sparse,waterfall:sparse"
-```
-
-**Generated Commands:**
-- ✅ Environment variable export
-- ✅ Claude Code integration instructions
-- ✅ .zshrc aliases for easy access
-- ✅ Executable startup script (`start_dashboard.sh`)
-
-### 📊 **DASHBOARD PREVIEW EXAMPLES**
-
-**Dense Mode Example (Performance Monitor):**
-```
-┌─ API Performance Monitor ─────────────────────────────────────┐
-│ 🔵 Session abc123 | anthropic/claude-3.5-sonnet→openai/gpt-4o │
-│ ⚡ 15.8s | 📊 CTX: ████████░░ 43.7k/200k (22%) | 82 tok/s    │
-│ 🧠 THINK: ███░░░░░░░ 920 tokens | 💰 $0.0234 estimated       │
-│ 📤 OUT: ██░░░░░░░░ 1.3k/16k | 🌊 STREAMING | 3msg + SYS     │
-└───────────────────────────────────────────────────────────────┘
-```
-
-**Sparse Mode Example (Activity Feed):**
-```
-🔵abc123→OK 🟢def456→OK 🔴ghi789→ERR 🔵jkl012→OK | 4req 3.2s avg
-```
-
-### 🔧 **DASHBOARD INTEGRATION STATUS**
-
-**✅ PHASE 1 COMPLETE - Standalone Dashboard:**
-- Interactive configuration tool with previews
-- All 5 dashboard modules (dense + sparse modes)
-- Dashboard manager with layout system
-- Live dashboard with real-time updates
-- Request logger integration
-- Command generation for setup
-- Environment variable configuration
-- Rich formatting with fallback to plain text
-- Signal handling and graceful shutdown
-
-**✅ TESTED:**
-- Module rendering in both modes
-- Configuration parsing and validation
-- Layout generation for 1-4 modules
-- Request data flow from logger to modules
-- Cost estimation and token formatting
-- Progress bar generation
-- Model name formatting and provider detection
-
-**🔄 PHASE 2 COMPLETED - Integrated Proxy Dashboard:**
-- ✅ **Terminal dashboard** - Live Rich-based TUI with real-time updates
-- ✅ **Edge-based module positioning** - Modules on top/bottom/left/right edges
-- ✅ **Central waterfall display** - Live request flow visualization
-- ✅ **WebSocket dashboard** - Browser-based real-time dashboard at `/dashboard`
-- ✅ **Historical data persistence** - Analytics API with time-series data
-- ✅ **Advanced analytics** - Cost breakdown, error analysis, trend tracking
-- ✅ **Dashboard hooks system** - Real-time data flow from proxy to dashboards
-
-**✅ PHASE 3 COMPLETED - Advanced Features:**
-- ✅ **Prompt injection system** - Inject proxy stats into Claude Code prompts
-- ✅ **Multi-size variants** - Large, medium, small (for token optimization)
-- ✅ **Interactive configurator** - `configure_prompt_injection.py` with live previews
-- ✅ **Powerlevel10k integration** - Show proxy status in your shell prompt
-- ✅ **Real-time billing integration** - Provider API integration (OpenRouter, OpenAI, Anthropic)
-- ✅ **Automated model benchmarking** - Standardized tests, performance comparison
-- ✅ **Multi-user authentication** - User management with API keys and quotas
-- ✅ **Database backend** - Enhanced SQLite with CSV/JSON export
-
-**🔄 PHASE 4 IN DEVELOPMENT:**
-- [ ] Moveable modules in terminal dashboard - Drag modules between edges
-- [ ] Layout persistence - Save/load dashboard arrangements
-- [ ] Resize panels - Dynamic module sizing
-- [ ] Custom dashboard themes and color schemes
-- [ ] Module creation API for extensions
-
----
-
-## 🎉 Complete Features Summary
-
-### ✅ **CORE PROXY FEATURES (FULLY WORKING)**
-- **352 models** from multiple sources (OpenRouter, Ollama, LMStudio)
-- **Comprehensive reasoning support** (OpenAI, Anthropic, all providers)
-- **Dual reasoning control** (effort + max_tokens)
-- **OpenRouter reasoning tokens** with block preservation
-- **Multi-provider support** (OpenAI, Azure, OpenRouter, local)
-- **Function calling** & streaming support
-- **Claude API compatibility** with full `/v1/messages` endpoint
-- **Smart model mapping** (BIG/MIDDLE/SMALL configuration)
-- **Hybrid mode** - Mix local and remote models simultaneously
-- **Per-model routing** - Each model to different provider
-
-### ✅ **CONFIGURATION SYSTEM (FULLY WORKING)**
-- **10 pre-built templates** for quick setup
-- **Smart recommendations** with cost optimization
-- **99 configuration modes** for flexibility
-- **Interactive selector** with beautiful UI + filtering
-- **Local-only mode** (hide/show OpenRouter models)
-- **CLI configuration** for automation
-- **Environment variable management**
-- **Mode saving/loading system**
-
-### ✅ **DASHBOARD SYSTEM (FULLY WORKING)**
-- **Terminal dashboard** - Live Rich-based TUI with real-time updates
-- **WebSocket dashboard** - Browser-based dashboard at `/dashboard`
-- **5 complete dashboard modules** with dense/sparse modes
-- **Interactive configuration tool** with live previews
-- **Modular architecture** (1-4 modules, user selectable)
-- **Real-time monitoring** with Rich terminal interface
-- **Request lifecycle tracking** with detailed analytics
-- **Cost and performance monitoring**
-- **Session-based color coding**
-- **Command generation** for integration
-
-### ✅ **MODEL DATABASE (FULLY WORKING)**
-- **352 total models** with complete metadata
-- **140 free models** (local + OpenRouter free tier)
-- **Reasoning support detection** (210+ models)
-- **Vision support tracking** (45+ models)
-- **Pricing information** per 1M tokens
-- **Context window limits** for all models
-- **Provider endpoint mapping**
-
-### ✅ **LOGGING SYSTEM (FULLY WORKING)**
-- **Rich colored terminal output** with session colors
-- **Comprehensive request logging** (start/complete/error)
-- **Token usage visualization** with progress bars
-- **Performance metrics** (tokens/sec, latency)
-- **Cost estimation** with real-time tracking
-- **Context window monitoring** with percentage usage
-- **Thinking token tracking** for reasoning models
-
-### ✅ **MONITORING & ANALYTICS (FULLY WORKING)**
-- **Historical data persistence** - Analytics API with time-series data
-- **Cost breakdown** - By model, provider, and time period
-- **Error analytics** - Success rates, error types, trends
-- **Data export** - CSV and JSON format export
-- **Real-time billing integration** - OpenRouter, OpenAI, Anthropic APIs
-- **Account balance tracking** - Multi-provider support
-- **Automated benchmarking** - Standardized performance tests
-- **Model comparison** - Side-by-side benchmarking
-
-### ✅ **PROMPT INJECTION SYSTEM (FULLY WORKING)**
-- **Claude Code integration** - Inject proxy stats into prompts
-- **3 size variants** - Large (~250 tokens), Medium (~80 tokens), Small (~30 tokens)
-- **4 dashboard modules** - Status, performance, errors, models
-- **Interactive configurator** - `configure_prompt_injection.py` with previews
-- **Smart injection modes** - Auto, always, manual, header
-- **Powerlevel10k integration** - Show status in shell prompt
-- **Nerd Font support** - Beautiful icons: 🔧 ⚡ ⚠️ ✓ 🤖 🧠
-- **Environment variable config** - Easy setup and customization
-
-### ✅ **MULTI-USER SYSTEM (FULLY WORKING)**
-- **User management** - Create users with API keys
-- **Quota enforcement** - Per-user limits (requests, tokens, cost)
-- **Usage tracking** - Daily usage per user
-- **Authentication** - Secure API key validation
-- **User analytics** - Per-user statistics and history
-- **Database storage** - Persistent user data
-
-### 🔄 **FUTURE ENHANCEMENTS**
-
-The following features are planned for future releases:
-
-**Terminal Dashboard Enhancements:**
-- [ ] **Drag-and-drop module positioning** - Interactively move modules between edges
-- [ ] **Dynamic panel resizing** - Adjust module sizes on the fly
-- [ ] **Auto-hide inactive modules** - Clean interface when modules not needed
-- [ ] **Focus mode** - Expand waterfall to full screen
-- [ ] **Layout persistence** - Save and load custom dashboard arrangements
-
-**Theming & Customization:**
-- [ ] **Custom color schemes** - Dark, light, and custom themes
-- [ ] **Module creation API** - Build your own dashboard modules
-- [ ] **Plugin system** - Third-party extensions for dashboards
-- [ ] **Configurable refresh rates** - Per-module update frequencies
-
-**Advanced Analytics:**
-- [ ] **Trend prediction** - ML-based cost and usage forecasting
-- [ ] **Anomaly detection** - Automatic alerts for unusual patterns
-- [ ] **Cost optimization recommendations** - Automated suggestions
-- [ ] **A/B testing framework** - Compare model performance
-
-**Enterprise Features:**
-- [ ] **Team analytics** - Multi-user usage insights
-- [ ] **Budget management** - Set and enforce spending limits
-- [ ] **Audit logging** - Comprehensive request audit trails
-- [ ] **SSO integration** - Enterprise authentication
-
-### ⚠️ **KNOWN LIMITATIONS**
-- **Terminal dashboard** - Limited to 4 modules in standalone mode
-- **Cost estimates** - Approximate, not from real-time billing (except OpenRouter)
-- **WebSocket dashboard** - Basic implementation, no advanced filtering yet
-- **Benchmarking** - Background tasks only, no scheduling yet
-
-### 🔒 **SECURITY NOTES**
-- **No hardcoded secrets** - All API keys via environment variables
-- **Gitignore protection** - Sensitive files excluded from version control
-- **Clean repository** - No development artifacts or temporary files
-
-### 🧪 **TESTING STATUS**
-- ✅ **Core proxy functionality** - Fully tested with multiple providers
-- ✅ **Model selection and configuration** - Tested with all templates
-- ✅ **Dashboard modules** - All 5 modules tested in both modes
-- ✅ **Request logging integration** - Tested with live API calls
-- ✅ **Configuration management** - Mode saving/loading tested
-- ✅ **Interactive tools** - Selector and configurator tested
-- 🔄 **Load testing** - In progress for high-volume scenarios
-- 🔄 **Edge case handling** - Ongoing testing for error conditions
-
----
-
-## 📋 **AUDIT CHECKLIST**
-
-### ✅ **IMPLEMENTED AND WORKING**
-- [x] Claude API proxy with full compatibility
-- [x] Multi-provider support (OpenAI, Azure, OpenRouter, local)
-- [x] Reasoning token support across all providers
-- [x] 352 model database with metadata
-- [x] Interactive model selector with filtering
-- [x] 10 pre-built configuration templates
-- [x] 99 configuration mode slots
-- [x] Smart model recommendations
-- [x] Hybrid deployment support
-- [x] Rich terminal logging with colors
-- [x] Complete dashboard system (5 modules)
-- [x] Dashboard configuration tool
-- [x] Live dashboard interface
-- [x] Request lifecycle tracking
-- [x] Cost and performance monitoring
-- [x] Session-based analytics
-
-### ✅ **NEWLY IMPLEMENTED** (Latest Update)
-- [x] **WebSocket dashboard** for browser - Real-time dashboard at `/dashboard`
-- [x] **Historical data persistence** - Analytics API with time-series data
-- [x] **Advanced analytics** - Cost breakdown, error analysis, trend tracking
-- [x] **Real-time billing integration** - Provider API integration (OpenRouter, OpenAI, Anthropic)
-- [x] **Automated model benchmarking** - Standardized tests, performance comparison
-- [x] **Multi-user authentication** - User management with API keys and quotas
-- [x] **Database backend** - Enhanced SQLite with export capabilities
-
-### 🔄 **IN DEVELOPMENT**
-- [ ] Custom dashboard themes
-- [ ] Module creation API
-- [ ] Web-based configuration interface (currently API-only)
+MIT License - do whatever you want with it.
 
 ---
 
 <div align="center">
 
-**Made with ❤️ for the developer community**
+**Made with ❤️ for the Claude Code community**
 
-[⭐ Star on GitHub](https://github.com/yourusername/claude-code-proxy)
+[Report Bug](https://github.com/aaaronmiller/claude-code-proxy/issues) • [Request Feature](https://github.com/aaaronmiller/claude-code-proxy/issues) • [Discussions](https://github.com/aaaronmiller/claude-code-proxy/discussions)
 
 </div>
