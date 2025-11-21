@@ -44,7 +44,7 @@ USE_RICH = RICH_AVAILABLE and LOG_STYLE == "rich" and COLOR_SCHEME != "none"
 class RequestLogger:
     """Compact request logger for terminal output with color support."""
     
-    # Subtle color palette for session differentiation (cyan/magenta shades only)
+    # Expanded color palette for session differentiation with more variety
     SESSION_COLORS = [
         "bright_cyan",      # Session 1: Bright cyan
         "cyan",             # Session 2: Cyan
@@ -52,6 +52,12 @@ class RequestLogger:
         "magenta",          # Session 4: Magenta
         "bright_blue",      # Session 5: Bright blue
         "blue",             # Session 6: Blue
+        "bright_green",     # Session 7: Bright green
+        "green",            # Session 8: Green
+        "bright_yellow",    # Session 9: Bright yellow
+        "yellow",           # Session 10: Yellow
+        "bright_red",       # Session 11: Bright red (for high activity)
+        "red",              # Session 12: Red
     ]
     
     @staticmethod
@@ -104,9 +110,9 @@ class RequestLogger:
     ) -> None:
         """
         Log request start with ALL comprehensive info on ONE line.
-        
-        Format (1 line with colors):
-        🔵 abc123 | anthropic/claude-3.5-sonnet→openai/gpt-4o-mini | openrouter.ai | CTX:1.2k/200k (1%) | OUT:16k | THINK:8k | STREAM | 3msg | SYS | 127.0.0.1
+
+        Format (enhanced with all metrics):
+        [PROJECT] ▶ abc123 | claude-3.5→gpt-4o | CTX:1.2k/200k(1%) OUT:16k THINK:8k | 🧠REASON | STREAM 3msg | 127.0.0.1
         """
         # Extract provider and model info
         def get_provider_info(model_name: str) -> tuple[str, str, str]:
@@ -158,42 +164,97 @@ class RequestLogger:
         # Format token counts
         def fmt_tokens(count):
             return f"{count/1000:.1f}k" if count >= 1000 else str(count)
-        
-        # Build compact single-line output
+
+        # Determine task type for better visual identification
+        task_type = "TEXT"
+        task_icon = "📝"
+        task_color = "white"
+        if reasoning_config:
+            task_type = "REASON"
+            task_icon = "🧠"
+            task_color = "magenta"
+        elif has_images:
+            task_type = "IMAGE"
+            task_icon = "🖼️ "
+            task_color = "cyan"
+        elif has_tools:
+            task_type = "TOOLS"
+            task_icon = "🔧"
+            task_color = "yellow"
+
+        # Build comprehensive single-line output
         if USE_RICH and console:
             # Get session-specific color
             session_color = RequestLogger._get_session_color(request_id)
-            
+
             text = Text()
-            
+
             # Workspace name with background (if available)
             if workspace_name:
                 text.append(f" {workspace_name} ", style=f"bold white on {session_color}")
-                text.append(" ", style="")
-            
+                text.append("  ", style="")
+
             # Session ID and icon with session color
             text.append("▶ ", style=f"bold {session_color}")
             text.append(f"{request_id[:8]} ", style=f"bold {session_color}")
-            text.append("| ", style=f"{session_color}")
-            
-            # Compact model routing (use session color for consistency)
-            text.append(f"{orig_family}", style=f"{session_color}")
+            text.append("| ", style=f"dim")
+
+            # Compact model routing with color coding
+            text.append(f"{orig_family}", style=f"dim {session_color}")
             if orig_size != "unknown":
-                text.append(f"-{orig_size}", style=f"{session_color}")
-            text.append("→", style=f"dim {session_color}")
+                text.append(f"-{orig_size}", style=f"dim {session_color}")
+            text.append("→", style=f"dim")
             text.append(f"{routed_family}", style=f"bold {session_color}")
             if routed_size != "unknown":
                 text.append(f"-{routed_size}", style=f"bold {session_color}")
-            text.append(" | ", style=f"dim {session_color}")
-            
-            # Compact metrics (use session color)
-            if input_tokens > 0:
-                text.append(f"IN:{fmt_tokens(input_tokens)} ", style=f"{session_color}")
+            text.append(" | ", style=f"dim")
+
+            # Context window with percentage (enhanced display)
+            if context_limit > 0 and input_tokens > 0:
+                ctx_pct = (input_tokens / context_limit) * 100
+                ctx_color = "green" if ctx_pct < 50 else "yellow" if ctx_pct < 80 else "red"
+                text.append("CTX:", style="dim")
+                text.append(f"{fmt_tokens(input_tokens)}", style=ctx_color)
+                text.append(f"/{fmt_tokens(context_limit)}", style="dim")
+                text.append(f"({ctx_pct:.0f}%) ", style=ctx_color)
+            elif input_tokens > 0:
+                text.append(f"IN:{fmt_tokens(input_tokens)} ", style=f"cyan")
+
+            # Output limit
+            if output_limit > 0:
+                text.append("OUT:", style="dim")
+                text.append(f"{fmt_tokens(output_limit)} ", style="blue")
+
+            # Reasoning budget
+            if reasoning_config:
+                from src.models.reasoning import OpenAIReasoningConfig, AnthropicThinkingConfig, GeminiThinkingConfig
+                if isinstance(reasoning_config, OpenAIReasoningConfig):
+                    think_str = fmt_tokens(reasoning_config.max_tokens) if reasoning_config.max_tokens else reasoning_config.effort
+                elif isinstance(reasoning_config, (AnthropicThinkingConfig, GeminiThinkingConfig)):
+                    think_str = fmt_tokens(reasoning_config.budget)
+                else:
+                    think_str = "?"
+                text.append("THINK:", style="dim")
+                text.append(f"{think_str} ", style="magenta bold")
+
+            text.append("| ", style="dim")
+
+            # Task type with icon
+            text.append(f"{task_icon} ", style=task_color)
+            text.append(f"{task_type} ", style=f"bold {task_color}")
+
+            # Stream indicator
             if stream:
                 text.append("STREAM ", style=f"bold {session_color}")
+
+            # Message count
             if message_count > 0:
-                text.append(f"{message_count}msg ", style=f"dim {session_color}")
-            
+                text.append(f"{message_count}msg ", style=f"dim")
+
+            # System prompt indicator
+            if has_system:
+                text.append("SYS ", style="dim")
+
             console.print(text)
         else:
             # Plain text version
@@ -289,36 +350,79 @@ class RequestLogger:
         if model_name:
             context_limit, output_limit = get_model_limits(model_name)
         
-        # Compact completion line matching the start format
+        # Enhanced completion line with comprehensive metrics
         if USE_RICH and console:
             # Get session-specific color (same as start)
             session_color = RequestLogger._get_session_color(request_id)
-            
+
             text = Text()
             icon = "✓" if status == "OK" else "✗"
-            
+            icon_color = "green" if status == "OK" else "red"
+
             # Indented completion with session color
-            text.append(f"  {icon} ", style=f"bold {session_color}")
+            text.append(f"  {icon} ", style=f"bold {icon_color}")
             text.append(f"{request_id[:8]} ", style=f"bold {session_color}")
-            text.append("| ", style=f"{session_color}")
-            
-            # Duration (session color)
+            text.append("| ", style=f"dim")
+
+            # Duration
             if duration_ms:
-                text.append(f"{duration_ms/1000:.1f}s ", style=f"{session_color}")
-            
-            # Token counts (session color)
+                duration_color = "green" if duration_ms < 3000 else "yellow" if duration_ms < 10000 else "red"
+                text.append(f"{duration_ms/1000:.1f}s ", style=duration_color)
+                text.append("| ", style="dim")
+
+            # Token counts with context window percentage
             if usage:
-                text.append(f"IN:{format_tokens(input_tokens)} ", style=f"{session_color}")
-                text.append(f"OUT:{format_tokens(output_tokens)} ", style=f"bold {session_color}")
-                
+                text.append("IN:", style="dim")
+                text.append(f"{format_tokens(input_tokens)} ", style="cyan")
+
+                # Show context usage if we have the limit
+                if context_limit > 0:
+                    ctx_pct = (input_tokens / context_limit) * 100
+                    ctx_color = "green" if ctx_pct < 50 else "yellow" if ctx_pct < 80 else "red"
+                    text.append(f"({ctx_pct:.0f}%) ", style=ctx_color)
+
+                text.append("OUT:", style="dim")
+                text.append(f"{format_tokens(output_tokens)} ", style="bold blue")
+
+                # Show output limit usage if available
+                if output_limit > 0 and output_tokens > 0:
+                    out_pct = (output_tokens / output_limit) * 100
+                    out_color = "green" if out_pct < 50 else "yellow" if out_pct < 80 else "red"
+                    text.append(f"({out_pct:.0f}%) ", style=out_color)
+
+                # Thinking tokens
                 if thinking_tokens > 0:
-                    text.append(f"THINK:{format_tokens(thinking_tokens)} ", style=f"bold {session_color}")
-            
-            # Performance (session color)
-            if SHOW_PERFORMANCE and output_tokens > 0 and duration_ms:
+                    text.append("THINK:", style="dim")
+                    text.append(f"{format_tokens(thinking_tokens)} ", style="bold magenta")
+
+                text.append("| ", style="dim")
+
+            # Performance metrics (prominently displayed)
+            if output_tokens > 0 and duration_ms:
                 tok_s = output_tokens / (duration_ms / 1000)
-                text.append(f"| {tok_s:.0f}t/s", style=f"dim {session_color}")
-            
+                speed_color = "green" if tok_s > 50 else "yellow" if tok_s > 20 else "red"
+                text.append("⚡", style=speed_color)
+                text.append(f"{tok_s:.0f}t/s ", style=f"bold {speed_color}")
+
+            # Cost estimate (if available)
+            if usage and model_name:
+                # Rough cost estimate
+                cost = 0.0
+                cost_map = {
+                    "gpt-4o": (0.005, 0.015),
+                    "gpt-4": (0.030, 0.060),
+                    "claude-3.5": (0.003, 0.015),
+                    "claude-3": (0.003, 0.015),
+                }
+                for key, (in_cost, out_cost) in cost_map.items():
+                    if key in model_name.lower():
+                        cost = (input_tokens / 1_000_000 * in_cost) + (output_tokens / 1_000_000 * out_cost)
+                        break
+                if cost > 0:
+                    cost_color = "green" if cost < 0.01 else "yellow" if cost < 0.10 else "red"
+                    text.append("$", style="dim")
+                    text.append(f"{cost:.4f}", style=cost_color)
+
             console.print(text)
         else:
             icon = "🟢" if status == "OK" else "🔴"
