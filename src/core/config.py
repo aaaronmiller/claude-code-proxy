@@ -135,6 +135,35 @@ class Config:
         # Compact logger mode - reduce console noise when dashboard is active
         self.compact_logger = os.environ.get("COMPACT_LOGGER", "true" if self.enable_dashboard else "false").lower() == "true"
 
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # TERMINAL OUTPUT CONFIGURATION (like prompt injection system)
+        # ═══════════════════════════════════════════════════════════════════════════════
+
+        # Terminal output display mode: "minimal", "normal", "detailed", "debug"
+        # - minimal: Request ID + model only
+        # - normal: Request ID + model + tokens + speed (default)
+        # - detailed: All metrics including context %, task type, cost
+        # - debug: Everything including system flags and client info
+        self.terminal_display_mode = os.environ.get("TERMINAL_DISPLAY_MODE", "detailed").lower()
+
+        # Show specific metrics (can be toggled individually)
+        self.terminal_show_workspace = os.environ.get("TERMINAL_SHOW_WORKSPACE", "true").lower() == "true"
+        self.terminal_show_context_pct = os.environ.get("TERMINAL_SHOW_CONTEXT_PCT", "true").lower() == "true"
+        self.terminal_show_task_type = os.environ.get("TERMINAL_SHOW_TASK_TYPE", "true").lower() == "true"
+        self.terminal_show_speed = os.environ.get("TERMINAL_SHOW_SPEED", "true").lower() == "true"
+        self.terminal_show_cost = os.environ.get("TERMINAL_SHOW_COST", "true").lower() == "true"
+        self.terminal_show_duration_colors = os.environ.get("TERMINAL_SHOW_DURATION_COLORS", "true").lower() == "true"
+
+        # Color scheme for terminal output: "auto", "vibrant", "subtle", "mono"
+        # - auto: Rich colors with session differentiation (default)
+        # - vibrant: Bright, high-contrast colors
+        # - subtle: Muted colors for less distraction
+        # - mono: Minimal colors, mostly white/gray
+        self.terminal_color_scheme = os.environ.get("TERMINAL_COLOR_SCHEME", "auto").lower()
+
+        # Session color differentiation (use different colors per Claude Code session)
+        self.terminal_session_colors = os.environ.get("TERMINAL_SESSION_COLORS", "true").lower() == "true"
+
     def _validate_reasoning_config(self):
         """Validate reasoning configuration values"""
         valid_effort_levels = {'low', 'medium', 'high'}

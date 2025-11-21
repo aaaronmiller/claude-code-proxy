@@ -153,34 +153,50 @@ async def create_message(
         # Extract input text for token counting and workspace detection
         input_text = ""
         workspace_name = None
-        
+
+        def extract_workspace_name(text: str) -> Optional[str]:
+            """Extract workspace/project name from system prompt text."""
+            import re
+            import os
+
+            # Try multiple patterns in order of preference
+            patterns = [
+                # Claude Code pattern: "Working directory: /path/to/project"
+                r'Working directory:\s+([^\n]+)',
+                # Git path pattern: /something/git/project-name
+                r'/git/([^/\s]+)',
+                # Generic path pattern: extract last folder name from absolute paths
+                r'/([a-zA-Z0-9_-]+)(?:/[a-zA-Z0-9_.-]+)*\s',
+                # Workspace keyword pattern
+                r'workspace.*?:?\s+([a-zA-Z0-9_-]+)',
+            ]
+
+            for pattern in patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    candidate = match.group(1).strip()
+                    # If it's a full path, extract just the last folder name
+                    if '/' in candidate:
+                        candidate = os.path.basename(candidate.rstrip('/'))
+                    # Skip common parent folders
+                    skip_names = ['users', 'home', 'user', 'documents', 'projects', 'git', 'code', 'my_projects', '0my_projects']
+                    if candidate.lower() not in skip_names and len(candidate) > 0:
+                        # Shorten if too long
+                        if len(candidate) > 20:
+                            return candidate[:17] + "..."
+                        return candidate
+            return None
+
         if request.system:
             if isinstance(request.system, str):
                 input_text += request.system
-                # Try to extract workspace from system prompt
-                import re
-                # Look for patterns like "/Users/user/project" or "workspace: project"
-                workspace_match = re.search(r'/([^/]+)/git/([^/\s]+)', request.system)
-                if not workspace_match:
-                    workspace_match = re.search(r'workspace.*?([a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)', request.system, re.IGNORECASE)
-                if workspace_match:
-                    workspace_name = workspace_match.group(2) if len(workspace_match.groups()) > 1 else workspace_match.group(1)
-                    # Shorten if too long
-                    if workspace_name and len(workspace_name) > 20:
-                        workspace_name = workspace_name[:17] + "..."
+                workspace_name = extract_workspace_name(request.system)
             elif isinstance(request.system, list):
                 for block in request.system:
                     if hasattr(block, "text"):
                         input_text += block.text
                         if not workspace_name and block.text:
-                            import re
-                            workspace_match = re.search(r'/([^/]+)/git/([^/\s]+)', block.text)
-                            if not workspace_match:
-                                workspace_match = re.search(r'workspace.*?([a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)', block.text, re.IGNORECASE)
-                            if workspace_match:
-                                workspace_name = workspace_match.group(2) if len(workspace_match.groups()) > 1 else workspace_match.group(1)
-                                if workspace_name and len(workspace_name) > 20:
-                                    workspace_name = workspace_name[:17] + "..."
+                            workspace_name = extract_workspace_name(block.text)
         
         for msg in request.messages:
             if isinstance(msg.content, str):
