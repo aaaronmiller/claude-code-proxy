@@ -86,8 +86,18 @@ Examples:
                        help='Show current configuration and exit')
     parser.add_argument('--select-models', action='store_true',
                        help='Launch interactive model selector')
+    parser.add_argument('--validate-config', action='store_true',
+                       help='Validate configuration and exit')
+    parser.add_argument('--skip-validation', action='store_true',
+                       help='Skip configuration validation on startup')
 
     args = parser.parse_args()
+
+    # Handle validation check
+    if args.validate_config:
+        from src.core.validator import validate_config_on_startup
+        passed = validate_config_on_startup(strict=False)
+        sys.exit(0 if passed else 1)
 
     # Handle crosstalk operations
     from src.cli.crosstalk_cli import handle_crosstalk_operations
@@ -107,14 +117,15 @@ Examples:
 
     # Set environment variables from CLI args
     env_updates = {}
+    skip_validation = args.skip_validation
     for key, value in vars(args).items():
-        if value is not None and key not in ['show_config', 'select_models']:
+        if value is not None and key not in ['show_config', 'select_models', 'validate_config', 'skip_validation']:
             env_key = key.upper().replace('-', '_')
             env_updates[f'CLAUDE_{env_key}'] = str(value)
 
     # Import main after handling modes
     from src.main import main as start_main
-    start_main(env_updates)
+    start_main(env_updates, skip_validation=skip_validation)
 
 if __name__ == "__main__":
     main()
