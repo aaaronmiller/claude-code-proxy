@@ -75,6 +75,79 @@ Done! Claude Code now uses your configured provider.
 
 ---
 
+## 📋 Complete Workflow (Copy-Paste Ready)
+
+### One-Time Setup + First Request
+
+```bash
+# Clone and install
+git clone https://github.com/aaaronmiller/claude-code-proxy.git
+cd claude-code-proxy
+uv sync
+
+# Run setup wizard (interactive)
+python setup_wizard.py
+
+# Start proxy (in background)
+python start_proxy.py &
+
+# Configure Claude Code + test
+export ANTHROPIC_BASE_URL=http://localhost:8082
+claude "write a fibonacci function"
+```
+
+### Manual Setup (Without Wizard)
+
+```bash
+# Clone and install
+git clone https://github.com/aaaronmiller/claude-code-proxy.git
+cd claude-code-proxy
+uv sync
+
+# Configure .env
+cp .env.example .env
+cat >> .env << 'EOF'
+PROVIDER_API_KEY="your-api-key-here"
+PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_MODEL="anthropic/claude-sonnet-4"
+MIDDLE_MODEL="google/gemini-pro-1.5"
+SMALL_MODEL="google/gemini-flash-1.5:free"
+EOF
+
+# Start proxy + use
+python start_proxy.py &
+export ANTHROPIC_BASE_URL=http://localhost:8082
+claude "hello world"
+```
+
+### Daily Usage
+
+```bash
+# Terminal 1: Start proxy
+cd claude-code-proxy
+python start_proxy.py
+
+# Terminal 2: Use Claude Code
+export ANTHROPIC_BASE_URL=http://localhost:8082
+cd ~/your-project
+claude "your prompt here"
+```
+
+### Quick Model Switch
+
+```bash
+# Browse models
+python -m src.cli.model_selector
+
+# Update .env with selected model
+nano .env  # Change BIG_MODEL, MIDDLE_MODEL, or SMALL_MODEL
+
+# Restart proxy
+pkill -f start_proxy.py && python start_proxy.py &
+```
+
+---
+
 ## 🧩 Core Concepts
 
 ### How It Works

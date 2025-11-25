@@ -48,7 +48,7 @@ async def serve_config_ui():
     return {"message": "Web UI not available"}
 
 
-def main(env_updates: dict = None):
+def main(env_updates: dict = None, skip_validation: bool = False):
     """Main entry point with optional environment updates."""
     # Apply environment updates from CLI
     if env_updates:
@@ -148,6 +148,17 @@ def main(env_updates: dict = None):
     # Display comprehensive configuration
     from src.utils.startup_display import display_startup_config
     display_startup_config(config)
+
+    # Validate configuration
+    if not skip_validation:
+        from src.core.validator import validate_config_on_startup
+        validation_passed = validate_config_on_startup(strict=False)
+
+        if not validation_passed:
+            import sys
+            print("\n💡 Run 'python setup_wizard.py' to fix configuration issues")
+            print("💡 Or use --skip-validation to bypass this check")
+            sys.exit(1)
 
     # Parse log level - extract just the first word to handle comments
     log_level = config.log_level.split()[0].lower()

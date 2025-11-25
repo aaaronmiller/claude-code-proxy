@@ -37,6 +37,7 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
     "httpx>=0.28.0",
 ]
 
@@ -52,6 +53,7 @@ claude-code-proxy = "src.main:main"
 dev-dependencies = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
     "black>=25.0.0",
     "isort>=5.13.0",
     "mypy>=1.15.0",
