@@ -97,19 +97,9 @@ class ConfigValidator:
 
     def _check_deprecated_variables(self):
         """Warn about deprecated variable names"""
-        deprecated_vars = {
-            "OPENAI_API_KEY": "PROVIDER_API_KEY",
-            "OPENAI_BASE_URL": "PROVIDER_BASE_URL",
-            "ANTHROPIC_API_KEY": "PROXY_AUTH_KEY (for proxy authentication)",
-        }
-
-        for old_var, new_var in deprecated_vars.items():
-            if os.getenv(old_var) and not os.getenv(new_var.split()[0]):
-                self.warnings.append(
-                    f"Using deprecated variable: {old_var}\n"
-                    f"  → Update to: {new_var}\n"
-                    f"  → See: docs/CONFIGURATION.md for details"
-                )
+        # User requested to support global keys without warnings.
+        # The system supports OPENAI_API_KEY etc. as fallbacks, so we suppress these warnings.
+        pass
 
     def _check_model_configuration(self):
         """Validate model configuration"""
@@ -121,7 +111,8 @@ class ConfigValidator:
         if not big_model:
             self.warnings.append("BIG_MODEL not configured (Claude Opus requests will fail)")
 
-        if not middle_model:
+        # MIDDLE_MODEL defaults to BIG_MODEL in config.py, so only warn if neither is set
+        if not middle_model and not big_model:
             self.warnings.append("MIDDLE_MODEL not configured (Claude Sonnet requests will fail)")
 
         if not small_model:
@@ -313,6 +304,18 @@ class ConfigValidator:
                     f"  → Current value: {provider_url}\n"
                     f"  → Example: https://api.openai.com/v1"
                 )
+            
+            # Check for localhost loop
+            if "localhost" in provider_url or "127.0.0.1" in provider_url:
+                # Check if it matches the server port
+                server_port = os.getenv("PORT", "8082")
+                if f":{server_port}" in provider_url:
+                    self.warnings.append(
+                        f"PROVIDER_BASE_URL appears to be pointing to THIS proxy ({provider_url})\n"
+                        f"  → This will cause an infinite loop!\n"
+                        f"  → PROVIDER_BASE_URL should point to the UPSTREAM provider (e.g. OpenAI, OpenRouter)\n"
+                        f"  → The 'localhost:{server_port}' address is for your Claude Code client, not this config."
+                    )
 
     def _check_port_availability(self):
         """Check if configured port is available"""

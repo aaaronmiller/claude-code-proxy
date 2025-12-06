@@ -11,7 +11,8 @@ from datetime import datetime, timedelta
 import os
 from pathlib import Path
 
-from src.utils.usage_tracker import usage_tracker
+from src.services.usage.usage_tracker import usage_tracker
+from src.services.usage.cost_calculator import calculate_cost
 from src.core.logging import logger
 
 router = APIRouter()

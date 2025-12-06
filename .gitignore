@@ -192,8 +192,8 @@ docs/_build/
 .kiro/specs/**/build/
 
 # Model databases (can be regenerated)
-models/
-!models/.gitkeep
+/models/
+!/models/.gitkeep
 
 # Model usage tracking
 .model_usage.json

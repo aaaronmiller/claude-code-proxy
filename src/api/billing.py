@@ -5,7 +5,7 @@ Provides access to real-time billing data from provider APIs.
 """
 
 from fastapi import APIRouter, Query, HTTPException
-from src.billing.billing_integrations import billing_manager
+from src.services.billing.billing_integrations import BillingManager, BillingProvider
 from src.core.logging import logger
 
 router = APIRouter()

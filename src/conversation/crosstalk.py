@@ -13,9 +13,12 @@ import time
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+from src.services.prompts.system_prompt_loader import get_model_system_prompt
+from src.services.logging.compact_logger import CompactLogger
+from src.services.models.model_filter import filter_models
+from src.services.prompts.prompt_injection_middleware import inject_system_prompts
 from src.core.config import config
 from src.core.client import OpenAIClient
-from src.utils.system_prompt_loader import get_model_system_prompt
 
 
 class CrosstalkParadigm(Enum):

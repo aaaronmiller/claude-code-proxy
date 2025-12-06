@@ -10,18 +10,20 @@ from src.core.config import config
 from src.core.logging import logger
 from src.core.client import OpenAIClient
 from src.models.claude import ClaudeMessagesRequest, ClaudeTokenCountRequest
-from src.conversion.request_converter import convert_claude_to_openai
-from src.conversion.response_converter import (
+from src.services.conversion.request_converter import convert_claude_to_openai
+from src.services.conversion.response_converter import (
     convert_openai_to_claude_response,
     convert_openai_streaming_to_claude_with_cancellation,
+    convert_openai_streaming_to_claude
 )
 from src.core.model_manager import model_manager
-from src.utils.request_logger import request_logger
-from src.utils.compact_logger import compact_logger
-from src.utils.usage_tracker import usage_tracker
-from src.utils.json_detector import json_detector
-from src.utils.cost_calculator import calculate_cost
-from src.utils.model_limits import get_model_limits
+from src.services.logging.request_logger import request_logger, RequestLogger
+from src.services.logging.compact_logger import compact_logger
+from src.services.usage.usage_tracker import usage_tracker
+from src.services.usage.model_limits import check_model_limits
+from src.services.models.model_filter import filter_models
+from src.services.prompts.prompt_injection_middleware import inject_system_prompts
+from src.services.usage.model_limits import get_model_limits
 from src.conversation.crosstalk import crosstalk_orchestrator
 from src.dashboard.dashboard_hooks import dashboard_hooks
 from src.models.crosstalk import (
@@ -221,7 +223,8 @@ async def create_message(
                         input_text += block.text
         
         # Get model limits and token counts for logging
-        from src.utils.model_limits import get_model_limits
+        # Get model limits and token counts for logging
+        from src.services.usage.model_limits import get_model_limits
         context_limit, output_limit = get_model_limits(routed_model)
         
         # Estimate input tokens
@@ -325,9 +328,48 @@ async def create_message(
         else:
             # Non-streaming response
             logger.debug(f"Starting non-streaming response for request_id: {request_id}")
-            openai_response = await openai_client.create_chat_completion(
-                openai_request, request_id, config, api_key=openai_api_key
-            )
+            
+            # Seamless Key Rotation / Retry Loop
+            # If we get a 401, we wait for the user to fix the key via the wizard
+            from src.utils.key_reloader import key_reloader
+            import asyncio
+            
+            max_retries = 150  # Wait up to 300 seconds (5 minutes)
+            retry_count = 0
+            
+            while True:
+                try:
+                    openai_response = await openai_client.create_chat_completion(
+                        openai_request, request_id, config, api_key=openai_api_key
+                    )
+                    break # Success!
+                    
+                except HTTPException as e:
+                    if e.status_code == 401 and not openai_api_key: # Only retry for server-side keys (proxy mode)
+                        if retry_count >= max_retries:
+                            logger.error(f"Authentication failed. Timed out waiting for key update.")
+                            raise e
+                        
+                        if retry_count == 0:
+                            logger.warning(f"Authentication failed (401). Waiting for key update in profile...")
+                            logger.warning(f"Run 'cproxy-init' or the wizard to fix your key.")
+                        
+                        # Wait and check for updates
+                        await asyncio.sleep(2)
+                        retry_count += 1
+                        
+                        if key_reloader.check_for_updates():
+                            logger.info("Key update detected! Retrying request...")
+                            # Re-configure client with new key
+                            openai_client.api_key = config.openai_api_key
+                            continue
+                        
+                        # Log progress every 10 seconds
+                        if retry_count % 5 == 0:
+                            logger.info(f"Still waiting for key update... ({retry_count * 2}s elapsed)")
+                    else:
+                        raise e # Re-raise other errors immediately
+
             logger.debug(f"OpenAI response received for request_id: {request_id}")
             
             # Log comprehensive completion with all metadata

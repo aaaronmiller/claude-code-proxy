@@ -202,11 +202,11 @@ def run_quick_crosstalk(args):
     # Build system prompts
     system_prompts = {}
     if args.big_system_prompt:
-        system_prompts['big'] = args.big_system_prompt
+        system_prompts['big'] = get_model_system_prompt(args.big_system_prompt)
     if args.middle_system_prompt:
-        system_prompts['middle'] = args.middle_system_prompt
+        system_prompts['middle'] = get_model_system_prompt(args.middle_system_prompt)
     if args.small_system_prompt:
-        system_prompts['small'] = args.small_system_prompt
+        system_prompts['small'] = get_model_system_prompt(args.small_system_prompt)
 
     # Get other settings
     paradigm = args.crosstalk_paradigm or 'relay'

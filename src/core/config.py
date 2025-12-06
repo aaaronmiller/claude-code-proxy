@@ -31,8 +31,8 @@ class Config:
             self.openai_api_key = provider_api_key
         elif legacy_openai_key:
             self.openai_api_key = legacy_openai_key
-            print("⚠️  DEPRECATION WARNING: OPENAI_API_KEY is deprecated. Use PROVIDER_API_KEY instead.")
-            print("   This variable name is misleading - it works with ANY provider, not just OpenAI.")
+            # print("⚠️  DEPRECATION WARNING: OPENAI_API_KEY is deprecated. Use PROVIDER_API_KEY instead.")
+            # print("   This variable name is misleading - it works with ANY provider, not just OpenAI.")
         else:
             self.openai_api_key = None
 
@@ -40,7 +40,7 @@ class Config:
             self.openai_base_url = provider_base_url
         elif legacy_openai_url:
             self.openai_base_url = legacy_openai_url
-            print("⚠️  DEPRECATION WARNING: OPENAI_BASE_URL is deprecated. Use PROVIDER_BASE_URL instead.")
+            # print("⚠️  DEPRECATION WARNING: OPENAI_BASE_URL is deprecated. Use PROVIDER_BASE_URL instead.")
         else:
             self.openai_base_url = "https://api.openai.com/v1"
 
@@ -48,8 +48,8 @@ class Config:
             self.anthropic_api_key = proxy_auth_key
         elif legacy_anthropic_key:
             self.anthropic_api_key = legacy_anthropic_key
-            print("⚠️  DEPRECATION WARNING: ANTHROPIC_API_KEY is deprecated. Use PROXY_AUTH_KEY instead.")
-            print("   This variable is for proxy authentication, NOT for Anthropic's API.")
+            # print("⚠️  DEPRECATION WARNING: ANTHROPIC_API_KEY is deprecated. Use PROXY_AUTH_KEY instead.")
+            # print("   This variable is for proxy authentication, NOT for Anthropic's API.")
         else:
             self.anthropic_api_key = None
 

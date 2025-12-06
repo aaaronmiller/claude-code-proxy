@@ -1,0 +1,1697 @@
+{
+  "google/gemini-3-pro-image-preview": {
+    "context": 65536,
+    "output": 32768,
+    "name": "Google: Nano Banana Pro (Gemini 3 Pro Image Preview)"
+  },
+  "x-ai/grok-4.1-fast": {
+    "context": 2000000,
+    "output": 30000,
+    "name": "xAI: Grok 4.1 Fast"
+  },
+  "x-ai/grok-4.1-fast:free": {
+    "context": 2000000,
+    "output": 30000,
+    "name": "xAI: Grok 4.1 Fast (free)"
+  },
+  "google/gemini-3-pro-preview": {
+    "context": 1048576,
+    "output": 65536,
+    "name": "Google: Gemini 3 Pro Preview"
+  },
+  "deepcogito/cogito-v2.1-671b": {
+    "context": 128000,
+    "output": null,
+    "name": "Deep Cogito: Cogito v2.1 671B"
+  },
+  "openai/gpt-5.1": {
+    "context": 400000,
+    "output": 128000,
+    "name": "OpenAI: GPT-5.1"
+  },
+  "openai/gpt-5.1-chat": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: GPT-5.1 Chat"
+  },
+  "openai/gpt-5.1-codex": {
+    "context": 400000,
+    "output": 128000,
+    "name": "OpenAI: GPT-5.1-Codex"
+  },
+  "openai/gpt-5.1-codex-mini": {
+    "context": 400000,
+    "output": 100000,
+    "name": "OpenAI: GPT-5.1-Codex-Mini"
+  },
+  "kwaipilot/kat-coder-pro:free": {
+    "context": 256000,
+    "output": 32000,
+    "name": "Kwaipilot: KAT-Coder-Pro V1 (free)"
+  },
+  "moonshotai/kimi-linear-48b-a3b-instruct": {
+    "context": 1048576,
+    "output": 1048576,
+    "name": "MoonshotAI: Kimi Linear 48B A3B Instruct"
+  },
+  "moonshotai/kimi-k2-thinking": {
+    "context": 262144,
+    "output": 16384,
+    "name": "MoonshotAI: Kimi K2 Thinking"
+  },
+  "amazon/nova-premier-v1": {
+    "context": 1000000,
+    "output": 32000,
+    "name": "Amazon: Nova Premier 1.0"
+  },
+  "perplexity/sonar-pro-search": {
+    "context": 200000,
+    "output": 8000,
+    "name": "Perplexity: Sonar Pro Search"
+  },
+  "mistralai/voxtral-small-24b-2507": {
+    "context": 32000,
+    "output": null,
+    "name": "Mistral: Voxtral Small 24B 2507"
+  },
+  "openai/gpt-oss-safeguard-20b": {
+    "context": 131072,
+    "output": 65536,
+    "name": "OpenAI: gpt-oss-safeguard-20b"
+  },
+  "nvidia/nemotron-nano-12b-v2-vl:free": {
+    "context": 128000,
+    "output": 128000,
+    "name": "NVIDIA: Nemotron Nano 12B 2 VL (free)"
+  },
+  "nvidia/nemotron-nano-12b-v2-vl": {
+    "context": 131072,
+    "output": null,
+    "name": "NVIDIA: Nemotron Nano 12B 2 VL"
+  },
+  "minimax/minimax-m2": {
+    "context": 204800,
+    "output": 131072,
+    "name": "MiniMax: MiniMax M2"
+  },
+  "liquid/lfm2-8b-a1b": {
+    "context": 32768,
+    "output": null,
+    "name": "LiquidAI/LFM2-8B-A1B"
+  },
+  "liquid/lfm-2.2-6b": {
+    "context": 32768,
+    "output": null,
+    "name": "LiquidAI/LFM2-2.6B"
+  },
+  "ibm-granite/granite-4.0-h-micro": {
+    "context": 131000,
+    "output": null,
+    "name": "IBM: Granite 4.0 Micro"
+  },
+  "deepcogito/cogito-v2-preview-llama-405b": {
+    "context": 32768,
+    "output": null,
+    "name": "Deep Cogito: Cogito V2 Preview Llama 405B"
+  },
+  "openai/gpt-5-image-mini": {
+    "context": 400000,
+    "output": 128000,
+    "name": "OpenAI: GPT-5 Image Mini"
+  },
+  "anthropic/claude-haiku-4.5": {
+    "context": 200000,
+    "output": 64000,
+    "name": "Anthropic: Claude Haiku 4.5"
+  },
+  "qwen/qwen3-vl-8b-thinking": {
+    "context": 256000,
+    "output": 32768,
+    "name": "Qwen: Qwen3 VL 8B Thinking"
+  },
+  "qwen/qwen3-vl-8b-instruct": {
+    "context": 131072,
+    "output": 32768,
+    "name": "Qwen: Qwen3 VL 8B Instruct"
+  },
+  "openai/gpt-5-image": {
+    "context": 400000,
+    "output": 128000,
+    "name": "OpenAI: GPT-5 Image"
+  },
+  "openai/o3-deep-research": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: o3 Deep Research"
+  },
+  "openai/o4-mini-deep-research": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: o4 Mini Deep Research"
+  },
+  "nvidia/llama-3.3-nemotron-super-49b-v1.5": {
+    "context": 131072,
+    "output": null,
+    "name": "NVIDIA: Llama 3.3 Nemotron Super 49B V1.5"
+  },
+  "baidu/ernie-4.5-21b-a3b-thinking": {
+    "context": 131072,
+    "output": 65536,
+    "name": "Baidu: ERNIE 4.5 21B A3B Thinking"
+  },
+  "google/gemini-2.5-flash-image": {
+    "context": 32768,
+    "output": 32768,
+    "name": "Google: Gemini 2.5 Flash Image (Nano Banana)"
+  },
+  "qwen/qwen3-vl-30b-a3b-thinking": {
+    "context": 131072,
+    "output": 32768,
+    "name": "Qwen: Qwen3 VL 30B A3B Thinking"
+  },
+  "qwen/qwen3-vl-30b-a3b-instruct": {
+    "context": 262144,
+    "output": null,
+    "name": "Qwen: Qwen3 VL 30B A3B Instruct"
+  },
+  "openai/gpt-5-pro": {
+    "context": 400000,
+    "output": 128000,
+    "name": "OpenAI: GPT-5 Pro"
+  },
+  "z-ai/glm-4.6": {
+    "context": 202752,
+    "output": 202752,
+    "name": "Z.AI: GLM 4.6"
+  },
+  "z-ai/glm-4.6:exacto": {
+    "context": 202752,
+    "output": null,
+    "name": "Z.AI: GLM 4.6 (exacto)"
+  },
+  "anthropic/claude-sonnet-4.5": {
+    "context": 1000000,
+    "output": 64000,
+    "name": "Anthropic: Claude Sonnet 4.5"
+  },
+  "deepseek/deepseek-v3.2-exp": {
+    "context": 163840,
+    "output": null,
+    "name": "DeepSeek: DeepSeek V3.2 Exp"
+  },
+  "thedrummer/cydonia-24b-v4.1": {
+    "context": 131072,
+    "output": 131072,
+    "name": "TheDrummer: Cydonia 24B V4.1"
+  },
+  "relace/relace-apply-3": {
+    "context": 256000,
+    "output": 128000,
+    "name": "Relace: Relace Apply 3"
+  },
+  "google/gemini-2.5-flash-preview-09-2025": {
+    "context": 1048576,
+    "output": 65536,
+    "name": "Google: Gemini 2.5 Flash Preview 09-2025"
+  },
+  "google/gemini-2.5-flash-lite-preview-09-2025": {
+    "context": 1048576,
+    "output": 65536,
+    "name": "Google: Gemini 2.5 Flash Lite Preview 09-2025"
+  },
+  "qwen/qwen3-vl-235b-a22b-thinking": {
+    "context": 262144,
+    "output": 262144,
+    "name": "Qwen: Qwen3 VL 235B A22B Thinking"
+  },
+  "qwen/qwen3-vl-235b-a22b-instruct": {
+    "context": 131072,
+    "output": 32768,
+    "name": "Qwen: Qwen3 VL 235B A22B Instruct"
+  },
+  "qwen/qwen3-max": {
+    "context": 256000,
+    "output": 32768,
+    "name": "Qwen: Qwen3 Max"
+  },
+  "qwen/qwen3-coder-plus": {
+    "context": 128000,
+    "output": 65536,
+    "name": "Qwen: Qwen3 Coder Plus"
+  },
+  "openai/gpt-5-codex": {
+    "context": 400000,
+    "output": 128000,
+    "name": "OpenAI: GPT-5 Codex"
+  },
+  "deepseek/deepseek-v3.1-terminus": {
+    "context": 163840,
+    "output": 163840,
+    "name": "DeepSeek: DeepSeek V3.1 Terminus"
+  },
+  "deepseek/deepseek-v3.1-terminus:exacto": {
+    "context": 131072,
+    "output": 65536,
+    "name": "DeepSeek: DeepSeek V3.1 Terminus (exacto)"
+  },
+  "x-ai/grok-4-fast": {
+    "context": 2000000,
+    "output": 30000,
+    "name": "xAI: Grok 4 Fast"
+  },
+  "alibaba/tongyi-deepresearch-30b-a3b:free": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Tongyi DeepResearch 30B A3B (free)"
+  },
+  "alibaba/tongyi-deepresearch-30b-a3b": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Tongyi DeepResearch 30B A3B"
+  },
+  "qwen/qwen3-coder-flash": {
+    "context": 128000,
+    "output": 65536,
+    "name": "Qwen: Qwen3 Coder Flash"
+  },
+  "arcee-ai/afm-4.5b": {
+    "context": 65536,
+    "output": null,
+    "name": "Arcee AI: AFM 4.5B"
+  },
+  "opengvlab/internvl3-78b": {
+    "context": 32768,
+    "output": 32768,
+    "name": "OpenGVLab: InternVL3 78B"
+  },
+  "qwen/qwen3-next-80b-a3b-thinking": {
+    "context": 262144,
+    "output": 262144,
+    "name": "Qwen: Qwen3 Next 80B A3B Thinking"
+  },
+  "qwen/qwen3-next-80b-a3b-instruct": {
+    "context": 262144,
+    "output": 262144,
+    "name": "Qwen: Qwen3 Next 80B A3B Instruct"
+  },
+  "meituan/longcat-flash-chat:free": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Meituan: LongCat Flash Chat (free)"
+  },
+  "meituan/longcat-flash-chat": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Meituan: LongCat Flash Chat"
+  },
+  "qwen/qwen-plus-2025-07-28": {
+    "context": 1000000,
+    "output": 32768,
+    "name": "Qwen: Qwen Plus 0728"
+  },
+  "qwen/qwen-plus-2025-07-28:thinking": {
+    "context": 1000000,
+    "output": 32768,
+    "name": "Qwen: Qwen Plus 0728 (thinking)"
+  },
+  "nvidia/nemotron-nano-9b-v2:free": {
+    "context": 128000,
+    "output": null,
+    "name": "NVIDIA: Nemotron Nano 9B V2 (free)"
+  },
+  "nvidia/nemotron-nano-9b-v2": {
+    "context": 131072,
+    "output": null,
+    "name": "NVIDIA: Nemotron Nano 9B V2"
+  },
+  "moonshotai/kimi-k2-0905": {
+    "context": 262144,
+    "output": 262144,
+    "name": "MoonshotAI: Kimi K2 0905"
+  },
+  "moonshotai/kimi-k2-0905:exacto": {
+    "context": 262144,
+    "output": null,
+    "name": "MoonshotAI: Kimi K2 0905 (exacto)"
+  },
+  "deepcogito/cogito-v2-preview-llama-70b": {
+    "context": 32768,
+    "output": null,
+    "name": "Deep Cogito: Cogito V2 Preview Llama 70B"
+  },
+  "deepcogito/cogito-v2-preview-llama-109b-moe": {
+    "context": 32767,
+    "output": null,
+    "name": "Cogito V2 Preview Llama 109B"
+  },
+  "deepcogito/cogito-v2-preview-deepseek-671b": {
+    "context": 163840,
+    "output": null,
+    "name": "Deep Cogito: Cogito V2 Preview Deepseek 671B"
+  },
+  "stepfun-ai/step3": {
+    "context": 65536,
+    "output": 65536,
+    "name": "StepFun: Step3"
+  },
+  "qwen/qwen3-30b-a3b-thinking-2507": {
+    "context": 32768,
+    "output": null,
+    "name": "Qwen: Qwen3 30B A3B Thinking 2507"
+  },
+  "x-ai/grok-code-fast-1": {
+    "context": 256000,
+    "output": 10000,
+    "name": "xAI: Grok Code Fast 1"
+  },
+  "nousresearch/hermes-4-70b": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Nous: Hermes 4 70B"
+  },
+  "nousresearch/hermes-4-405b": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Nous: Hermes 4 405B"
+  },
+  "google/gemini-2.5-flash-image-preview": {
+    "context": 32768,
+    "output": 32768,
+    "name": "Google: Gemini 2.5 Flash Image Preview (Nano Banana)"
+  },
+  "deepseek/deepseek-chat-v3.1": {
+    "context": 163840,
+    "output": 163840,
+    "name": "DeepSeek: DeepSeek V3.1"
+  },
+  "openai/gpt-4o-audio-preview": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: GPT-4o Audio"
+  },
+  "mistralai/mistral-medium-3.1": {
+    "context": 131072,
+    "output": null,
+    "name": "Mistral: Mistral Medium 3.1"
+  },
+  "baidu/ernie-4.5-21b-a3b": {
+    "context": 120000,
+    "output": 8000,
+    "name": "Baidu: ERNIE 4.5 21B A3B"
+  },
+  "baidu/ernie-4.5-vl-28b-a3b": {
+    "context": 30000,
+    "output": 8000,
+    "name": "Baidu: ERNIE 4.5 VL 28B A3B"
+  },
+  "z-ai/glm-4.5v": {
+    "context": 65536,
+    "output": 16384,
+    "name": "Z.AI: GLM 4.5V"
+  },
+  "ai21/jamba-mini-1.7": {
+    "context": 256000,
+    "output": 4096,
+    "name": "AI21: Jamba Mini 1.7"
+  },
+  "ai21/jamba-large-1.7": {
+    "context": 256000,
+    "output": 4096,
+    "name": "AI21: Jamba Large 1.7"
+  },
+  "openai/gpt-5-chat": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: GPT-5 Chat"
+  },
+  "openai/gpt-5": {
+    "context": 400000,
+    "output": 128000,
+    "name": "OpenAI: GPT-5"
+  },
+  "openai/gpt-5-mini": {
+    "context": 400000,
+    "output": 128000,
+    "name": "OpenAI: GPT-5 Mini"
+  },
+  "openai/gpt-5-nano": {
+    "context": 400000,
+    "output": 128000,
+    "name": "OpenAI: GPT-5 Nano"
+  },
+  "openai/gpt-oss-120b": {
+    "context": 131072,
+    "output": 131072,
+    "name": "OpenAI: gpt-oss-120b"
+  },
+  "openai/gpt-oss-120b:exacto": {
+    "context": 131072,
+    "output": null,
+    "name": "OpenAI: gpt-oss-120b (exacto)"
+  },
+  "openai/gpt-oss-20b:free": {
+    "context": 131072,
+    "output": 131072,
+    "name": "OpenAI: gpt-oss-20b (free)"
+  },
+  "openai/gpt-oss-20b": {
+    "context": 131072,
+    "output": null,
+    "name": "OpenAI: gpt-oss-20b"
+  },
+  "anthropic/claude-opus-4.1": {
+    "context": 200000,
+    "output": 32000,
+    "name": "Anthropic: Claude Opus 4.1"
+  },
+  "mistralai/codestral-2508": {
+    "context": 256000,
+    "output": null,
+    "name": "Mistral: Codestral 2508"
+  },
+  "qwen/qwen3-coder-30b-a3b-instruct": {
+    "context": 262144,
+    "output": 262144,
+    "name": "Qwen: Qwen3 Coder 30B A3B Instruct"
+  },
+  "qwen/qwen3-30b-a3b-instruct-2507": {
+    "context": 262144,
+    "output": 262144,
+    "name": "Qwen: Qwen3 30B A3B Instruct 2507"
+  },
+  "z-ai/glm-4.5": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Z.AI: GLM 4.5"
+  },
+  "z-ai/glm-4.5-air:free": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Z.AI: GLM 4.5 Air (free)"
+  },
+  "z-ai/glm-4.5-air": {
+    "context": 131072,
+    "output": 98304,
+    "name": "Z.AI: GLM 4.5 Air"
+  },
+  "qwen/qwen3-235b-a22b-thinking-2507": {
+    "context": 262144,
+    "output": 262144,
+    "name": "Qwen: Qwen3 235B A22B Thinking 2507"
+  },
+  "z-ai/glm-4-32b": {
+    "context": 128000,
+    "output": null,
+    "name": "Z.AI: GLM 4 32B "
+  },
+  "qwen/qwen3-coder:free": {
+    "context": 262000,
+    "output": 262000,
+    "name": "Qwen: Qwen3 Coder 480B A35B (free)"
+  },
+  "qwen/qwen3-coder": {
+    "context": 262144,
+    "output": 262144,
+    "name": "Qwen: Qwen3 Coder 480B A35B"
+  },
+  "qwen/qwen3-coder:exacto": {
+    "context": 262144,
+    "output": 262144,
+    "name": "Qwen: Qwen3 Coder 480B A35B (exacto)"
+  },
+  "bytedance/ui-tars-1.5-7b": {
+    "context": 128000,
+    "output": 2048,
+    "name": "ByteDance: UI-TARS 7B "
+  },
+  "google/gemini-2.5-flash-lite": {
+    "context": 1048576,
+    "output": 65535,
+    "name": "Google: Gemini 2.5 Flash Lite"
+  },
+  "qwen/qwen3-235b-a22b-2507": {
+    "context": 262144,
+    "output": 262144,
+    "name": "Qwen: Qwen3 235B A22B Instruct 2507"
+  },
+  "switchpoint/router": {
+    "context": 131072,
+    "output": null,
+    "name": "Switchpoint Router"
+  },
+  "moonshotai/kimi-k2:free": {
+    "context": 32768,
+    "output": null,
+    "name": "MoonshotAI: Kimi K2 0711 (free)"
+  },
+  "moonshotai/kimi-k2": {
+    "context": 131072,
+    "output": null,
+    "name": "MoonshotAI: Kimi K2 0711"
+  },
+  "thudm/glm-4.1v-9b-thinking": {
+    "context": 65536,
+    "output": 8000,
+    "name": "THUDM: GLM 4.1V 9B Thinking"
+  },
+  "mistralai/devstral-medium": {
+    "context": 131072,
+    "output": null,
+    "name": "Mistral: Devstral Medium"
+  },
+  "mistralai/devstral-small": {
+    "context": 128000,
+    "output": null,
+    "name": "Mistral: Devstral Small 1.1"
+  },
+  "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {
+    "context": 32768,
+    "output": null,
+    "name": "Venice: Uncensored (free)"
+  },
+  "x-ai/grok-4": {
+    "context": 256000,
+    "output": null,
+    "name": "xAI: Grok 4"
+  },
+  "google/gemma-3n-e2b-it:free": {
+    "context": 8192,
+    "output": 2048,
+    "name": "Google: Gemma 3n 2B (free)"
+  },
+  "tencent/hunyuan-a13b-instruct": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Tencent: Hunyuan A13B Instruct"
+  },
+  "tngtech/deepseek-r1t2-chimera:free": {
+    "context": 163840,
+    "output": null,
+    "name": "TNG: DeepSeek R1T2 Chimera (free)"
+  },
+  "tngtech/deepseek-r1t2-chimera": {
+    "context": 163840,
+    "output": 163840,
+    "name": "TNG: DeepSeek R1T2 Chimera"
+  },
+  "morph/morph-v3-large": {
+    "context": 262144,
+    "output": 131072,
+    "name": "Morph: Morph V3 Large"
+  },
+  "morph/morph-v3-fast": {
+    "context": 81920,
+    "output": 38000,
+    "name": "Morph: Morph V3 Fast"
+  },
+  "baidu/ernie-4.5-vl-424b-a47b": {
+    "context": 123000,
+    "output": 16000,
+    "name": "Baidu: ERNIE 4.5 VL 424B A47B "
+  },
+  "baidu/ernie-4.5-300b-a47b": {
+    "context": 123000,
+    "output": 12000,
+    "name": "Baidu: ERNIE 4.5 300B A47B "
+  },
+  "thedrummer/anubis-70b-v1.1": {
+    "context": 131072,
+    "output": 131072,
+    "name": "TheDrummer: Anubis 70B V1.1"
+  },
+  "inception/mercury": {
+    "context": 128000,
+    "output": 16384,
+    "name": "Inception: Mercury"
+  },
+  "mistralai/mistral-small-3.2-24b-instruct:free": {
+    "context": 131072,
+    "output": null,
+    "name": "Mistral: Mistral Small 3.2 24B (free)"
+  },
+  "mistralai/mistral-small-3.2-24b-instruct": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Mistral: Mistral Small 3.2 24B"
+  },
+  "minimax/minimax-m1": {
+    "context": 1000000,
+    "output": 40000,
+    "name": "MiniMax: MiniMax M1"
+  },
+  "google/gemini-2.5-flash": {
+    "context": 1048576,
+    "output": 65535,
+    "name": "Google: Gemini 2.5 Flash"
+  },
+  "google/gemini-2.5-pro": {
+    "context": 1048576,
+    "output": 65536,
+    "name": "Google: Gemini 2.5 Pro"
+  },
+  "moonshotai/kimi-dev-72b": {
+    "context": 131072,
+    "output": 131072,
+    "name": "MoonshotAI: Kimi Dev 72B"
+  },
+  "openai/o3-pro": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: o3 Pro"
+  },
+  "x-ai/grok-3-mini": {
+    "context": 131072,
+    "output": null,
+    "name": "xAI: Grok 3 Mini"
+  },
+  "x-ai/grok-3": {
+    "context": 131072,
+    "output": null,
+    "name": "xAI: Grok 3"
+  },
+  "mistralai/magistral-small-2506": {
+    "context": 40000,
+    "output": 40000,
+    "name": "Mistral: Magistral Small 2506"
+  },
+  "mistralai/magistral-medium-2506:thinking": {
+    "context": 40960,
+    "output": 40000,
+    "name": "Mistral: Magistral Medium 2506 (thinking)"
+  },
+  "mistralai/magistral-medium-2506": {
+    "context": 40960,
+    "output": 40000,
+    "name": "Mistral: Magistral Medium 2506"
+  },
+  "google/gemini-2.5-pro-preview": {
+    "context": 1048576,
+    "output": 65536,
+    "name": "Google: Gemini 2.5 Pro Preview 06-05"
+  },
+  "deepseek/deepseek-r1-0528-qwen3-8b:free": {
+    "context": 131072,
+    "output": null,
+    "name": "DeepSeek: DeepSeek R1 0528 Qwen3 8B (free)"
+  },
+  "deepseek/deepseek-r1-0528-qwen3-8b": {
+    "context": 32768,
+    "output": 32768,
+    "name": "DeepSeek: DeepSeek R1 0528 Qwen3 8B"
+  },
+  "deepseek/deepseek-r1-0528:free": {
+    "context": 163840,
+    "output": null,
+    "name": "DeepSeek: R1 0528 (free)"
+  },
+  "deepseek/deepseek-r1-0528": {
+    "context": 163840,
+    "output": 163840,
+    "name": "DeepSeek: R1 0528"
+  },
+  "anthropic/claude-opus-4": {
+    "context": 200000,
+    "output": 32000,
+    "name": "Anthropic: Claude Opus 4"
+  },
+  "anthropic/claude-sonnet-4": {
+    "context": 1000000,
+    "output": 64000,
+    "name": "Anthropic: Claude Sonnet 4"
+  },
+  "mistralai/devstral-small-2505": {
+    "context": 128000,
+    "output": null,
+    "name": "Mistral: Devstral Small 2505"
+  },
+  "google/gemma-3n-e4b-it:free": {
+    "context": 8192,
+    "output": 2048,
+    "name": "Google: Gemma 3n 4B (free)"
+  },
+  "google/gemma-3n-e4b-it": {
+    "context": 32768,
+    "output": null,
+    "name": "Google: Gemma 3n 4B"
+  },
+  "openai/codex-mini": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: Codex Mini"
+  },
+  "nousresearch/deephermes-3-mistral-24b-preview": {
+    "context": 32768,
+    "output": 32768,
+    "name": "Nous: DeepHermes 3 Mistral 24B Preview"
+  },
+  "mistralai/mistral-medium-3": {
+    "context": 131072,
+    "output": null,
+    "name": "Mistral: Mistral Medium 3"
+  },
+  "google/gemini-2.5-pro-preview-05-06": {
+    "context": 1048576,
+    "output": 65535,
+    "name": "Google: Gemini 2.5 Pro Preview 05-06"
+  },
+  "arcee-ai/spotlight": {
+    "context": 131072,
+    "output": 65537,
+    "name": "Arcee AI: Spotlight"
+  },
+  "arcee-ai/maestro-reasoning": {
+    "context": 131072,
+    "output": 32000,
+    "name": "Arcee AI: Maestro Reasoning"
+  },
+  "arcee-ai/virtuoso-large": {
+    "context": 131072,
+    "output": 64000,
+    "name": "Arcee AI: Virtuoso Large"
+  },
+  "arcee-ai/coder-large": {
+    "context": 32768,
+    "output": null,
+    "name": "Arcee AI: Coder Large"
+  },
+  "microsoft/phi-4-reasoning-plus": {
+    "context": 32768,
+    "output": null,
+    "name": "Microsoft: Phi 4 Reasoning Plus"
+  },
+  "inception/mercury-coder": {
+    "context": 128000,
+    "output": 16384,
+    "name": "Inception: Mercury Coder"
+  },
+  "qwen/qwen3-4b:free": {
+    "context": 40960,
+    "output": null,
+    "name": "Qwen: Qwen3 4B (free)"
+  },
+  "deepseek/deepseek-prover-v2": {
+    "context": 163840,
+    "output": null,
+    "name": "DeepSeek: DeepSeek Prover V2"
+  },
+  "meta-llama/llama-guard-4-12b": {
+    "context": 163840,
+    "output": null,
+    "name": "Meta: Llama Guard 4 12B"
+  },
+  "qwen/qwen3-30b-a3b:free": {
+    "context": 40960,
+    "output": null,
+    "name": "Qwen: Qwen3 30B A3B (free)"
+  },
+  "qwen/qwen3-30b-a3b": {
+    "context": 40960,
+    "output": 40960,
+    "name": "Qwen: Qwen3 30B A3B"
+  },
+  "qwen/qwen3-8b": {
+    "context": 128000,
+    "output": 20000,
+    "name": "Qwen: Qwen3 8B"
+  },
+  "qwen/qwen3-14b:free": {
+    "context": 40960,
+    "output": null,
+    "name": "Qwen: Qwen3 14B (free)"
+  },
+  "qwen/qwen3-14b": {
+    "context": 40960,
+    "output": 40960,
+    "name": "Qwen: Qwen3 14B"
+  },
+  "qwen/qwen3-32b": {
+    "context": 40960,
+    "output": 40960,
+    "name": "Qwen: Qwen3 32B"
+  },
+  "qwen/qwen3-235b-a22b:free": {
+    "context": 40960,
+    "output": null,
+    "name": "Qwen: Qwen3 235B A22B (free)"
+  },
+  "qwen/qwen3-235b-a22b": {
+    "context": 40960,
+    "output": 40960,
+    "name": "Qwen: Qwen3 235B A22B"
+  },
+  "tngtech/deepseek-r1t-chimera:free": {
+    "context": 163840,
+    "output": null,
+    "name": "TNG: DeepSeek R1T Chimera (free)"
+  },
+  "tngtech/deepseek-r1t-chimera": {
+    "context": 163840,
+    "output": 163840,
+    "name": "TNG: DeepSeek R1T Chimera"
+  },
+  "microsoft/mai-ds-r1:free": {
+    "context": 163840,
+    "output": null,
+    "name": "Microsoft: MAI DS R1 (free)"
+  },
+  "microsoft/mai-ds-r1": {
+    "context": 163840,
+    "output": 163840,
+    "name": "Microsoft: MAI DS R1"
+  },
+  "openai/o4-mini-high": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: o4 Mini High"
+  },
+  "openai/o3": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: o3"
+  },
+  "openai/o4-mini": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: o4 Mini"
+  },
+  "qwen/qwen2.5-coder-7b-instruct": {
+    "context": 32768,
+    "output": null,
+    "name": "Qwen: Qwen2.5 Coder 7B Instruct"
+  },
+  "openai/gpt-4.1": {
+    "context": 1047576,
+    "output": 32768,
+    "name": "OpenAI: GPT-4.1"
+  },
+  "openai/gpt-4.1-mini": {
+    "context": 1047576,
+    "output": 32768,
+    "name": "OpenAI: GPT-4.1 Mini"
+  },
+  "openai/gpt-4.1-nano": {
+    "context": 1047576,
+    "output": 32768,
+    "name": "OpenAI: GPT-4.1 Nano"
+  },
+  "eleutherai/llemma_7b": {
+    "context": 4096,
+    "output": 4096,
+    "name": "EleutherAI: Llemma 7b"
+  },
+  "alfredpros/codellama-7b-instruct-solidity": {
+    "context": 4096,
+    "output": 4096,
+    "name": "AlfredPros: CodeLLaMa 7B Instruct Solidity"
+  },
+  "arliai/qwq-32b-arliai-rpr-v1:free": {
+    "context": 32768,
+    "output": null,
+    "name": "ArliAI: QwQ 32B RpR v1 (free)"
+  },
+  "arliai/qwq-32b-arliai-rpr-v1": {
+    "context": 32768,
+    "output": 32768,
+    "name": "ArliAI: QwQ 32B RpR v1"
+  },
+  "x-ai/grok-3-mini-beta": {
+    "context": 131072,
+    "output": null,
+    "name": "xAI: Grok 3 Mini Beta"
+  },
+  "x-ai/grok-3-beta": {
+    "context": 131072,
+    "output": null,
+    "name": "xAI: Grok 3 Beta"
+  },
+  "nvidia/llama-3.1-nemotron-ultra-253b-v1": {
+    "context": 131072,
+    "output": null,
+    "name": "NVIDIA: Llama 3.1 Nemotron Ultra 253B v1"
+  },
+  "meta-llama/llama-4-maverick": {
+    "context": 1048576,
+    "output": 16384,
+    "name": "Meta: Llama 4 Maverick"
+  },
+  "meta-llama/llama-4-scout": {
+    "context": 327680,
+    "output": 16384,
+    "name": "Meta: Llama 4 Scout"
+  },
+  "qwen/qwen2.5-vl-32b-instruct:free": {
+    "context": 16384,
+    "output": null,
+    "name": "Qwen: Qwen2.5 VL 32B Instruct (free)"
+  },
+  "qwen/qwen2.5-vl-32b-instruct": {
+    "context": 16384,
+    "output": 16384,
+    "name": "Qwen: Qwen2.5 VL 32B Instruct"
+  },
+  "deepseek/deepseek-chat-v3-0324:free": {
+    "context": 163840,
+    "output": null,
+    "name": "DeepSeek: DeepSeek V3 0324 (free)"
+  },
+  "deepseek/deepseek-chat-v3-0324": {
+    "context": 163840,
+    "output": 163840,
+    "name": "DeepSeek: DeepSeek V3 0324"
+  },
+  "openai/o1-pro": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: o1-pro"
+  },
+  "mistralai/mistral-small-3.1-24b-instruct:free": {
+    "context": 96000,
+    "output": 96000,
+    "name": "Mistral: Mistral Small 3.1 24B (free)"
+  },
+  "mistralai/mistral-small-3.1-24b-instruct": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Mistral: Mistral Small 3.1 24B"
+  },
+  "allenai/olmo-2-0325-32b-instruct": {
+    "context": 4096,
+    "output": 4096,
+    "name": "AllenAI: Olmo 2 32B Instruct"
+  },
+  "google/gemma-3-4b-it:free": {
+    "context": 32768,
+    "output": 8192,
+    "name": "Google: Gemma 3 4B (free)"
+  },
+  "google/gemma-3-4b-it": {
+    "context": 96000,
+    "output": null,
+    "name": "Google: Gemma 3 4B"
+  },
+  "google/gemma-3-12b-it:free": {
+    "context": 32768,
+    "output": 8192,
+    "name": "Google: Gemma 3 12B (free)"
+  },
+  "google/gemma-3-12b-it": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Google: Gemma 3 12B"
+  },
+  "cohere/command-a": {
+    "context": 256000,
+    "output": 8192,
+    "name": "Cohere: Command A"
+  },
+  "openai/gpt-4o-mini-search-preview": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: GPT-4o-mini Search Preview"
+  },
+  "openai/gpt-4o-search-preview": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: GPT-4o Search Preview"
+  },
+  "google/gemma-3-27b-it:free": {
+    "context": 131072,
+    "output": null,
+    "name": "Google: Gemma 3 27B (free)"
+  },
+  "google/gemma-3-27b-it": {
+    "context": 131072,
+    "output": 131072,
+    "name": "Google: Gemma 3 27B"
+  },
+  "thedrummer/skyfall-36b-v2": {
+    "context": 32768,
+    "output": 32768,
+    "name": "TheDrummer: Skyfall 36B V2"
+  },
+  "microsoft/phi-4-multimodal-instruct": {
+    "context": 131072,
+    "output": null,
+    "name": "Microsoft: Phi 4 Multimodal Instruct"
+  },
+  "perplexity/sonar-reasoning-pro": {
+    "context": 128000,
+    "output": null,
+    "name": "Perplexity: Sonar Reasoning Pro"
+  },
+  "perplexity/sonar-pro": {
+    "context": 200000,
+    "output": 8000,
+    "name": "Perplexity: Sonar Pro"
+  },
+  "perplexity/sonar-deep-research": {
+    "context": 128000,
+    "output": null,
+    "name": "Perplexity: Sonar Deep Research"
+  },
+  "qwen/qwq-32b": {
+    "context": 32768,
+    "output": null,
+    "name": "Qwen: QwQ 32B"
+  },
+  "google/gemini-2.0-flash-lite-001": {
+    "context": 1048576,
+    "output": 8192,
+    "name": "Google: Gemini 2.0 Flash Lite"
+  },
+  "anthropic/claude-3.7-sonnet:thinking": {
+    "context": 200000,
+    "output": 64000,
+    "name": "Anthropic: Claude 3.7 Sonnet (thinking)"
+  },
+  "anthropic/claude-3.7-sonnet": {
+    "context": 200000,
+    "output": 64000,
+    "name": "Anthropic: Claude 3.7 Sonnet"
+  },
+  "mistralai/mistral-saba": {
+    "context": 32768,
+    "output": null,
+    "name": "Mistral: Saba"
+  },
+  "meta-llama/llama-guard-3-8b": {
+    "context": 131072,
+    "output": null,
+    "name": "Llama Guard 3 8B"
+  },
+  "openai/o3-mini-high": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: o3 Mini High"
+  },
+  "google/gemini-2.0-flash-001": {
+    "context": 1048576,
+    "output": 8192,
+    "name": "Google: Gemini 2.0 Flash"
+  },
+  "qwen/qwen-vl-plus": {
+    "context": 7500,
+    "output": 1500,
+    "name": "Qwen: Qwen VL Plus"
+  },
+  "aion-labs/aion-1.0": {
+    "context": 131072,
+    "output": 32768,
+    "name": "AionLabs: Aion-1.0"
+  },
+  "aion-labs/aion-1.0-mini": {
+    "context": 131072,
+    "output": 32768,
+    "name": "AionLabs: Aion-1.0-Mini"
+  },
+  "aion-labs/aion-rp-llama-3.1-8b": {
+    "context": 32768,
+    "output": 32768,
+    "name": "AionLabs: Aion-RP 1.0 (8B)"
+  },
+  "qwen/qwen-vl-max": {
+    "context": 131072,
+    "output": 8192,
+    "name": "Qwen: Qwen VL Max"
+  },
+  "qwen/qwen-turbo": {
+    "context": 1000000,
+    "output": 8192,
+    "name": "Qwen: Qwen-Turbo"
+  },
+  "qwen/qwen2.5-vl-72b-instruct": {
+    "context": 32768,
+    "output": 32768,
+    "name": "Qwen: Qwen2.5 VL 72B Instruct"
+  },
+  "qwen/qwen-plus": {
+    "context": 131072,
+    "output": 8192,
+    "name": "Qwen: Qwen-Plus"
+  },
+  "qwen/qwen-max": {
+    "context": 32768,
+    "output": 8192,
+    "name": "Qwen: Qwen-Max "
+  },
+  "openai/o3-mini": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: o3 Mini"
+  },
+  "mistralai/mistral-small-24b-instruct-2501:free": {
+    "context": 32768,
+    "output": null,
+    "name": "Mistral: Mistral Small 3 (free)"
+  },
+  "mistralai/mistral-small-24b-instruct-2501": {
+    "context": 32768,
+    "output": 16384,
+    "name": "Mistral: Mistral Small 3"
+  },
+  "deepseek/deepseek-r1-distill-qwen-32b": {
+    "context": 131072,
+    "output": null,
+    "name": "DeepSeek: R1 Distill Qwen 32B"
+  },
+  "deepseek/deepseek-r1-distill-qwen-14b": {
+    "context": 32768,
+    "output": 16384,
+    "name": "DeepSeek: R1 Distill Qwen 14B"
+  },
+  "perplexity/sonar-reasoning": {
+    "context": 127000,
+    "output": null,
+    "name": "Perplexity: Sonar Reasoning"
+  },
+  "perplexity/sonar": {
+    "context": 127072,
+    "output": null,
+    "name": "Perplexity: Sonar"
+  },
+  "deepseek/deepseek-r1-distill-llama-70b:free": {
+    "context": 8192,
+    "output": 4096,
+    "name": "DeepSeek: R1 Distill Llama 70B (free)"
+  },
+  "deepseek/deepseek-r1-distill-llama-70b": {
+    "context": 131072,
+    "output": 131072,
+    "name": "DeepSeek: R1 Distill Llama 70B"
+  },
+  "deepseek/deepseek-r1:free": {
+    "context": 163840,
+    "output": null,
+    "name": "DeepSeek: R1 (free)"
+  },
+  "deepseek/deepseek-r1": {
+    "context": 163840,
+    "output": null,
+    "name": "DeepSeek: R1"
+  },
+  "minimax/minimax-01": {
+    "context": 1000192,
+    "output": 1000192,
+    "name": "MiniMax: MiniMax-01"
+  },
+  "mistralai/codestral-2501": {
+    "context": 256000,
+    "output": null,
+    "name": "Mistral: Codestral 2501"
+  },
+  "microsoft/phi-4": {
+    "context": 16384,
+    "output": null,
+    "name": "Microsoft: Phi 4"
+  },
+  "sao10k/l3.1-70b-hanami-x1": {
+    "context": 16000,
+    "output": null,
+    "name": "Sao10K: Llama 3.1 70B Hanami x1"
+  },
+  "deepseek/deepseek-chat": {
+    "context": 163840,
+    "output": 163840,
+    "name": "DeepSeek: DeepSeek V3"
+  },
+  "sao10k/l3.3-euryale-70b": {
+    "context": 131072,
+    "output": 16384,
+    "name": "Sao10K: Llama 3.3 Euryale 70B"
+  },
+  "openai/o1": {
+    "context": 200000,
+    "output": 100000,
+    "name": "OpenAI: o1"
+  },
+  "cohere/command-r7b-12-2024": {
+    "context": 128000,
+    "output": 4000,
+    "name": "Cohere: Command R7B (12-2024)"
+  },
+  "google/gemini-2.0-flash-exp:free": {
+    "context": 1048576,
+    "output": 8192,
+    "name": "Google: Gemini 2.0 Flash Experimental (free)"
+  },
+  "meta-llama/llama-3.3-70b-instruct:free": {
+    "context": 131072,
+    "output": null,
+    "name": "Meta: Llama 3.3 70B Instruct (free)"
+  },
+  "meta-llama/llama-3.3-70b-instruct": {
+    "context": 131072,
+    "output": 16384,
+    "name": "Meta: Llama 3.3 70B Instruct"
+  },
+  "amazon/nova-lite-v1": {
+    "context": 300000,
+    "output": 5120,
+    "name": "Amazon: Nova Lite 1.0"
+  },
+  "amazon/nova-micro-v1": {
+    "context": 128000,
+    "output": 5120,
+    "name": "Amazon: Nova Micro 1.0"
+  },
+  "amazon/nova-pro-v1": {
+    "context": 300000,
+    "output": 5120,
+    "name": "Amazon: Nova Pro 1.0"
+  },
+  "openai/gpt-4o-2024-11-20": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: GPT-4o (2024-11-20)"
+  },
+  "mistralai/mistral-large-2411": {
+    "context": 131072,
+    "output": null,
+    "name": "Mistral Large 2411"
+  },
+  "mistralai/mistral-large-2407": {
+    "context": 131072,
+    "output": null,
+    "name": "Mistral Large 2407"
+  },
+  "mistralai/pixtral-large-2411": {
+    "context": 131072,
+    "output": null,
+    "name": "Mistral: Pixtral Large 2411"
+  },
+  "qwen/qwen-2.5-coder-32b-instruct:free": {
+    "context": 32768,
+    "output": null,
+    "name": "Qwen2.5 Coder 32B Instruct (free)"
+  },
+  "qwen/qwen-2.5-coder-32b-instruct": {
+    "context": 32768,
+    "output": 32768,
+    "name": "Qwen2.5 Coder 32B Instruct"
+  },
+  "raifle/sorcererlm-8x22b": {
+    "context": 16000,
+    "output": null,
+    "name": "SorcererLM 8x22B"
+  },
+  "thedrummer/unslopnemo-12b": {
+    "context": 32768,
+    "output": null,
+    "name": "TheDrummer: UnslopNemo 12B"
+  },
+  "anthropic/claude-3.5-haiku-20241022": {
+    "context": 200000,
+    "output": 8192,
+    "name": "Anthropic: Claude 3.5 Haiku (2024-10-22)"
+  },
+  "anthropic/claude-3.5-haiku": {
+    "context": 200000,
+    "output": 8192,
+    "name": "Anthropic: Claude 3.5 Haiku"
+  },
+  "anthropic/claude-3.5-sonnet": {
+    "context": 200000,
+    "output": 8192,
+    "name": "Anthropic: Claude 3.5 Sonnet"
+  },
+  "anthracite-org/magnum-v4-72b": {
+    "context": 16384,
+    "output": 2048,
+    "name": "Magnum v4 72B"
+  },
+  "mistralai/ministral-8b": {
+    "context": 131072,
+    "output": null,
+    "name": "Mistral: Ministral 8B"
+  },
+  "mistralai/ministral-3b": {
+    "context": 131072,
+    "output": null,
+    "name": "Mistral: Ministral 3B"
+  },
+  "qwen/qwen-2.5-7b-instruct": {
+    "context": 32768,
+    "output": null,
+    "name": "Qwen: Qwen2.5 7B Instruct"
+  },
+  "nvidia/llama-3.1-nemotron-70b-instruct": {
+    "context": 131072,
+    "output": 16384,
+    "name": "NVIDIA: Llama 3.1 Nemotron 70B Instruct"
+  },
+  "inflection/inflection-3-productivity": {
+    "context": 8000,
+    "output": 1024,
+    "name": "Inflection: Inflection 3 Productivity"
+  },
+  "inflection/inflection-3-pi": {
+    "context": 8000,
+    "output": 1024,
+    "name": "Inflection: Inflection 3 Pi"
+  },
+  "thedrummer/rocinante-12b": {
+    "context": 32768,
+    "output": null,
+    "name": "TheDrummer: Rocinante 12B"
+  },
+  "meta-llama/llama-3.2-11b-vision-instruct": {
+    "context": 131072,
+    "output": 16384,
+    "name": "Meta: Llama 3.2 11B Vision Instruct"
+  },
+  "meta-llama/llama-3.2-90b-vision-instruct": {
+    "context": 32768,
+    "output": 16384,
+    "name": "Meta: Llama 3.2 90B Vision Instruct"
+  },
+  "meta-llama/llama-3.2-1b-instruct": {
+    "context": 60000,
+    "output": null,
+    "name": "Meta: Llama 3.2 1B Instruct"
+  },
+  "meta-llama/llama-3.2-3b-instruct:free": {
+    "context": 131072,
+    "output": null,
+    "name": "Meta: Llama 3.2 3B Instruct (free)"
+  },
+  "meta-llama/llama-3.2-3b-instruct": {
+    "context": 131072,
+    "output": 16384,
+    "name": "Meta: Llama 3.2 3B Instruct"
+  },
+  "qwen/qwen-2.5-72b-instruct:free": {
+    "context": 32768,
+    "output": null,
+    "name": "Qwen2.5 72B Instruct (free)"
+  },
+  "qwen/qwen-2.5-72b-instruct": {
+    "context": 32768,
+    "output": 32768,
+    "name": "Qwen2.5 72B Instruct"
+  },
+  "neversleep/llama-3.1-lumimaid-8b": {
+    "context": 32768,
+    "output": null,
+    "name": "NeverSleep: Lumimaid v0.2 8B"
+  },
+  "mistralai/pixtral-12b": {
+    "context": 32768,
+    "output": null,
+    "name": "Mistral: Pixtral 12B"
+  },
+  "cohere/command-r-08-2024": {
+    "context": 128000,
+    "output": 4000,
+    "name": "Cohere: Command R (08-2024)"
+  },
+  "cohere/command-r-plus-08-2024": {
+    "context": 128000,
+    "output": 4000,
+    "name": "Cohere: Command R+ (08-2024)"
+  },
+  "qwen/qwen-2.5-vl-7b-instruct": {
+    "context": 32768,
+    "output": null,
+    "name": "Qwen: Qwen2.5-VL 7B Instruct"
+  },
+  "sao10k/l3.1-euryale-70b": {
+    "context": 32768,
+    "output": null,
+    "name": "Sao10K: Llama 3.1 Euryale 70B v2.2"
+  },
+  "microsoft/phi-3.5-mini-128k-instruct": {
+    "context": 128000,
+    "output": null,
+    "name": "Microsoft: Phi-3.5 Mini 128K Instruct"
+  },
+  "nousresearch/hermes-3-llama-3.1-70b": {
+    "context": 65536,
+    "output": null,
+    "name": "Nous: Hermes 3 70B Instruct"
+  },
+  "nousresearch/hermes-3-llama-3.1-405b:free": {
+    "context": 131072,
+    "output": null,
+    "name": "Nous: Hermes 3 405B Instruct (free)"
+  },
+  "nousresearch/hermes-3-llama-3.1-405b": {
+    "context": 131072,
+    "output": 16384,
+    "name": "Nous: Hermes 3 405B Instruct"
+  },
+  "openai/chatgpt-4o-latest": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: ChatGPT-4o"
+  },
+  "sao10k/l3-lunaris-8b": {
+    "context": 8192,
+    "output": null,
+    "name": "Sao10K: Llama 3 8B Lunaris"
+  },
+  "openai/gpt-4o-2024-08-06": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: GPT-4o (2024-08-06)"
+  },
+  "meta-llama/llama-3.1-405b": {
+    "context": 32768,
+    "output": 32768,
+    "name": "Meta: Llama 3.1 405B (base)"
+  },
+  "meta-llama/llama-3.1-8b-instruct": {
+    "context": 131072,
+    "output": 16384,
+    "name": "Meta: Llama 3.1 8B Instruct"
+  },
+  "meta-llama/llama-3.1-70b-instruct": {
+    "context": 131072,
+    "output": null,
+    "name": "Meta: Llama 3.1 70B Instruct"
+  },
+  "meta-llama/llama-3.1-405b-instruct": {
+    "context": 130815,
+    "output": null,
+    "name": "Meta: Llama 3.1 405B Instruct"
+  },
+  "mistralai/mistral-nemo:free": {
+    "context": 131072,
+    "output": 128000,
+    "name": "Mistral: Mistral Nemo (free)"
+  },
+  "mistralai/mistral-nemo": {
+    "context": 131072,
+    "output": 16384,
+    "name": "Mistral: Mistral Nemo"
+  },
+  "openai/gpt-4o-mini": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: GPT-4o-mini"
+  },
+  "openai/gpt-4o-mini-2024-07-18": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: GPT-4o-mini (2024-07-18)"
+  },
+  "google/gemma-2-27b-it": {
+    "context": 8192,
+    "output": null,
+    "name": "Google: Gemma 2 27B"
+  },
+  "google/gemma-2-9b-it": {
+    "context": 8192,
+    "output": null,
+    "name": "Google: Gemma 2 9B"
+  },
+  "sao10k/l3-euryale-70b": {
+    "context": 8192,
+    "output": 8192,
+    "name": "Sao10k: Llama 3 Euryale 70B v2.1"
+  },
+  "nousresearch/hermes-2-pro-llama-3-8b": {
+    "context": 8192,
+    "output": 2048,
+    "name": "NousResearch: Hermes 2 Pro - Llama-3 8B"
+  },
+  "mistralai/mistral-7b-instruct-v0.3": {
+    "context": 32768,
+    "output": 4096,
+    "name": "Mistral: Mistral 7B Instruct v0.3"
+  },
+  "mistralai/mistral-7b-instruct:free": {
+    "context": 32768,
+    "output": 16384,
+    "name": "Mistral: Mistral 7B Instruct (free)"
+  },
+  "mistralai/mistral-7b-instruct": {
+    "context": 32768,
+    "output": 16384,
+    "name": "Mistral: Mistral 7B Instruct"
+  },
+  "microsoft/phi-3-mini-128k-instruct": {
+    "context": 128000,
+    "output": null,
+    "name": "Microsoft: Phi-3 Mini 128K Instruct"
+  },
+  "microsoft/phi-3-medium-128k-instruct": {
+    "context": 128000,
+    "output": null,
+    "name": "Microsoft: Phi-3 Medium 128K Instruct"
+  },
+  "openai/gpt-4o": {
+    "context": 128000,
+    "output": 16384,
+    "name": "OpenAI: GPT-4o"
+  },
+  "openai/gpt-4o:extended": {
+    "context": 128000,
+    "output": 64000,
+    "name": "OpenAI: GPT-4o (extended)"
+  },
+  "openai/gpt-4o-2024-05-13": {
+    "context": 128000,
+    "output": 4096,
+    "name": "OpenAI: GPT-4o (2024-05-13)"
+  },
+  "meta-llama/llama-guard-2-8b": {
+    "context": 8192,
+    "output": null,
+    "name": "Meta: LlamaGuard 2 8B"
+  },
+  "meta-llama/llama-3-70b-instruct": {
+    "context": 8192,
+    "output": 16384,
+    "name": "Meta: Llama 3 70B Instruct"
+  },
+  "meta-llama/llama-3-8b-instruct": {
+    "context": 8192,
+    "output": 16384,
+    "name": "Meta: Llama 3 8B Instruct"
+  },
+  "mistralai/mixtral-8x22b-instruct": {
+    "context": 65536,
+    "output": null,
+    "name": "Mistral: Mixtral 8x22B Instruct"
+  },
+  "microsoft/wizardlm-2-8x22b": {
+    "context": 65536,
+    "output": 16384,
+    "name": "WizardLM-2 8x22B"
+  },
+  "openai/gpt-4-turbo": {
+    "context": 128000,
+    "output": 4096,
+    "name": "OpenAI: GPT-4 Turbo"
+  },
+  "anthropic/claude-3-haiku": {
+    "context": 200000,
+    "output": 4096,
+    "name": "Anthropic: Claude 3 Haiku"
+  },
+  "anthropic/claude-3-opus": {
+    "context": 200000,
+    "output": 4096,
+    "name": "Anthropic: Claude 3 Opus"
+  },
+  "mistralai/mistral-large": {
+    "context": 128000,
+    "output": null,
+    "name": "Mistral Large"
+  },
+  "openai/gpt-4-turbo-preview": {
+    "context": 128000,
+    "output": 4096,
+    "name": "OpenAI: GPT-4 Turbo Preview"
+  },
+  "openai/gpt-3.5-turbo-0613": {
+    "context": 4095,
+    "output": 4096,
+    "name": "OpenAI: GPT-3.5 Turbo (older v0613)"
+  },
+  "mistralai/mistral-small": {
+    "context": 32768,
+    "output": null,
+    "name": "Mistral Small"
+  },
+  "mistralai/mistral-tiny": {
+    "context": 32768,
+    "output": null,
+    "name": "Mistral Tiny"
+  },
+  "mistralai/mistral-7b-instruct-v0.2": {
+    "context": 32768,
+    "output": null,
+    "name": "Mistral: Mistral 7B Instruct v0.2"
+  },
+  "mistralai/mixtral-8x7b-instruct": {
+    "context": 32768,
+    "output": 16384,
+    "name": "Mistral: Mixtral 8x7B Instruct"
+  },
+  "neversleep/noromaid-20b": {
+    "context": 4096,
+    "output": null,
+    "name": "Noromaid 20B"
+  },
+  "alpindale/goliath-120b": {
+    "context": 6144,
+    "output": 1024,
+    "name": "Goliath 120B"
+  },
+  "openrouter/auto": {
+    "context": 2000000,
+    "output": null,
+    "name": "Auto Router"
+  },
+  "openai/gpt-4-1106-preview": {
+    "context": 128000,
+    "output": 4096,
+    "name": "OpenAI: GPT-4 Turbo (older v1106)"
+  },
+  "openai/gpt-3.5-turbo-instruct": {
+    "context": 4095,
+    "output": 4096,
+    "name": "OpenAI: GPT-3.5 Turbo Instruct"
+  },
+  "mistralai/mistral-7b-instruct-v0.1": {
+    "context": 2824,
+    "output": null,
+    "name": "Mistral: Mistral 7B Instruct v0.1"
+  },
+  "openai/gpt-3.5-turbo-16k": {
+    "context": 16385,
+    "output": 4096,
+    "name": "OpenAI: GPT-3.5 Turbo 16k"
+  },
+  "mancer/weaver": {
+    "context": 8000,
+    "output": 2000,
+    "name": "Mancer: Weaver (alpha)"
+  },
+  "undi95/remm-slerp-l2-13b": {
+    "context": 6144,
+    "output": null,
+    "name": "ReMM SLERP 13B"
+  },
+  "gryphe/mythomax-l2-13b": {
+    "context": 4096,
+    "output": null,
+    "name": "MythoMax 13B"
+  },
+  "openai/gpt-4-0314": {
+    "context": 8191,
+    "output": 4096,
+    "name": "OpenAI: GPT-4 (older v0314)"
+  },
+  "openai/gpt-3.5-turbo": {
+    "context": 16385,
+    "output": 4096,
+    "name": "OpenAI: GPT-3.5 Turbo"
+  },
+  "openai/gpt-4": {
+    "context": 8191,
+    "output": 4096,
+    "name": "OpenAI: GPT-4"
+  }
+}

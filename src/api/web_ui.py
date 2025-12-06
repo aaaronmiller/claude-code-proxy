@@ -227,8 +227,8 @@ async def list_models():
 async def get_stats():
     """Get proxy statistics"""
     try:
-        # Try to get stats from usage tracker if enabled
-        from src.utils.usage_tracker import usage_tracker
+        # Try to get stats from src.services.models.model_filter import get_available_models
+        from src.services.usage.usage_tracker import usage_tracker
 
         if usage_tracker.enabled:
             # Get today's stats

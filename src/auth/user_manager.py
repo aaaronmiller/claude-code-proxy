@@ -5,6 +5,7 @@ Manages users, API keys, and per-user usage tracking.
 """
 
 import sqlite3
+import os
 import secrets
 import hashlib
 from datetime import datetime, timedelta
@@ -17,12 +18,22 @@ from src.core.logging import logger
 class UserManager:
     """Manages users and API keys for multi-user deployments"""
 
-    def __init__(self, db_path: str = "users.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: str = "data/users.db"):
+        # Resolve absolute path relative to project root if it's a relative path
+        if not os.path.isabs(db_path):
+            # Assuming src/auth/user_manager.py -> src/auth -> src -> root
+            project_root = Path(__file__).parent.parent.parent
+            self.db_path = str(project_root / db_path)
+        else:
+            self.db_path = db_path
+            
         self._init_db()
 
     def _init_db(self):
         """Initialize user database"""
+        # Ensure directory exists
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 

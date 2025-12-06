@@ -5,8 +5,10 @@ import os
 import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
-from src.utils.model_filter import model_filter
-from src.utils.model_limits import get_model_limits
+from src.services.models.model_filter import get_available_models, filter_models, model_filter
+from src.services.models.modes import ModeManager
+from src.services.models.recommender import ModelRecommender
+from src.services.usage.model_limits import get_model_limits
 
 # Try to import readchar for arrow key support
 try:

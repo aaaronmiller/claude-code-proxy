@@ -2,8 +2,8 @@ import re
 import logging
 from typing import Optional, Tuple, Dict, Any
 from src.core.config import config
-from src.utils.model_parser import parse_model_name, ParsedModel
-from src.utils.reasoning_validator import (
+from src.services.models.model_parser import parse_model_name, ParsedModel
+from src.core.reasoning_validator import (
     validate_openai_reasoning,
     validate_anthropic_thinking,
     validate_gemini_thinking,

@@ -1,0 +1,45 @@
+{
+  "models": {
+    "kwaipilot/kat-coder-pro:free": {
+      "count": 1844,
+      "last_used": "2025-11-16T06:46:46.030289",
+      "first_used": "2025-11-16T00:59:54.796086"
+    },
+    "openai/gpt-5.1-codex": {
+      "count": 724,
+      "last_used": "2025-11-18T15:13:30.310808",
+      "first_used": "2025-11-16T01:59:33.601547"
+    },
+    "minimax/minimax-m2": {
+      "count": 1,
+      "last_used": "2025-11-16T02:21:00.159430",
+      "first_used": "2025-11-16T02:21:00.159424"
+    },
+    "openrouter/sherlock-dash-alpha": {
+      "count": 498,
+      "last_used": "2025-11-21T01:46:20.789551",
+      "first_used": "2025-11-16T06:52:44.964381"
+    },
+    "openrouter/sherlock-think-alpha": {
+      "count": 154,
+      "last_used": "2025-11-21T01:46:20.794464",
+      "first_used": "2025-11-16T23:36:18.596005"
+    },
+    "x-ai/grok-4.1-fast:free": {
+      "count": 303,
+      "last_used": "2025-12-01T06:32:02.551715",
+      "first_used": "2025-11-21T01:50:55.211766"
+    },
+    "openai/gpt-4o": {
+      "count": 67,
+      "last_used": "2025-11-21T04:28:15.890059",
+      "first_used": "2025-11-21T03:19:22.434574"
+    },
+    "openai/gpt-4o-mini": {
+      "count": 47,
+      "last_used": "2025-11-21T04:28:21.824065",
+      "first_used": "2025-11-21T04:25:52.603387"
+    }
+  },
+  "last_updated": "2025-12-01T06:32:02.551735"
+}

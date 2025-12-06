@@ -1,0 +1,49 @@
+{
+    "tests": [
+        {
+            "name": "Simple Math",
+            "prompt": "What is 123 + 456? Answer with just the number.",
+            "expected_keywords": [
+                "579"
+            ],
+            "category": "reasoning"
+        },
+        {
+            "name": "Code Generation",
+            "prompt": "Write a Python function to calculate fibonacci number. Include only the code, no explanation.",
+            "expected_keywords": [
+                "def",
+                "fibonacci",
+                "return"
+            ],
+            "category": "coding"
+        },
+        {
+            "name": "Text Summarization",
+            "prompt": "Summarize this in 10 words: Artificial intelligence is transforming how we work and live.",
+            "expected_keywords": [
+                "AI",
+                "transform",
+                "work",
+                "live"
+            ],
+            "category": "nlp"
+        },
+        {
+            "name": "Instruction Following",
+            "prompt": "List exactly 3 colors. Format: 1. [color] 2. [color] 3. [color]",
+            "expected_keywords": [
+                "1.",
+                "2.",
+                "3."
+            ],
+            "category": "instruction"
+        },
+        {
+            "name": "Creative Writing",
+            "prompt": "Write a haiku about coding.",
+            "expected_keywords": [],
+            "category": "creative"
+        }
+    ]
+}

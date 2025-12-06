@@ -9,7 +9,7 @@ from typing import List
 from pathlib import Path
 import json
 
-from src.benchmarking.model_benchmarks import model_benchmarker, BENCHMARK_TESTS
+from src.services.benchmarking.model_benchmarks import model_benchmarker, BENCHMARK_TESTS
 from src.core.logging import logger
 
 router = APIRouter()
