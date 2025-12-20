@@ -32,20 +32,49 @@ def get_terminal_size() -> Tuple[int, int]:
         return 24, 80
 
 
+DEFAULT_MODELS = [
+    # Antigravity (FREE via local token)
+    "antigravity/gemini-3-pro",
+    "antigravity/gemini-3-flash",
+    "antigravity/claude-sonnet-4.5",
+    "antigravity/claude-sonnet-4.5-thinking",
+    "antigravity/claude-opus-4.5",
+    "antigravity/gpt-oss-120b",
+    # OpenAI
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini",
+    # Anthropic
+    "anthropic/claude-3.5-sonnet",
+    "anthropic/claude-3-5-haiku",
+    "anthropic/claude-3-opus",
+    # Google
+    "google/gemini-pro-1.5",
+    "google/gemini-flash-1.5",
+    "google/gemini-exp-1206",
+    # Meta
+    "meta-llama/llama-3.1-405b-instruct",
+    "meta-llama/llama-3.1-70b-instruct",
+    # Others
+    "mistral/mistral-large-2407",
+    "cohere/command-r-plus-08-2024",
+    "qwen/qwen-2.5-72b-instruct"
+]
+
 def load_all_models() -> List[str]:
-    """Load all available models from the scraped database."""
+    """Load all available models from the scraped database or use defaults."""
     models_dir = Path(__file__).parent.parent.parent / "models"
     json_path = models_dir / "model_limits.json"
     
-    if not json_path.exists():
-        return []
-    
-    try:
-        with open(json_path, 'r') as f:
-            data = json.load(f)
-            return sorted(data.keys())
-    except Exception:
-        return []
+    # Try to load from file
+    if json_path.exists():
+        try:
+            with open(json_path, 'r') as f:
+                data = json.load(f)
+                return sorted(data.keys())
+        except Exception:
+            pass # Fallback to defaults
+            
+    return sorted(DEFAULT_MODELS)
 
 
 def format_model_line(idx: int, model_id: str, selected_for: Optional[str] = None) -> str:

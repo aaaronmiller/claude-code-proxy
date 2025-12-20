@@ -1,425 +1,354 @@
 #!/usr/bin/env python3
 """
-Dashboard Configuration Tool
+Dashboard Configuration Tool (TUI Redesign)
 
-Interactive tool to configure API monitoring dashboard modules.
-Shows previews and generates commands for Claude Code and .zshrc integration.
+A slick, grid-based interface to configure the API monitoring dashboard.
+Supports 10 slots: 4 Left, 4 Right, Top, Bottom.
 """
 
-import os
 import sys
-from typing import List, Dict, Tuple
+import os
+import json
 from enum import Enum
+from typing import Dict, List, Optional, Tuple
 
-# Try to import Rich for better UI
+# Try imports
+try:
+    import readchar
+    READCHAR_AVAILABLE = True
+except ImportError:
+    READCHAR_AVAILABLE = False
+
 try:
     from rich.console import Console
     from rich.panel import Panel
-    from rich.columns import Columns
-    from rich.text import Text
-    from rich.prompt import Prompt, Confirm
     from rich.table import Table
     from rich.layout import Layout
+    from rich.text import Text
+    from rich.box import ROUNDED, HEAVY
+    from rich.align import Align
     RICH_AVAILABLE = True
     console = Console()
 except ImportError:
     RICH_AVAILABLE = False
     console = None
 
+# --- Constants ---
 
-class ModuleType(Enum):
-    PERFORMANCE = "performance"
-    ACTIVITY = "activity" 
-    ROUTING = "routing"
-    ANALYTICS = "analytics"
-    WATERFALL = "waterfall"
+class SlotInfo:
+    def __init__(self, id: str, name: str, row: int, col: int, width: int = 30):
+        self.id = id
+        self.name = name
+        self.row = row  # Simple grid coord for nav (0-5)
+        self.col = col  # 0=Left, 1=Center, 2=Right
+        self.width = width
+        self.module: Optional[str] = None
+        self.mode: str = "sparse"
 
-
-class DisplayMode(Enum):
-    DENSE = "dense"
-    SPARSE = "sparse"
-
-
-class DashboardConfigurator:
-    """Interactive dashboard configuration tool."""
+SLOTS = [
+    # Top Center
+    SlotInfo("T1", "Top Bar", 0, 1, width=60),
     
+    # Left Column
+    SlotInfo("L1", "Left 1", 1, 0),
+    SlotInfo("L2", "Left 2", 2, 0),
+    SlotInfo("L3", "Left 3", 3, 0),
+    SlotInfo("L4", "Left 4", 4, 0),
+
+    # Right Column
+    SlotInfo("R1", "Right 1", 1, 2),
+    SlotInfo("R2", "Right 2", 2, 2),
+    SlotInfo("R3", "Right 3", 3, 2),
+    SlotInfo("R4", "Right 4", 4, 2),
+
+    # Bottom Center
+    SlotInfo("B1", "Bottom Bar", 5, 1, width=60),
+]
+
+MODULES = {
+    "performance": {
+        "icon": "⚡",
+        "name": "Performance",
+        "desc": "Real-time latency & tokens",
+        "preview_sparse": "⚡ 15.8s | 82 t/s\n📊 43k ctx | $0.02",
+        "preview_dense": "⚡ 15.8s | 82 tok/s\n📊 CTX: 43.7k/200k\n🧠 Think: 920 tok\n💰 Est: $0.0234"
+    },
+    "activity": {
+        "icon": "📝",
+        "name": "Activity Feed",
+        "desc": "Recent request history",
+        "preview_sparse": "🔵 abc123 → OK\n🟢 def456 → OK",
+        "preview_dense": "🔵 abc123 claude→gpt4\n🟢 def456 gpt4→sonnet\n🔴 ghi789 gemini→ERR\n⚡ Avg: 3.2s"
+    },
+    "routing": {
+        "icon": "🔄",
+        "name": "Routing",
+        "desc": "Model flow visualizer",
+        "preview_sparse": "claude → gpt4o\n43k → 1.3k",
+        "preview_dense": "[Claude]──>[GPT-4o]\n ↓ 43k      ↓ 1.3k\n 🧠 920     ⚡ 82t/s"
+    },
+    "analytics": {
+        "icon": "📈",
+        "name": "Analytics",
+        "desc": "Cost & usage stats",
+        "preview_sparse": "47 req | $12.45\n94% Success",
+        "preview_dense": "Reqs: 47 | $12.45\nAvg: 2.3s | 94% OK\n🏆 Fast: gpt-4o-mini\n🔥 Hot: sonnet"
+    },
+    "waterfall": {
+        "icon": "🌊",
+        "name": "Waterfall",
+        "desc": "Request stages",
+        "preview_sparse": "Parse→Route→Send\nWait→Recv→Done",
+        "preview_dense": "Parse.. 0.1s\nRoute.. 0.2s\nSend... 0.3s\nWait... 14s"
+    },
+    "empty": {
+        "icon": "⚫",
+        "name": "Empty Slot",
+        "desc": "Clear this slot",
+        "preview_sparse": "",
+        "preview_dense": ""
+    }
+}
+
+# --- TUI Class ---
+
+class DashboardTUI:
     def __init__(self):
-        self.selected_modules = []
-        self.module_previews = self._generate_previews()
+        self.cursor_idx = 0  # Index in SLOTS list
+        self.running = True
+        # Pre-fill slots for demo mode (Showcase all modules)
+        self.get_slot("L1").module = "performance"
+        self.get_slot("L1").mode = "dense"
+        self.get_slot("L2").module = "activity"
+        self.get_slot("L3").module = "routing"
+        self.get_slot("L4").module = "analytics"
         
-    def _generate_previews(self) -> Dict[str, Dict[str, str]]:
-        """Generate preview content for each module in both modes."""
-        return {
-            "performance": {
-                "dense": """┌─ API Performance Monitor ─────────────────────────────────────┐
-│ 🔵 Session abc123 | anthropic/claude-3.5-sonnet→openai/gpt-4o │
-│ ⚡ 15.8s | 📊 CTX: ████████░░ 43.7k/200k (22%) | 82 tok/s    │
-│ 🧠 THINK: ███░░░░░░░ 920 tokens | 💰 $0.0234 estimated       │
-│ 📤 OUT: ██░░░░░░░░ 1.3k/16k | 🌊 STREAMING | 3msg + SYS     │
-└───────────────────────────────────────────────────────────────┘""",
-                "sparse": "🔵 abc123 | claude→gpt4o | ⚡15.8s | 📊22% | 🧠920 | 💰$0.02 | 🌊STR"
-            },
-            "activity": {
-                "dense": """┌─ Multi-Session Activity Feed ─────────────────────────────────┐
-│ 🔵 abc123 anthropic/claude-opus→openai/o1-preview | 🧠45k | ⚡3.2s | 💰$1.23 │
-│ 🟢 def456 openai/gpt-4→anthropic/claude-sonnet | 🧠8k | ⚡1.8s | 💰$0.45   │
-│ 🔴 ghi789 google/gemini-pro→ERROR | Rate limit | ⚡0.5s | 💰$0.00        │
-│ 🔵 jkl012 anthropic/claude-haiku→openai/gpt-4o-mini | 🧠2k | ⚡0.9s | 💰$0.12 │
-└─────────────────────────────────────────────────────────────────────────────┘""",
-                "sparse": "🔵abc123→OK 🟢def456→OK 🔴ghi789→ERR 🔵jkl012→OK | 4req 3.2s avg"
-            },
-            "routing": {
-                "dense": """┌─ Model Routing Flow ──────────────────────────────────────────┐
-│                                                               │
-│  [Claude 3.5 Sonnet] ──routing──> [GPT-4o Mini]             │
-│       ↓ 43.7k ctx                    ↓ 1.3k out              │
-│   🧠 Thinking: 920 tokens        ⚡ Speed: 82 tok/s          │
-│   💰 Cost: $0.0234              📊 Efficiency: 94%           │
-│                                                               │
-└───────────────────────────────────────────────────────────────┘""",
-                "sparse": "claude-sonnet→gpt4o-mini | 43.7k→1.3k | 🧠920 | ⚡82t/s | 💰$0.02"
-            },
-            "analytics": {
-                "dense": """┌─ Cost & Performance Analytics (Last Hour) ────────────────────┐
-│ Total Requests: 47 | Avg Response: 2.3s | Success: 94.7%   │
-│ 💰 Total Cost: $12.45 | 🧠 Thinking Tokens: 234k          │
-│ 🏆 Fastest: gpt-4o-mini (0.8s) | 🐌 Slowest: o1-preview (8.2s) │
-│ 📈 Peak Usage: 14:30 (12 req/min) | 🔥 Hot Model: claude-sonnet │
-└─────────────────────────────────────────────────────────────┘""",
-                "sparse": "47req | 2.3s avg | 94.7% ✓ | 💰$12.45 | 🧠234k | 🏆gpt4o-mini | 🔥claude"
-            },
-            "waterfall": {
-                "dense": """┌─ Live Request Waterfall ──────────────────────────────────────┐
-│ 🔵 Request abc123 ────────────────────────────────────────────────  │
-│ ├─ 📝 Parse: claude-3.5-sonnet:8k → gpt-4o-mini        (0.1s) │
-│ ├─ 🔄 Route: openrouter.ai endpoint selection           (0.2s) │
-│ ├─ 🧠 Think: Reasoning budget allocated (8k tokens)     (0.1s) │
-│ ├─ 🚀 Send: 43.7k context → API                        (0.3s) │
-│ ├─ ⏳ Wait: Model processing...                         (14.2s) │
-│ ├─ 📥 Recv: 1.3k output + 920 thinking tokens          (0.9s) │
-│ └─ ✅ Done: Total 15.8s | $0.0234 | 82 tok/s                  │
-└─────────────────────────────────────────────────────────────────┘""",
-                "sparse": "🔵abc123: Parse→Route→Think→Send→Wait→Recv→Done | 15.8s | $0.02"
-            }
-        }
-    
-    def show_welcome(self):
-        """Show welcome message and instructions."""
-        if RICH_AVAILABLE:
-            welcome_text = Text()
-            welcome_text.append("🚀 API Dashboard Configurator\n\n", style="bold cyan")
-            welcome_text.append("Configure your API monitoring dashboard with modular components.\n")
-            welcome_text.append("Select 1-4 modules and choose dense or sparse display modes.\n\n")
-            welcome_text.append("Available modules:\n", style="bold")
-            welcome_text.append("• Performance Monitor - Real-time request performance\n")
-            welcome_text.append("• Activity Feed - Multi-session request history\n") 
-            welcome_text.append("• Routing Visualizer - Model routing flow display\n")
-            welcome_text.append("• Analytics Panel - Cost and performance analytics\n")
-            welcome_text.append("• Request Waterfall - Detailed request lifecycle\n")
-            
-            console.print(Panel(welcome_text, title="Dashboard Configuration", border_style="cyan"))
-        else:
-            print("=" * 60)
-            print("🚀 API Dashboard Configurator")
-            print("=" * 60)
-            print("Configure your API monitoring dashboard with modular components.")
-            print("Select 1-4 modules and choose dense or sparse display modes.")
-            print("\nAvailable modules:")
-            print("• Performance Monitor - Real-time request performance")
-            print("• Activity Feed - Multi-session request history") 
-            print("• Routing Visualizer - Model routing flow display")
-            print("• Analytics Panel - Cost and performance analytics")
-            print("• Request Waterfall - Detailed request lifecycle")
-            print()
-    
-    def show_module_previews(self):
-        """Show previews of all available modules."""
-        if RICH_AVAILABLE:
-            console.print("\n[bold cyan]Module Previews:[/bold cyan]\n")
-            
-            for module_name, modes in self.module_previews.items():
-                console.print(f"[bold yellow]{module_name.upper()}[/bold yellow]")
-                
-                # Show dense and sparse side by side
-                dense_panel = Panel(modes["dense"], title="Dense Mode", border_style="green")
-                sparse_panel = Panel(modes["sparse"], title="Sparse Mode", border_style="blue")
-                
-                console.print(Columns([dense_panel, sparse_panel]))
-                console.print()
-        else:
-            print("\nModule Previews:")
-            print("=" * 40)
-            
-            for module_name, modes in self.module_previews.items():
-                print(f"\n{module_name.upper()}:")
-                print(f"Dense Mode:\n{modes['dense']}")
-                print(f"Sparse Mode:\n{modes['sparse']}")
-                print("-" * 40)
-    
-    def select_modules(self) -> List[Tuple[str, str]]:
-        """Interactive module selection."""
-        selected = []
-        
-        if RICH_AVAILABLE:
-            console.print("\n[bold cyan]Select your dashboard modules (1-4):[/bold cyan]")
-            
-            while len(selected) < 4:
-                # Show current selection
-                if selected:
-                    current = ", ".join([f"{m}:{d}" for m, d in selected])
-                    console.print(f"[dim]Current selection: {current}[/dim]")
-                
-                # Module selection
-                available_modules = [m.value for m in ModuleType if m.value not in [s[0] for s in selected]]
-                if not available_modules:
-                    break
-                
-                module_choice = Prompt.ask(
-                    "Choose module",
-                    choices=available_modules + ["done"],
-                    default="done" if selected else available_modules[0]
-                )
-                
-                if module_choice == "done":
-                    break
-                
-                # Mode selection
-                mode_choice = Prompt.ask(
-                    f"Display mode for {module_choice}",
-                    choices=["dense", "sparse"],
-                    default="dense"
-                )
-                
-                selected.append((module_choice, mode_choice))
-                
-                # Show preview of selection
-                self._show_selection_preview(selected)
-                
-                if not Confirm.ask("Add another module?", default=False):
-                    break
-        else:
-            print("\nSelect your dashboard modules (1-4):")
-            
-            while len(selected) < 4:
-                print(f"\nAvailable modules: {', '.join([m.value for m in ModuleType])}")
-                if selected:
-                    current = ", ".join([f"{m}:{d}" for m, d in selected])
-                    print(f"Current selection: {current}")
-                
-                module_choice = input("Choose module (or 'done'): ").strip().lower()
-                if module_choice == "done" or not module_choice:
-                    break
-                
-                if module_choice not in [m.value for m in ModuleType]:
-                    print("Invalid module choice.")
-                    continue
-                
-                mode_choice = input("Display mode (dense/sparse): ").strip().lower()
-                if mode_choice not in ["dense", "sparse"]:
-                    mode_choice = "dense"
-                
-                selected.append((module_choice, mode_choice))
-                
-                add_more = input("Add another module? (y/n): ").strip().lower()
-                if add_more not in ["y", "yes"]:
-                    break
-        
-        return selected
-    
-    def _show_selection_preview(self, selected: List[Tuple[str, str]]):
-        """Show preview of current selection."""
-        if not RICH_AVAILABLE:
-            return
-        
-        console.print("\n[bold green]Preview of your dashboard:[/bold green]")
-        
-        panels = []
-        for module_name, mode in selected:
-            if module_name in self.module_previews:
-                preview_content = self.module_previews[module_name][mode]
-                title = f"{module_name.title()} ({mode})"
-                panel = Panel(preview_content, title=title, border_style="green" if mode == "dense" else "blue")
-                panels.append(panel)
-        
-        # Show panels in a grid layout
-        if len(panels) == 1:
-            console.print(panels[0])
-        elif len(panels) == 2:
-            console.print(Columns(panels))
-        else:
-            # For 3-4 panels, show in rows
-            if len(panels) >= 3:
-                console.print(Columns(panels[:2]))
-                if len(panels) == 4:
-                    console.print(Columns(panels[2:]))
-                else:
-                    console.print(panels[2])
-    
-    def generate_commands(self, selected_modules: List[Tuple[str, str]]) -> Dict[str, str]:
-        """Generate configuration commands."""
-        # Create dashboard config string
-        config_string = ",".join([f"{module}:{mode}" for module, mode in selected_modules])
-        
-        # Generate environment variable
-        env_var = f'export DASHBOARD_MODULES="{config_string}"'
-        
-        # Generate Claude Code command
-        claude_command = f"""# Add to your Claude Code project settings or .env file:
-DASHBOARD_MODULES={config_string}
+        self.get_slot("R1").module = "waterfall"
+        self.get_slot("R1").mode = "dense"
+        self.get_slot("R2").module = "performance"
+        self.get_slot("R3").module = "activity"
+        self.get_slot("R4").module = "routing"
 
-# Or run directly:
-DASHBOARD_MODULES="{config_string}" python -m src.dashboard.live_dashboard"""
+        self.get_slot("T1").module = "analytics"
+        self.get_slot("T1").mode = "sparse"
         
-        # Generate .zshrc addition
-        zshrc_addition = f"""
-# API Dashboard Configuration
-{env_var}
+        self.get_slot("B1").module = "performance"
+        self.get_slot("B1").mode = "sparse"
 
-# Dashboard aliases
-alias dashboard-live="DASHBOARD_MODULES='{config_string}' python -m src.dashboard.live_dashboard"
-alias dashboard-config="python configure_dashboard.py"
-alias dashboard-preview="DASHBOARD_MODULES='{config_string}' python -c 'from src.dashboard import dashboard_manager; dashboard_manager.print_dashboard()'"
-"""
-        
-        # Generate startup script
-        startup_script = f"""#!/bin/bash
-# API Dashboard Startup Script
-export DASHBOARD_MODULES="{config_string}"
+    def get_slot(self, id: str) -> SlotInfo:
+        return next(s for s in SLOTS if s.id == id)
 
-echo "🚀 Starting API Dashboard with modules: {config_string}"
-python -m src.dashboard.live_dashboard
-"""
+    def clear_screen(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
+
+    def draw_screen(self):
+        self.clear_screen()
         
-        return {
-            "env_var": env_var,
-            "claude_command": claude_command,
-            "zshrc_addition": zshrc_addition,
-            "startup_script": startup_script,
-            "config_string": config_string
-        }
-    
-    def show_commands(self, commands: Dict[str, str]):
-        """Display generated commands."""
-        if RICH_AVAILABLE:
-            console.print("\n[bold cyan]Generated Configuration Commands:[/bold cyan]\n")
-            
-            # Environment Variable
-            console.print(Panel(
-                commands["env_var"],
-                title="Environment Variable",
-                border_style="green"
-            ))
-            
-            # Claude Code Integration
-            console.print(Panel(
-                commands["claude_command"],
-                title="Claude Code Integration",
-                border_style="blue"
-            ))
-            
-            # .zshrc Addition
-            console.print(Panel(
-                commands["zshrc_addition"],
-                title=".zshrc Addition",
-                border_style="yellow"
-            ))
-            
-            # Startup Script
-            console.print(Panel(
-                commands["startup_script"],
-                title="Startup Script (save as start_dashboard.sh)",
-                border_style="magenta"
-            ))
-            
-        else:
-            print("\nGenerated Configuration Commands:")
-            print("=" * 50)
-            
-            print("\nEnvironment Variable:")
-            print(commands["env_var"])
-            
-            print("\nClaude Code Integration:")
-            print(commands["claude_command"])
-            
-            print("\n.zshrc Addition:")
-            print(commands["zshrc_addition"])
-            
-            print("\nStartup Script (save as start_dashboard.sh):")
-            print(commands["startup_script"])
-    
-    def save_startup_script(self, commands: Dict[str, str]):
-        """Save the startup script to file."""
-        script_content = commands["startup_script"]
+        # 1. Header
+        console.print(Panel(
+            Align.center("[bold cyan]🚀 API Dashboard Configurator[/bold cyan]\n[dim]Arrow keys to move • Enter to select • s to toggle size • q to save[/dim]"),
+            border_style="cyan",
+            box=ROUNDED
+        ))
+
+        # 2. Main Grid
+        # We construct a table with 3 columns: Left Stack, Center (Terminal), Right Stack
         
-        with open("start_dashboard.sh", "w") as f:
-            f.write(script_content)
-        
-        # Make executable
-        os.chmod("start_dashboard.sh", 0o755)
-        
-        if RICH_AVAILABLE:
-            console.print(f"\n[green]✅ Startup script saved as 'start_dashboard.sh'[/green]")
-            console.print("[dim]Run with: ./start_dashboard.sh[/dim]")
-        else:
-            print("\n✅ Startup script saved as 'start_dashboard.sh'")
-            print("Run with: ./start_dashboard.sh")
-    
-    def run(self):
-        """Run the interactive configuration process."""
-        self.show_welcome()
-        
-        # Show previews
-        show_previews = True
-        if RICH_AVAILABLE:
-            show_previews = Confirm.ask("Show module previews?", default=True)
-        else:
-            show_previews = input("Show module previews? (y/n): ").strip().lower() in ["y", "yes", ""]
-        
-        if show_previews:
-            self.show_module_previews()
-        
-        # Select modules
-        selected_modules = self.select_modules()
-        
-        if not selected_modules:
-            if RICH_AVAILABLE:
-                console.print("[red]No modules selected. Exiting.[/red]")
+        grid = Table.grid(expand=True, padding=(0, 2))
+        grid.add_column("Left", ratio=1)
+        grid.add_column("Center", ratio=3)
+        grid.add_column("Right", ratio=1)
+
+        # Helper to render a slot
+        def render_slot(slot: SlotInfo, is_focused: bool):
+            if slot.module:
+                mod = MODULES[slot.module]
+                content = mod[f"preview_{slot.mode}"]
+                title = f"{mod['icon']} {mod['name']}"
+                style = "green" if is_focused else "blue"
             else:
-                print("No modules selected. Exiting.")
-            return
-        
-        # Generate commands
-        commands = self.generate_commands(selected_modules)
-        
-        # Show final preview
-        self._show_selection_preview(selected_modules)
-        
-        # Show commands
-        self.show_commands(commands)
-        
-        # Offer to save startup script
-        save_script = True
-        if RICH_AVAILABLE:
-            save_script = Confirm.ask("Save startup script?", default=True)
-        else:
-            save_script = input("Save startup script? (y/n): ").strip().lower() in ["y", "yes", ""]
-        
-        if save_script:
-            self.save_startup_script(commands)
-        
-        if RICH_AVAILABLE:
-            console.print("\n[bold green]🎉 Dashboard configuration complete![/bold green]")
-            console.print("[dim]Copy the commands above to integrate with your workflow.[/dim]")
-        else:
-            print("\n🎉 Dashboard configuration complete!")
-            print("Copy the commands above to integrate with your workflow.")
+                content = "[dim]Empty Slot[/dim]"
+                title = slot.name
+                style = "yellow" if is_focused else "dim"
+            
+            border = HEAVY if is_focused else ROUNDED
+            return Panel(
+                Align.center(content),
+                title=title,
+                border_style=style,
+                box=border,
+                height=4 if slot.mode == "sparse" else 8
+            )
 
+        # Top Bar (T1) - Spans Center
+        # We can't easily span in a simple grid, so we render T1 above the main columns
+        t1_slot = self.get_slot("T1")
+        is_focused = (SLOTS[self.cursor_idx].id == "T1")
+        console.print(Align.center(render_slot(t1_slot, is_focused), width=60))
+        console.print()
+
+        # Middle Section (L1-4, Terminal, R1-4)
+        # We need to assemble the stacks
+        left_stack = Table.grid(expand=True, padding=(0, 0))
+        for i in range(1, 5):
+            slot = self.get_slot(f"L{i}")
+            is_focused = (SLOTS[self.cursor_idx].id == slot.id)
+            left_stack.add_row(render_slot(slot, is_focused))
+            left_stack.add_row("") # Spacer
+
+        right_stack = Table.grid(expand=True, padding=(0, 0))
+        for i in range(1, 5):
+            slot = self.get_slot(f"R{i}")
+            is_focused = (SLOTS[self.cursor_idx].id == slot.id)
+            right_stack.add_row(render_slot(slot, is_focused))
+            right_stack.add_row("") # Spacer
+
+        # Center "Terminal" Placeholder
+        terminal_view = Panel(
+            "\n[dim]... terminal output ...[/dim]\n" * 8,
+            title="Terminal Area (Live Output)",
+            border_style="dim",
+            box=ROUNDED
+        )
+
+        grid.add_row(left_stack, terminal_view, right_stack)
+        console.print(grid)
+        console.print()
+
+        # Bottom Bar (B1)
+        b1_slot = self.get_slot("B1")
+        is_focused = (SLOTS[self.cursor_idx].id == "B1")
+        console.print(Align.center(render_slot(b1_slot, is_focused), width=60))
+
+    def handle_input(self):
+        key = readchar.readkey()
+        
+        # Navigation logic (flat list mapped to grid)
+        # 0=T1
+        # 1-4=L1-L4
+        # 5-8=R1-R4  (Indices in SLOTS list are different: T1=0, L1=1..4, R1=5..8, B1=9 is wrong order in list vs visual)
+        # Wait, my SLOTS list order was: T1(0), L1-4(1-4), R1-4(5-8), B1(9)
+        
+        # Determine logical row/col
+        current = SLOTS[self.cursor_idx]
+        
+        if key == readchar.key.UP:
+             # Logic is tricky. Let's use simple neighbor finding.
+             # If T1, wrap to B1? No.
+             if current.id.startswith('L'):
+                 if current.id == 'L1': self.cursor_idx = 0 # To T1
+                 else: self.cursor_idx -= 1
+             elif current.id.startswith('R'):
+                 if current.id == 'R1': self.cursor_idx = 0 # To T1
+                 else: self.cursor_idx -= 1
+             elif current.id == 'B1':
+                 self.cursor_idx = 0 # To T1 (wrap) or neighbor?
+                 # B1 -> L4 or R4 depending on last pos? let's go to L4 default
+                 self.cursor_idx = 4 
+             elif current.id == 'T1':
+                 self.cursor_idx = 9 # Wrap to B1
+
+        elif key == readchar.key.DOWN:
+            if current.id == 'T1':
+                self.cursor_idx = 1 # To L1
+            elif current.id.startswith('L'):
+                if current.id == 'L4': self.cursor_idx = 9 # To B1
+                else: self.cursor_idx += 1
+            elif current.id.startswith('R'):
+                if current.id == 'R4': self.cursor_idx = 9 # To B1
+                else: self.cursor_idx += 1
+            elif current.id == 'B1':
+                self.cursor_idx = 0 # To T1
+
+        elif key == readchar.key.LEFT:
+            if current.id.startswith('R'):
+                # Go to corresponding L
+                # R1(5) -> L1(1)
+                self.cursor_idx -= 4
+            elif current.id.startswith('L'):
+                # Go to R (wrap) or stay?
+                self.cursor_idx += 4 # To R
+            elif current.id == 'T1' or current.id == 'B1':
+                pass # Already centered
+
+        elif key == readchar.key.RIGHT:
+            if current.id.startswith('L'):
+                # Go to R
+                self.cursor_idx += 4
+            elif current.id.startswith('R'):
+                # Go to L (wrap)
+                self.cursor_idx -= 4
+            elif current.id == 'T1' or current.id == 'B1':
+                pass
+
+        elif key == readchar.key.ENTER or key == ' ':
+             self.pick_module(current)
+        
+        elif key == 's':
+            # Toggle sparse/dense
+            current.mode = "dense" if current.mode == "sparse" else "sparse"
+
+        elif key == 'x' or key == readchar.key.BACKSPACE:
+            current.module = None
+
+        elif key == 'q':
+            self.running = False
+
+    def pick_module(self, slot: SlotInfo):
+        self.clear_screen()
+        console.print(Panel(
+            f"[bold]Select Module for {slot.name}[/bold]",
+            border_style="cyan"
+        ))
+        
+        # Simple list loop
+        mods = list(MODULES.keys())
+        for i, m_key in enumerate(mods):
+            m = MODULES[m_key]
+            console.print(f"[{i+1}] {m['icon']} {m['name']} - [dim]{m['desc']}[/dim]")
+        
+        console.print("\n[dim]Press number to select or q to cancel[/dim]")
+        
+        k = readchar.readkey()
+        if k.isdigit() and 1 <= int(k) <= len(mods):
+            choice = mods[int(k)-1]
+            if choice == "empty":
+                slot.module = None
+            else:
+                slot.module = choice
+                
+    def generate_config(self):
+        # Format: "L1:perf:sparse,R1:routing:dense,..."
+        config_parts = []
+        for slot in SLOTS:
+            if slot.module:
+                config_parts.append(f"{slot.id}:{slot.module}:{slot.mode}")
+        
+        config_str = ",".join(config_parts)
+        
+        # Save command
+        console.print("\n[bold green]✅ Configuration Generated![/bold green]")
+        console.print(Panel(f"export DASHBOARD_CONFIG='{config_str}'", title="Environment Variable"))
+        
+        # Save to file option? For now just print.
+        # Use python-dotenv to save if needed, but standard print is safer.
+        console.print("[dim]Add this variable to your .env file or shell profile.[/dim]")
+
+    def run(self):
+        if not RICH_AVAILABLE or not READCHAR_AVAILABLE:
+            print("Error: 'rich' and 'readchar' libraries are required.")
+            print("Run: uv sync")
+            return
+
+        while self.running:
+            self.draw_screen()
+            self.handle_input()
+        
+        self.generate_config()
 
 def main():
-    """Main entry point."""
-    configurator = DashboardConfigurator()
-    configurator.run()
-
+    tui = DashboardTUI()
+    tui.run()
 
 if __name__ == "__main__":
     main()

@@ -102,6 +102,25 @@ class OpenAIClient:
             config: Optional config object
             api_key: Optional per-request API key (for passthrough mode)
         """
+        
+        # Check for Antigravity models - route to Antigravity client
+        model = request.get('model', '')
+        if model.lower().startswith('antigravity/') or 'antigravity' in model.lower():
+            from src.services.antigravity_client import get_antigravity_client
+            from src.services.models.provider_detector import ProviderDetector
+            
+            # Normalize model name for Antigravity
+            detector = ProviderDetector("https://daily-cloudcode-pa.sandbox.googleapis.com")
+            antigravity_model = detector.normalize_model_name(model)
+            
+            client = get_antigravity_client()
+            return await client.create_chat_completion(
+                messages=request.get('messages', []),
+                model=antigravity_model,
+                max_tokens=request.get('max_tokens', request.get('max_completion_tokens', 8192)),
+                temperature=request.get('temperature', 1.0),
+                stream=False
+            )
 
         # Get the appropriate client based on the model
         # If api_key is provided (passthrough mode), create a temporary client
@@ -180,6 +199,27 @@ class OpenAIClient:
             config: Optional config object
             api_key: Optional per-request API key (for passthrough mode)
         """
+        
+        # Check for Antigravity models - route to Antigravity client
+        model = request.get('model', '')
+        if model.lower().startswith('antigravity/') or 'antigravity' in model.lower():
+            from src.services.antigravity_client import get_antigravity_client
+            from src.services.models.provider_detector import ProviderDetector
+            
+            # Normalize model name for Antigravity
+            detector = ProviderDetector("https://daily-cloudcode-pa.sandbox.googleapis.com")
+            antigravity_model = detector.normalize_model_name(model)
+            
+            client = get_antigravity_client()
+            async for chunk in client.create_chat_completion_stream(
+                messages=request.get('messages', []),
+                model=antigravity_model,
+                max_tokens=request.get('max_tokens', request.get('max_completion_tokens', 8192)),
+                temperature=request.get('temperature', 1.0)
+            ):
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}"
+            yield "data: [DONE]"
+            return
 
         # Get the appropriate client based on the model
         # If api_key is provided (passthrough mode), create a temporary client

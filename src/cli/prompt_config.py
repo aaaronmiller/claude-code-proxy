@@ -132,9 +132,28 @@ def show_preview(modules: list, size: str):
 
     try:
         from src.services.prompts.prompt_injector import PromptInjector
-        from src.services.prompts.templates import get_available_templates, get_templater
-
-        output = get_templater(modules, size, mock_stats)
+        
+        # Generate preview using PromptInjector
+        injector = PromptInjector()
+        output_lines = []
+        
+        for module in modules:
+            info = MODULES.get(module, {})
+            icon = info.get('icon', '?')
+            name = info.get('name', module)
+            
+            if size == 'large':
+                output_lines.append(f"┌─ {icon} {name} ─────────────────────────┐")
+                output_lines.append(f"│ Requests: {mock_stats['total_requests']:,}")
+                output_lines.append(f"│ Success: {mock_stats['success_count']:,}")
+                output_lines.append(f"│ Errors: {mock_stats['error_count']}")
+                output_lines.append(f"└────────────────────────────────────────┘")
+            elif size == 'medium':
+                output_lines.append(f"{icon} {name}: {mock_stats['total_requests']} reqs | {mock_stats['avg_tokens_per_sec']} t/s | ${mock_stats['total_cost']:.2f}")
+            else:  # small
+                output_lines.append(f"{icon}{mock_stats['total_requests']}")
+        
+        output = "\n".join(output_lines)
 
         if output:
             print("\033[90m" + "─" * 60 + "\033[0m")

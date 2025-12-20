@@ -115,6 +115,19 @@ def display_startup_config(config):
     
     console.print(Panel(server_table, title="[bold magenta]Server[/bold magenta]", border_style="cyan"))
     
+    # Quick Tips
+    tips_table = Table(show_header=False, box=None, padding=(0, 2))
+    tips_table.add_column("Action", style="dim")
+    tips_table.add_column("Command", style="yellow")
+    
+    tips_table.add_row("Open Dashboard", "python start_proxy.py --configure-dashboard")
+    tips_table.add_row("Select Models", "python start_proxy.py --select-models")
+    tips_table.add_row("Configure Prompts", "python start_proxy.py --configure-prompts")
+    tips_table.add_row("View Analytics", "python start_proxy.py --analytics")
+    tips_table.add_row("Health Check", "python start_proxy.py --doctor")
+
+    console.print(Panel(tips_table, title="[bold green]Quick Shortcuts[/bold green]", border_style="cyan"))
+    
     console.print()
     console.print(f"[dim]→ Listening on[/dim] [bold bright_cyan]http://{config.host}:{config.port}[/bold bright_cyan]")
     console.print()

@@ -388,6 +388,8 @@ async def create_message(
             provider = "unknown"
             if "openrouter" in endpoint.lower():
                 provider = "openrouter"
+            elif "daily-cloudcode-pa" in endpoint.lower() or "antigravity" in routed_model.lower():
+                provider = "antigravity"
             elif "openai" in endpoint.lower():
                 provider = "openai"
             elif "anthropic" in endpoint.lower():

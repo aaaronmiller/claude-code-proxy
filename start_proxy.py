@@ -14,106 +14,132 @@ def main():
         description='Claude Code Proxy - Use Claude API with OpenAI-compatible providers',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  %(prog)s                                    # Start with .env config
-  %(prog)s --big-model gpt-5 --reasoning high # Set models via CLI
-  %(prog)s --list-modes                       # List saved modes
-  %(prog)s --load-mode 1                      # Load saved mode
-  %(prog)s --mode development                 # Save current config as mode
+✨ Usage Tips:
+  → All Settings:        %(prog)s --settings
+  → Configure Models:    %(prog)s --select-models
+  → View Analytics:      %(prog)s --analytics
+  → Health Check:        %(prog)s --doctor
+  → Dry Run:             %(prog)s --dry-run
+  
+  → Standard Start:      %(prog)s
+  → Force Setup:         %(prog)s --setup
+
+For more details, see docs/guides/configuration.md
         """
     )
 
+    # Create argument groups
+    model_group = parser.add_argument_group('🤖 Model Configuration')
+    reasoning_group = parser.add_argument_group('🧠 Reasoning & Thinking')
+    server_group = parser.add_argument_group('🔌 Server Settings')
+    mode_group = parser.add_argument_group('💾 Profile/Mode Management')
+    crosstalk_group = parser.add_argument_group('🗣️  Crosstalk Orchestration')
+    tools_group = parser.add_argument_group('🛠️  Interactive Tools & Config')
+    validation_group = parser.add_argument_group('✅ Validation & Diagnostics')
+
     # Model arguments
-    parser.add_argument('--big-model', dest='big_model', metavar='MODEL',
+    model_group.add_argument('--big-model', dest='big_model', metavar='MODEL',
                        help='Model for Claude Opus requests')
-    parser.add_argument('--middle-model', dest='middle_model', metavar='MODEL',
+    model_group.add_argument('--middle-model', dest='middle_model', metavar='MODEL',
                        help='Model for Claude Sonnet requests')
-    parser.add_argument('--small-model', dest='small_model', metavar='MODEL',
+    model_group.add_argument('--small-model', dest='small_model', metavar='MODEL',
                        help='Model for Claude Haiku requests')
+    model_group.add_argument('--select-models', action='store_true',
+                       help='Launch interactive model selector')
 
     # Reasoning arguments
-    parser.add_argument('--reasoning-effort', dest='reasoning_effort',
+    reasoning_group.add_argument('--reasoning-effort', dest='reasoning_effort',
                        choices=['low', 'medium', 'high'],
                        help='Reasoning effort level (low, medium, high)')
-    parser.add_argument('--verbosity', dest='verbosity',
+    reasoning_group.add_argument('--verbosity', dest='verbosity',
                        help='Response verbosity level')
-    parser.add_argument('--reasoning-exclude', dest='reasoning_exclude',
+    reasoning_group.add_argument('--reasoning-exclude', dest='reasoning_exclude',
                        choices=['true', 'false'],
                        help='Whether to exclude reasoning tokens from response')
 
     # Server arguments
-    parser.add_argument('--host', dest='host', metavar='HOST',
+    server_group.add_argument('--host', dest='host', metavar='HOST',
                        help='Server host (default: 0.0.0.0)')
-    parser.add_argument('--port', dest='port', type=int, metavar='PORT',
+    server_group.add_argument('--port', dest='port', type=int, metavar='PORT',
                        help='Server port (default: 8082)')
-    parser.add_argument('--log-level', dest='log_level',
+    server_group.add_argument('--log-level', dest='log_level',
                        choices=['debug', 'info', 'warning', 'error', 'critical'],
                        help='Logging level')
 
     # Mode arguments
-    parser.add_argument('--list-modes', action='store_true',
+    mode_group.add_argument('--list-modes', action='store_true',
                        help='List all saved modes')
-    parser.add_argument('--load-mode', dest='load_mode', metavar='ID_OR_NAME',
+    mode_group.add_argument('--load-mode', dest='load_mode', metavar='ID/NAME',
                        help='Load a saved mode (ID or name)')
-    parser.add_argument('--save-mode', dest='save_mode', metavar='NAME',
+    mode_group.add_argument('--save-mode', dest='save_mode', metavar='NAME',
                        help='Save current configuration as a mode')
-    parser.add_argument('--delete-mode', dest='delete_mode', metavar='ID_OR_NAME',
+    mode_group.add_argument('--delete-mode', dest='delete_mode', metavar='ID/NAME',
                        help='Delete a saved mode')
-    parser.add_argument('--mode', dest='mode_name', metavar='NAME',
-                       help='Shorthand for --save-mode when combined with other args')
+    mode_group.add_argument('--mode', dest='mode_name', metavar='NAME',
+                       help='Shorthand for --save-mode')
 
     # Crosstalk options
-    parser.add_argument('--crosstalk-init', action='store_true',
+    crosstalk_group.add_argument('--crosstalk-init', action='store_true',
                        help='Launch interactive crosstalk setup wizard')
-    parser.add_argument('--crosstalk', dest='crosstalk_models',
-                       help='Quick crosstalk setup with comma-separated models (e.g., "big,small")')
-    parser.add_argument('--system-prompt-big', dest='big_system_prompt',
-                       help='System prompt for BIG model (file path with "path:" prefix or inline text)')
-    parser.add_argument('--system-prompt-middle', dest='middle_system_prompt',
-                       help='System prompt for MIDDLE model (file path with "path:" prefix or inline text)')
-    parser.add_argument('--system-prompt-small', dest='small_system_prompt',
-                       help='System prompt for SMALL model (file path with "path:" prefix or inline text)')
-    parser.add_argument('--crosstalk-iterations', dest='crosstalk_iterations', type=int,
-                       help='Number of crosstalk iterations (default: 20)')
-    parser.add_argument('--crosstalk-topic', dest='crosstalk_topic',
-                       help='Initial topic for crosstalk conversation')
-    parser.add_argument('--crosstalk-paradigm', dest='crosstalk_paradigm',
+    crosstalk_group.add_argument('--crosstalk', dest='crosstalk_models',
+                       help='Quick setup (comma-separated models)')
+    crosstalk_group.add_argument('--system-prompt-big', dest='big_system_prompt',
+                       help='System prompt for BIG model')
+    crosstalk_group.add_argument('--system-prompt-middle', dest='middle_system_prompt',
+                       help='System prompt for MIDDLE model')
+    crosstalk_group.add_argument('--system-prompt-small', dest='small_system_prompt',
+                       help='System prompt for SMALL model')
+    crosstalk_group.add_argument('--crosstalk-iterations', dest='crosstalk_iterations', type=int,
+                       help='Number of iterations (default: 20)')
+    crosstalk_group.add_argument('--crosstalk-topic', dest='crosstalk_topic',
+                       help='Initial topic')
+    crosstalk_group.add_argument('--crosstalk-paradigm', dest='crosstalk_paradigm',
                        choices=['memory', 'report', 'relay', 'debate'],
-                       help='Crosstalk communication paradigm')
+                       help='Communication paradigm')
 
-    # Other options
-    parser.add_argument('--config', dest='show_config', action='store_true',
-                       help='Show current configuration and exit')
-    parser.add_argument('--select-models', action='store_true',
-                       help='Launch interactive model selector')
-    parser.add_argument('--validate-config', action='store_true',
-                       help='Validate configuration and exit')
-    parser.add_argument('--skip-validation', action='store_true',
-                       help='Skip configuration validation on startup')
-    
-    # Setup tools
-    parser.add_argument('--setup', action='store_true',
+    # Interactive Tools
+    tools_group.add_argument('--setup', action='store_true',
                        help='Launch first-time setup wizard')
-    parser.add_argument('--configure-prompts', action='store_true',
+    tools_group.add_argument('--configure-prompts', action='store_true',
                        help='Launch prompt injection configurator')
-    parser.add_argument('--configure-terminal', action='store_true',
+    tools_group.add_argument('--configure-terminal', action='store_true',
                        help='Launch terminal output configurator')
-    parser.add_argument('--analytics', action='store_true',
-                       help='View usage analytics')
-    parser.add_argument('--configure-dashboard', action='store_true',
+    tools_group.add_argument('--configure-dashboard', action='store_true',
                        help='Launch dashboard module configurator')
+    tools_group.add_argument('--analytics', action='store_true',
+                       help='View usage analytics')
+    tools_group.add_argument('--settings', action='store_true',
+                       help='Launch unified settings TUI (models, terminal, dashboard, prompts)')
+    tools_group.add_argument('--doctor', action='store_true',
+                       help='Run health check and auto-fix common issues')
+    tools_group.add_argument('--fix-keys', action='store_true',
+                       help='(Deprecated, use --doctor) Launch API key repair wizard')
     
-    # Auto-Healing tools
-    parser.add_argument('--fix-keys', action='store_true',
-                       help='Launch API key repair wizard')
-    parser.add_argument('--client', action='store_true',
+    # Validation & Diagnostics
+    validation_group.add_argument('--config', dest='show_config', action='store_true',
+                       help='Show current configuration and exit')
+    validation_group.add_argument('--validate-config', action='store_true',
+                       help='Validate configuration and exit')
+    validation_group.add_argument('--skip-validation', action='store_true',
+                       help='Skip configuration validation on startup')
+    validation_group.add_argument('--dry-run', action='store_true',
+                       help='Validate config and check readiness without starting server')
+    validation_group.add_argument('--client', action='store_true',
                        help='Run as client wrapper (internal use)')
 
     args, unknown = parser.parse_known_args() # Use parse_known_args to allow passing args to client
 
-    # Handle Auto-Healing tools
-    if args.fix_keys:
+    # Handle unified settings TUI
+    if args.settings:
+        from src.cli.settings import main as settings_main
+        settings_main()
+        return
+
+    # Handle doctor (health check + auto-fix)
+    if args.doctor or args.fix_keys:
         from src.cli.fix_keys import main as fix_keys_main
+        if args.fix_keys:
+            print("⚠️  --fix-keys is deprecated. Use --doctor instead.")
         fix_keys_main()
         return
 
@@ -129,6 +155,71 @@ Examples:
         passed = validate_config_on_startup(strict=False)
         sys.exit(0 if passed else 1)
 
+    # Handle --config (show config and exit)
+    if args.show_config:
+        from src.core.config import Config
+        from src.services.logging.startup_display import display_startup_config
+        config = Config()
+        display_startup_config(config)
+        sys.exit(0)
+
+    # Handle dry-run (validate without starting)
+    if args.dry_run:
+        from src.core.config import Config
+        import socket
+
+        print("\n🔍 Dry Run - Checking configuration...\n")
+        
+        config = Config()
+        issues = []
+        
+        # Check API key
+        if config.openai_api_key and "dummy" not in config.openai_api_key:
+            key_preview = config.openai_api_key[:8] + "..." + config.openai_api_key[-4:]
+            print(f"✓ Provider API Key: {key_preview}")
+        else:
+            issues.append("No valid API key configured")
+            print("✗ Provider API Key: Not configured")
+        
+        # Check base URL
+        print(f"✓ Provider URL: {config.openai_base_url}")
+        
+        # Check models
+        print(f"✓ Big Model: {config.big_model}")
+        print(f"✓ Middle Model: {config.middle_model}")
+        print(f"✓ Small Model: {config.small_model}")
+        
+        # Check port availability
+        port = config.port
+        host = config.host
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex((host if host != "0.0.0.0" else "127.0.0.1", port))
+            sock.close()
+            if result == 0:
+                issues.append(f"Port {port} is already in use")
+                print(f"✗ Port {port}: Already in use")
+            else:
+                print(f"✓ Port {port}: Available")
+        except Exception as e:
+            print(f"? Port {port}: Could not check ({e})")
+        
+        # Check features
+        print(f"✓ Dashboard: {'enabled' if config.enable_dashboard else 'disabled'}")
+        print(f"✓ Tracking: {'enabled' if config.track_usage else 'disabled'}")
+        
+        print()
+        if issues:
+            print(f"⚠️  Found {len(issues)} issue(s):")
+            for issue in issues:
+                print(f"   - {issue}")
+            print("\nRun with --doctor to attempt auto-fix.")
+            sys.exit(1)
+        else:
+            print("✅ All checks passed. Ready to launch.")
+            print("   Run without --dry-run to start the server.")
+            sys.exit(0)
 
 
     # Handle setup wizard

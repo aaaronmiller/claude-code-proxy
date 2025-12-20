@@ -12,6 +12,10 @@ class ProviderDetector:
         'openrouter': [
             'openrouter.ai',
         ],
+        'antigravity': [
+            'daily-cloudcode-pa.sandbox.googleapis.com',
+            'autopush-cloudcode-pa.sandbox.googleapis.com',
+        ],
         'gemini': [
             'generativelanguage.googleapis.com',
             'googleapis.com',
@@ -68,6 +72,8 @@ class ProviderDetector:
         """
         if self.provider == 'openrouter':
             return self._normalize_for_openrouter(model_name)
+        elif self.provider == 'antigravity':
+            return self._normalize_for_antigravity(model_name)
         elif self.provider == 'gemini':
             return self._normalize_for_gemini(model_name)
         elif self.provider == 'openai':
@@ -143,6 +149,39 @@ class ProviderDetector:
         if '/' in model_name:
             return model_name.split('/', 1)[1]
         return model_name
+    
+    def _normalize_for_antigravity(self, model_name: str) -> str:
+        """
+        Normalize model name for Antigravity API.
+        
+        Antigravity uses internal model IDs like:
+        - Gemini 3 Pro (High)
+        - Claude Sonnet 4.5
+        - Claude Opus 4.5 (Thinking)
+        
+        Args:
+            model_name: Original model name
+            
+        Returns:
+            Model name for Antigravity
+        """
+        # Map common model names to Antigravity internal names
+        ANTIGRAVITY_MODEL_MAP = {
+            'gemini-3-pro': 'Gemini 3 Pro (High)',
+            'gemini-3-pro-low': 'Gemini 3 Pro (Low)',
+            'gemini-3-flash': 'Gemini 3 Flash',
+            'claude-sonnet-4.5': 'Claude Sonnet 4.5',
+            'claude-sonnet-4.5-thinking': 'Claude Sonnet 4.5 (Thinking)',
+            'claude-opus-4.5': 'Claude Opus 4.5 (Thinking)',
+            'gpt-oss-120b': 'GPT-OSS 120B (Medium)',
+        }
+        
+        # Strip provider prefix if present
+        if '/' in model_name:
+            model_name = model_name.split('/', 1)[1]
+        
+        # Return mapped name or original
+        return ANTIGRAVITY_MODEL_MAP.get(model_name.lower(), model_name)
     
     def get_provider_info(self) -> dict:
         """

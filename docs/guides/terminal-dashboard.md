@@ -294,10 +294,10 @@ export TERMINAL_SESSION_COLORS="true"
 
 ## Configuration Script Reference
 
-The `configure_terminal_output.py` script provides an interactive way to set up your terminal output:
+The interactive configuration tool provides an easy way to set up your terminal output:
 
 ```bash
-$ python configure_terminal_output.py
+$ python start_proxy.py --configure-terminal
 
 ┌────────────────────────────────────────┐
 │ Claude Code Proxy                      │
