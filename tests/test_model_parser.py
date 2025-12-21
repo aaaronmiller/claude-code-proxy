@@ -1,7 +1,7 @@
 """Unit tests for model name parser."""
 
 import pytest
-from src.utils.model_parser import parse_model_name, ParsedModel
+from src.services.models.model_parser import parse_model_name, ParsedModel
 
 
 class TestModelParser:

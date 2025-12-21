@@ -49,6 +49,51 @@ class SetupWizard:
         self.profiles_dir.mkdir(exist_ok=True)
         self.console = Console() if RICH_AVAILABLE else None
 
+    def _detect_vibeproxy(self) -> bool:
+        """Check if VibeProxy is running on localhost:8317"""
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', 8317))
+            sock.close()
+            return result == 0
+        except Exception:
+            return False
+
+    def _detect_ollama(self) -> bool:
+        """Check if Ollama is running on localhost:11434"""
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', 11434))
+            sock.close()
+            return result == 0
+        except Exception:
+            return False
+
+    def _fetch_vibeproxy_models(self) -> List[str]:
+        """Fetch available models from VibeProxy"""
+        try:
+            import requests
+            response = requests.get('http://127.0.0.1:8317/v1/models', timeout=3)
+            if response.status_code == 200:
+                data = response.json()
+                return [m['id'] for m in data.get('data', [])]
+        except Exception:
+            pass
+        # Fallback to known models
+        return [
+            "gemini-claude-opus-4-5-thinking",
+            "gemini-claude-sonnet-4-5-thinking",
+            "gemini-claude-sonnet-4-5",
+            "gemini-3-pro-preview",
+            "gemini-3-flash",
+            "gemini-2.5-flash",
+            "gpt-oss-120b-medium",
+        ]
+
     def check_existing_config(self) -> bool:
         """
         Check if existing configuration is valid.
@@ -221,7 +266,25 @@ class SetupWizard:
         print("STEP 1: Choose Your API Provider")
         print("─"*70)
 
-        provider_choices = [
+        # Check for running local providers
+        vibeproxy_detected = self._detect_vibeproxy()
+        ollama_detected = self._detect_ollama()
+
+        provider_choices = []
+
+        # Add VibeProxy first if detected
+        if vibeproxy_detected:
+            provider_choices.append({
+                "name": "🌌 VibeProxy/Antigravity (DETECTED - Claude & Gemini via OAuth)",
+                "value": "vibeproxy"
+            })
+        else:
+            provider_choices.append({
+                "name": "🌌 VibeProxy/Antigravity (Claude & Gemini via Google OAuth)",
+                "value": "vibeproxy"
+            })
+
+        provider_choices.extend([
             {
                 "name": "🚀 OpenRouter (352+ models, free tier)",
                 "value": "openrouter"
@@ -238,10 +301,21 @@ class SetupWizard:
                 "name": "☁️  Azure OpenAI (enterprise)",
                 "value": "azure"
             },
-            {
+        ])
+
+        # Add Ollama with detection status
+        if ollama_detected:
+            provider_choices.append({
+                "name": "🏠 Ollama (DETECTED - local, 100% free)",
+                "value": "ollama"
+            })
+        else:
+            provider_choices.append({
                 "name": "🏠 Ollama (local, 100% free)",
                 "value": "ollama"
-            },
+            })
+
+        provider_choices.extend([
             {
                 "name": "💻 LM Studio (local, GUI)",
                 "value": "lmstudio"
@@ -250,7 +324,7 @@ class SetupWizard:
                 "name": "⚙️  Custom provider",
                 "value": "custom"
             }
-        ]
+        ])
 
         provider = questionary.select(
             "Select your provider:",
@@ -268,7 +342,100 @@ class SetupWizard:
         """Configure specific provider settings"""
         config = {}
 
-        if provider == "openrouter":
+        if provider == "vibeproxy":
+            print("\n📝 VibeProxy/Antigravity Configuration")
+            print("VibeProxy handles OAuth authentication - no API key needed!")
+            print("Download: https://github.com/AntonioCiolworking/VibeProxy/releases\n")
+
+            config["PROVIDER_API_KEY"] = "dummy"
+            config["PROVIDER_BASE_URL"] = "http://127.0.0.1:8317/v1"
+
+            # Fetch available models
+            print("Fetching available models from VibeProxy...", end="", flush=True)
+            available_models = self._fetch_vibeproxy_models()
+            print(f" Found {len(available_models)} models!\n")
+
+            # Categorize models for better UX
+            thinking_models = [m for m in available_models if "thinking" in m.lower()]
+            claude_models = [m for m in available_models if "claude" in m.lower() and m not in thinking_models]
+            gemini_models = [m for m in available_models if "gemini" in m.lower()]
+            other_models = [m for m in available_models if m not in thinking_models + claude_models + gemini_models]
+
+            # BIG model - recommend thinking model
+            big_choices = []
+            if thinking_models:
+                big_choices.extend([f"🧠 {m}" for m in thinking_models])
+            if claude_models:
+                big_choices.extend([f"🤖 {m}" for m in claude_models])
+            big_choices.extend(gemini_models + other_models)
+            big_choices.append("Custom model...")
+
+            # Clean up display names for selection
+            big_choices_clean = [c.replace("🧠 ", "").replace("🤖 ", "") if c != "Custom model..." else c for c in big_choices]
+
+            print("Model Routing: Claude Code maps opus→BIG, sonnet→MIDDLE, haiku→SMALL\n")
+
+            big_model = questionary.select(
+                "Select BIG model (Claude Opus requests) - thinking models recommended:",
+                choices=big_choices,
+                style=custom_style
+            ).ask()
+
+            if big_model == "Custom model...":
+                big_model = questionary.text(
+                    "Enter custom model name:",
+                    style=custom_style
+                ).ask() or "gemini-claude-opus-4-5-thinking"
+            else:
+                # Strip emoji prefix
+                big_model = big_model.replace("🧠 ", "").replace("🤖 ", "")
+
+            config["BIG_MODEL"] = big_model
+
+            # MIDDLE model
+            middle_choices = gemini_models + claude_models + other_models
+            middle_choices.append("Custom model...")
+
+            middle_model = questionary.select(
+                "Select MIDDLE model (Claude Sonnet requests):",
+                choices=middle_choices,
+                style=custom_style
+            ).ask()
+
+            if middle_model == "Custom model...":
+                middle_model = questionary.text(
+                    "Enter custom model name:",
+                    style=custom_style
+                ).ask() or "gemini-3-pro-preview"
+
+            config["MIDDLE_MODEL"] = middle_model
+
+            # SMALL model - fast models
+            small_choices = [m for m in gemini_models if "flash" in m.lower()]
+            small_choices.extend([m for m in gemini_models if m not in small_choices])
+            small_choices.extend(other_models)
+            small_choices.append("Custom model...")
+
+            small_model = questionary.select(
+                "Select SMALL model (Claude Haiku requests) - fast models recommended:",
+                choices=small_choices,
+                style=custom_style
+            ).ask()
+
+            if small_model == "Custom model...":
+                small_model = questionary.text(
+                    "Enter custom model name:",
+                    style=custom_style
+                ).ask() or "gemini-3-flash"
+
+            config["SMALL_MODEL"] = small_model
+
+            # Set recommended defaults for VibeProxy
+            config["REASONING_MAX_TOKENS"] = "128000"
+            config["MAX_TOKENS_LIMIT"] = "65536"
+            config["REQUEST_TIMEOUT"] = "120"
+
+        elif provider == "openrouter":
             print("\n📝 OpenRouter Configuration")
             print("Get your API key at: https://openrouter.ai/keys\n")
 
@@ -582,8 +749,8 @@ class SetupWizard:
 
         # Claude/Gemini thinking tokens
         max_tokens = questionary.text(
-            "Max thinking tokens for Claude/Gemini (1024-24576, or leave blank):",
-            validate=lambda x: x == "" or (x.isdigit() and 1024 <= int(x) <= 24576),
+            "Max thinking tokens for Claude/Gemini (1024-128000, or leave blank for default):",
+            validate=lambda x: x == "" or (x.isdigit() and 1024 <= int(x) <= 128000),
             style=custom_style
         ).ask()
 

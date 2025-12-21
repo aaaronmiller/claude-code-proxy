@@ -105,12 +105,35 @@ def get_antigravity_token() -> Optional[str]:
     return get_antigravity_auth().get_token()
 
 
-# Available Antigravity models (from userStatusProtoBinaryBase64)
+# Available Antigravity models (from VibeProxy /v1/models endpoint - Dec 2025)
 ANTIGRAVITY_MODELS = [
-    "antigravity/gemini-3-pro",
-    "antigravity/gemini-3-pro-low",
-    "antigravity/gemini-3-flash",
-    "antigravity/claude-sonnet-4.5",
-    "antigravity/claude-sonnet-4.5-thinking",
-    "antigravity/claude-opus-4.5",
+    # Gemini 3 Series (Bleeding Edge)
+    "gemini-3-flash",
+    "gemini-3-pro-preview",
+    "gemini-3-pro-image-preview",
+    # Gemini 2.5 Series (Stable/Fast)
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-computer-use-preview-10-2025",
+    # Claude via Antigravity
+    "gemini-claude-sonnet-4-5",
+    "gemini-claude-sonnet-4-5-thinking",
+    "gemini-claude-opus-4-5-thinking",
+    # Open Source / Other
+    "gpt-oss-120b-medium",
 ]
+
+# Friendly aliases for Antigravity models (maps user-friendly names to actual IDs)
+ANTIGRAVITY_ALIASES = {
+    # Gemini 3 aliases
+    "antigravity/gemini-3-pro": "gemini-3-pro-preview",
+    "antigravity/gemini-3-pro-high": "gemini-3-pro-preview",
+    "antigravity/gemini-3-pro-low": "gemini-3-pro-preview",
+    "antigravity/gemini-3-flash": "gemini-3-flash",
+    # Claude via Antigravity aliases
+    "antigravity/claude-sonnet-4.5": "gemini-claude-sonnet-4-5",
+    "antigravity/claude-sonnet-4.5-thinking": "gemini-claude-sonnet-4-5-thinking",
+    "antigravity/claude-opus-4.5": "gemini-claude-opus-4-5-thinking",
+    # GPT-OSS alias
+    "antigravity/gpt-oss-120b": "gpt-oss-120b-medium",
+}

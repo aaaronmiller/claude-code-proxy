@@ -1,7 +1,7 @@
 """Unit tests for reasoning parameter validator."""
 
 import pytest
-from src.utils.reasoning_validator import (
+from src.core.reasoning_validator import (
     validate_openai_reasoning,
     validate_anthropic_thinking,
     validate_gemini_thinking,
@@ -34,6 +34,8 @@ class TestAnthropicThinkingValidation:
         assert validate_anthropic_thinking(4096) == 4096
         assert validate_anthropic_thinking(8000) == 8000
         assert validate_anthropic_thinking(16000) == 16000
+        assert validate_anthropic_thinking(64000) == 64000
+        assert validate_anthropic_thinking(128000) == 128000
     
     def test_budget_below_minimum(self):
         """Test adjustment of budget below minimum."""
@@ -42,8 +44,8 @@ class TestAnthropicThinkingValidation:
     
     def test_budget_above_maximum(self):
         """Test adjustment of budget above maximum."""
-        assert validate_anthropic_thinking(20000) == 16000
-        assert validate_anthropic_thinking(50000) == 16000
+        assert validate_anthropic_thinking(130000) == 128000
+        assert validate_anthropic_thinking(200000) == 128000
 
 
 class TestGeminiThinkingValidation:

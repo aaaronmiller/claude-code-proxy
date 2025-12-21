@@ -39,7 +39,7 @@ REASONING_CAPABLE_MODELS = {
         ],
         'reasoning_type': 'thinking_tokens',
         'min_tokens': 1024,
-        'max_tokens': 16000
+        'max_tokens': 128000
     },
     'gemini_thinking': {
         'patterns': [
@@ -239,7 +239,6 @@ class ModelManager:
                     # Anthropic thinking tokens
                     validated_budget = validate_anthropic_thinking(int(reasoning_value))
                     return AnthropicThinkingConfig(
-                        enabled=True,
                         type="enabled",
                         budget=validated_budget
                     )
@@ -247,7 +246,6 @@ class ModelManager:
             elif reasoning_type == 'thinking_budget':
                 validated_budget = validate_gemini_thinking(int(reasoning_value))
                 return GeminiThinkingConfig(
-                    enabled=True,
                     budget=validated_budget
                 )
         

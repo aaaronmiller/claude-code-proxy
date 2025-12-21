@@ -7,10 +7,14 @@ from urllib.parse import urlparse
 
 class ProviderDetector:
     """Detect provider from base URL and normalize model names accordingly."""
-    
+
     PROVIDER_PATTERNS = {
         'openrouter': [
             'openrouter.ai',
+        ],
+        'vibeproxy': [
+            '127.0.0.1:8317',
+            'localhost:8317',
         ],
         'antigravity': [
             'daily-cloudcode-pa.sandbox.googleapis.com',
@@ -72,6 +76,8 @@ class ProviderDetector:
         """
         if self.provider == 'openrouter':
             return self._normalize_for_openrouter(model_name)
+        elif self.provider == 'vibeproxy':
+            return self._normalize_for_vibeproxy(model_name)
         elif self.provider == 'antigravity':
             return self._normalize_for_antigravity(model_name)
         elif self.provider == 'gemini':
@@ -135,13 +141,13 @@ class ProviderDetector:
     def _normalize_for_openai(self, model_name: str) -> str:
         """
         Normalize model name for OpenAI API.
-        
+
         OpenAI API expects model names without provider prefix:
         - gpt-4o (not openai/gpt-4o)
-        
+
         Args:
             model_name: Original model name
-            
+
         Returns:
             Model name without provider prefix
         """
@@ -149,6 +155,57 @@ class ProviderDetector:
         if '/' in model_name:
             return model_name.split('/', 1)[1]
         return model_name
+
+    def _normalize_for_vibeproxy(self, model_name: str) -> str:
+        """
+        Normalize model name for VibeProxy (CLIProxyAPI).
+
+        VibeProxy exposes models from multiple providers (Antigravity, Gemini CLI, etc.)
+        and expects exact model IDs as returned by its /v1/models endpoint.
+
+        Available Antigravity models (as of Dec 2025):
+        - gemini-3-flash
+        - gemini-3-pro-preview
+        - gemini-3-pro-image-preview
+        - gemini-2.5-flash
+        - gemini-2.5-flash-lite
+        - gemini-2.5-computer-use-preview-10-2025
+        - gemini-claude-sonnet-4-5
+        - gemini-claude-sonnet-4-5-thinking
+        - gemini-claude-opus-4-5-thinking
+        - gpt-oss-120b-medium
+
+        Args:
+            model_name: Original model name
+
+        Returns:
+            Model name for VibeProxy
+        """
+        # Strip provider prefix if present (e.g., "antigravity/gemini-3-pro" -> "gemini-3-pro")
+        if '/' in model_name:
+            model_name = model_name.split('/', 1)[1]
+
+        # Map common aliases to VibeProxy model IDs
+        VIBEPROXY_MODEL_MAP = {
+            # Gemini 3 aliases
+            'gemini-3-pro': 'gemini-3-pro-preview',
+            'gemini-3-pro-high': 'gemini-3-pro-preview',
+            'gemini-3-pro-low': 'gemini-3-pro-preview',
+            # Claude via Antigravity aliases
+            'claude-sonnet-4.5': 'gemini-claude-sonnet-4-5',
+            'claude-sonnet-4-5': 'gemini-claude-sonnet-4-5',
+            'claude-sonnet-4.5-thinking': 'gemini-claude-sonnet-4-5-thinking',
+            'claude-sonnet-4-5-thinking': 'gemini-claude-sonnet-4-5-thinking',
+            'claude-opus-4.5': 'gemini-claude-opus-4-5-thinking',
+            'claude-opus-4-5': 'gemini-claude-opus-4-5-thinking',
+            'claude-opus-4.5-thinking': 'gemini-claude-opus-4-5-thinking',
+            'claude-opus-4-5-thinking': 'gemini-claude-opus-4-5-thinking',
+            # GPT-OSS alias
+            'gpt-oss-120b': 'gpt-oss-120b-medium',
+        }
+
+        # Return mapped name or original
+        return VIBEPROXY_MODEL_MAP.get(model_name.lower(), model_name)
     
     def _normalize_for_antigravity(self, model_name: str) -> str:
         """

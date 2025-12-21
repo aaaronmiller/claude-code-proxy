@@ -19,7 +19,7 @@ VALID_EFFORT_LEVELS = {'low', 'medium', 'high'}
 
 # Anthropic thinking token constraints
 ANTHROPIC_MIN_TOKENS = 1024
-ANTHROPIC_MAX_TOKENS = 16000
+ANTHROPIC_MAX_TOKENS = 128000
 
 # Gemini thinking budget constraints
 GEMINI_MIN_BUDGET = 0
