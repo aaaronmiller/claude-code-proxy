@@ -489,40 +489,83 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                                         target_claude_index = current_tool_calls[0]["claude_index"]
                                         logger.debug(f"Fallback: mapping index 0 to existing claude_index {target_claude_index}")
                             
-                            # If we decided to process this delta
-                            if target_claude_index is not None:
-                                if tc_index not in current_tool_calls:
-                                    current_tool_calls[tc_index] = {
-                                        "id": None,
-                                        "name": None,
-                                        "args_buffer": "",
-                                        "json_sent": False,
-                                        "claude_index": target_claude_index,
-                                        "started": False
-                                    }
-                                
-                                tool_call = current_tool_calls[tc_index]
-                                
-                                # Update Internal State
-                                if tc_id: tool_call["id"] = tc_id
-                                
-                                function_data = tc_delta.get(Constants.TOOL_FUNCTION, {})
-                                if function_data.get("name"):
-                                    tool_call["name"] = function_data["name"]
-                                
-                                # Emit START block if needed (only for the first time we see this ID/Block)
-                                if is_new_block:
-                                    tool_call["started"] = True # Mark local tracker as started too
-                                    # Ensure we have a name (or empty string placeholder if needed, though OpenAI usually sends name with ID)
-                                    name_val = tool_call["name"] or ""
-                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': target_claude_index, 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': name_val}}, ensure_ascii=False)}\n\n"
-                                
-                                # Emit DELTA for arguments
-                                if "arguments" in function_data and function_data["arguments"]:
-                                    partial_args = function_data["arguments"]
-                                    tool_call["args_buffer"] += partial_args
-                                    
-                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': target_claude_index, 'delta': {'type': Constants.DELTA_INPUT_JSON, 'partial_json': partial_args}}, ensure_ascii=False)}\n\n"
+    for tool_name, tool_call in deduplicated_tools.items():
+        if tool_call["started"]:
+            current_block_index += 1
+            tool_call["claude_index"] = current_block_index
+            
+            # Prepare arguments
+            parsed_args = {}
+            args_buffer = tool_call.get("args_buffer", "")
+            if args_buffer:
+                try:
+                    parsed_args = json.loads(args_buffer)
+                except Exception:
+                    pass
+
+            # Universal Fixes
+            if tool_name == "skill" and "skill" not in parsed_args:
+                 val = parsed_args.get("name") or parsed_args.get("skill_name") or parsed_args.get("command") or parsed_args.get("code") or parsed_args.get("prompt")
+                 if val: parsed_args["skill"] = val
+
+            if "command" in parsed_args and "prompt" not in parsed_args:
+                parsed_args["prompt"] = parsed_args["command"]
+            elif "prompt" in parsed_args and "command" not in parsed_args:
+                parsed_args["command"] = parsed_args["prompt"]
+
+            if tool_name == "task":
+                if "description" in parsed_args and "prompt" not in parsed_args:
+                    parsed_args["prompt"] = parsed_args["description"]
+                elif "prompt" in parsed_args and "description" not in parsed_args:
+                    parsed_args["description"] = parsed_args["prompt"]
+                if "subagent_type" not in parsed_args:
+                    parsed_args["subagent_type"] = "research"
+            
+            if tool_name == "todowrite":
+                # Case 1: content/activeForm
+                if "todos" not in parsed_args and "tasks" not in parsed_args:
+                    if "content" in parsed_args:
+                        parsed_args["todos"] = [{
+                            "id": "1",
+                            "content": parsed_args.get("content", ""),
+                            "status": parsed_args.get("state", parsed_args.get("status", "pending")),
+                            "priority": "medium"
+                        }]
+                        for key in ["content", "activeForm", "state"]:
+                            if key in parsed_args:
+                                del parsed_args[key]
+                
+                # Case 2: tasks -> todos
+                if "tasks" in parsed_args and "todos" not in parsed_args:
+                    parsed_args["todos"] = parsed_args["tasks"]
+                if "tasks" in parsed_args:
+                    del parsed_args["tasks"]
+                
+                # Case 3: Normalize items
+                if "todos" in parsed_args and isinstance(parsed_args["todos"], list):
+                    valid_statuses = {"pending", "in_progress", "completed"}
+                    for i, todo in enumerate(parsed_args["todos"]):
+                        if isinstance(todo, dict):
+                            if "id" not in todo: todo["id"] = str(i + 1)
+                            if "priority" not in todo: todo["priority"] = "medium"
+                            if "status" not in todo: todo["status"] = "pending"
+                            status = todo.get("status", "pending")
+                            if status not in valid_statuses:
+                                if "complete" in status.lower(): todo["status"] = "completed"
+                                elif "progress" in status.lower(): todo["status"] = "in_progress"
+                                else: todo["status"] = "pending"
+                            if "activeForm" in todo: del todo["activeForm"]
+
+            logger.info(f"FINAL ATOMIC TOOL (CLAUDISH PATTERN) {tool_name}: {parsed_args}")
+
+            # Atomic Yield with Input (Claudish Style: Start [No Input] -> Delta [Full Input])
+            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': tool_call['claude_index'], 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': tool_call['name']}}, ensure_ascii=False)}\n\n"
+            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': tool_call['claude_index'], 'delta': {'type': Constants.DELTA_INPUT_JSON, 'partial_json': json.dumps(parsed_args)}}, ensure_ascii=False)}\n\n"
+            yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': tool_call['claude_index']}, ensure_ascii=False)}\n\n"
+    
+    # Reset block index after flushing tools to prevent double-stop
+    if current_tool_calls:
+        current_block_index = -1
                                     
 
                     # Handle finish reason
