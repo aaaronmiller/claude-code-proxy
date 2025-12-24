@@ -342,9 +342,6 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     current_block_index = 0
     
     current_tool_calls = {}
-    # Track which tool names map to which Claude content block index to handle duplicates/ghost calls
-    # Map: tool_name -> claude_block_index
-    tool_name_to_claude_index = {}
     
     final_stop_reason = Constants.STOP_END_TURN
     usage_data = {"input_tokens": 0, "output_tokens": 0}
@@ -419,7 +416,7 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                         
                         yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': text_content}}, ensure_ascii=False)}\n\n"
 
-                    # Handle tool call deltas - SIMPLIFIED LOGIC WITH MERGING
+                    # Handle tool call deltas - SIMPLIFIED LOGIC WITH INDEX FILTERING
                     if "tool_calls" in delta and delta["tool_calls"]:
                         # Close previous block if we were doing text/thinking
                         if current_block_type in ["thinking", "text"]:
@@ -428,6 +425,11 @@ async def convert_openai_streaming_to_claude_with_cancellation(
 
                         for tc_delta in delta["tool_calls"]:
                             tc_index = tc_delta.get("index", 0)
+                            
+                            # CRITICAL FIX: Ignore secondary tool calls (index > 0) to prevent "Ghost Call" duplication
+                            # This sacrifices multi-tool use in a single turn for stability with VibeProxy/Gemini
+                            if tc_index > 0:
+                                continue
                             
                             if tc_index not in current_tool_calls:
                                 current_tool_calls[tc_index] = {
@@ -452,30 +454,18 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                             
                             # Start block if we have ID and Name
                             if (tool_call["id"] and tool_call["name"] and not tool_call["started"]):
-                                tool_name = tool_call["name"]
+                                current_block_index += 1
+                                tool_call["claude_index"] = current_block_index
+                                tool_call["started"] = True
                                 
-                                # Check if we already have a block for this tool name (Merge Strategy)
-                                if tool_name in tool_name_to_claude_index:
-                                    # Reuse existing block index
-                                    tool_call["claude_index"] = tool_name_to_claude_index[tool_name]
-                                    tool_call["started"] = True
-                                    # Do NOT yield START event again for duplicates
-                                    logger.info(f"Merging duplicate tool call {tool_name} (idx={tc_index}) into claude_index {tool_call['claude_index']}")
-                                else:
-                                    # New tool call
-                                    current_block_index += 1
-                                    tool_call["claude_index"] = current_block_index
-                                    tool_name_to_claude_index[tool_name] = current_block_index
-                                    tool_call["started"] = True
-                                    
-                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': tool_call['claude_index'], 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': tool_call['name']}}, ensure_ascii=False)}\n\n"
+                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': tool_call['claude_index'], 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': tool_call['name']}}, ensure_ascii=False)}\n\n"
                             
                             # Handle Arguments
                             if "arguments" in function_data and tool_call["started"] and function_data["arguments"] is not None:
                                 partial_args = function_data["arguments"]
                                 tool_call["args_buffer"] += partial_args
                                 
-                                # Send delta immediately (merged into the assigned claude_index)
+                                # Send delta immediately
                                 yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': tool_call['claude_index'], 'delta': {'type': Constants.DELTA_INPUT_JSON, 'partial_json': partial_args}}, ensure_ascii=False)}\n\n"
                                     
 
