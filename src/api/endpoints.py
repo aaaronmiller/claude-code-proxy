@@ -37,6 +37,52 @@ from src.models.crosstalk import (
     CrosstalkError,
 )
 
+# Debug logging for traffic capture
+import logging
+
+DEBUG_TRAFFIC_LOG = os.environ.get("DEBUG_TRAFFIC_LOG", "false").lower() == "true"
+traffic_logger = logging.getLogger("traffic_debugger")
+traffic_logger.setLevel(logging.DEBUG)
+
+if DEBUG_TRAFFIC_LOG:
+    # Setup file handler for traffic logs
+    log_dir = "logs"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+        
+    file_handler = logging.FileHandler(f"{log_dir}/debug_traffic.log")
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s'
+    ))
+    traffic_logger.addHandler(file_handler)
+
+async def log_request_body(request: Request):
+    """Middleware-like function to log request body if enabled."""
+    if not DEBUG_TRAFFIC_LOG:
+        return
+        
+    try:
+        # Clone body stream so it can be read again
+        body = await request.body()
+        
+        # Log basic info
+        traffic_logger.info(f"--- INCOMING REQUEST: {request.method} {request.url} ---")
+        traffic_logger.info(f"Headers: {dict(request.headers)}")
+        
+        # Log body (truncated if too large)
+        try:
+            body_str = body.decode('utf-8')
+            if len(body_str) > 50000:
+                traffic_logger.info(f"Body (Truncated): {body_str[:1000]}... [Total {len(body_str)} bytes]")
+            else:
+                traffic_logger.info(f"Body: {body_str}")
+        except:
+            traffic_logger.info(f"Body (Binary): {len(body)} bytes")
+            
+        traffic_logger.info("------------------------------------------------")
+    except Exception as e:
+        traffic_logger.error(f"Failed to log request: {e}")
+
 router = APIRouter()
 
 # Choose logger based on environment variable
@@ -123,6 +169,9 @@ async def create_message(
     http_request: Request,
     openai_api_key: Optional[str] = Depends(validate_and_extract_api_key)
 ):
+    # Log full request for debugging
+    await log_request_body(http_request)
+
     request_start_time = time.time()
     request_id = str(uuid.uuid4())
     
