@@ -343,6 +343,14 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     
     current_tool_calls = {}
     
+    # ID-based deduplication state
+    # Map: tool_call_id -> {primary_index: int, claude_index: int}
+    active_tool_ids = {} 
+    
+    # Fallback map for streams that don't send IDs in every chunk
+    # Map: stream_index -> tool_call_id
+    stream_index_to_id = {}
+
     final_stop_reason = Constants.STOP_END_TURN
     usage_data = {"input_tokens": 0, "output_tokens": 0}
 
@@ -416,7 +424,7 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                         
                         yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': text_content}}, ensure_ascii=False)}\n\n"
 
-                    # Handle tool call deltas - SIMPLIFIED LOGIC WITH INDEX FILTERING
+                    # Handle tool call deltas - ID-BASED DEDUPLICATION LOGIC
                     if "tool_calls" in delta and delta["tool_calls"]:
                         # Close previous block if we were doing text/thinking
                         if current_block_type in ["thinking", "text"]:
@@ -425,48 +433,94 @@ async def convert_openai_streaming_to_claude_with_cancellation(
 
                         for tc_delta in delta["tool_calls"]:
                             tc_index = tc_delta.get("index", 0)
+                            tc_id = tc_delta.get("id")
                             
-                            # CRITICAL FIX: Ignore secondary tool calls (index > 0) to prevent "Ghost Call" duplication
-                            # This sacrifices multi-tool use in a single turn for stability with VibeProxy/Gemini
-                            if tc_index > 0:
-                                continue
+                            # Determine Target Claude Block Index
+                            target_claude_index = None
+                            is_new_block = False
                             
-                            if tc_index not in current_tool_calls:
-                                current_tool_calls[tc_index] = {
-                                    "id": None,
-                                    "name": None,
-                                    "args_buffer": "",
-                                    "json_sent": False,
-                                    "claude_index": None,
-                                    "started": False
-                                }
-                            
-                            tool_call = current_tool_calls[tc_index]
-                            
-                            # Update ID
-                            if tc_delta.get("id"):
-                                tool_call["id"] = tc_delta["id"]
-                            
-                            # Update Name
-                            function_data = tc_delta.get(Constants.TOOL_FUNCTION, {})
-                            if function_data.get("name"):
-                                tool_call["name"] = function_data["name"]
-                            
-                            # Start block if we have ID and Name
-                            if (tool_call["id"] and tool_call["name"] and not tool_call["started"]):
-                                current_block_index += 1
-                                tool_call["claude_index"] = current_block_index
-                                tool_call["started"] = True
+                            # Case 1: We have an ID (start of a call or redundant ID)
+                            if tc_id:
+                                stream_index_to_id[tc_index] = tc_id
                                 
-                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': tool_call['claude_index'], 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': tool_call['name']}}, ensure_ascii=False)}\n\n"
+                                if tc_id in active_tool_ids:
+                                    # Known ID -> Duplicate/Ghost stream?
+                                    # If the index is different from the primary one, it's a ghost stream.
+                                    # We should MERGE into the existing block but be careful not to duplicate args.
+                                    # Usually, ghost streams send duplicate args. Ideally we ignore args from secondary streams.
+                                    target_claude_index = active_tool_ids[tc_id]["claude_index"]
+                                    
+                                    # Log potential ghost call
+                                    if active_tool_ids[tc_id]["primary_index"] != tc_index:
+                                        # Secondary stream for same ID -> Ghost Call
+                                        # Policy: IGNORE secondary stream content to prevent arg duplication
+                                        logger.debug(f"Ignoring ghost stream for ID {tc_id} (index {tc_index} vs primary {active_tool_ids[tc_id]['primary_index']})")
+                                        continue
+                                else:
+                                    # New unique ID -> New Block
+                                    current_block_index += 1
+                                    target_claude_index = current_block_index
+                                    is_new_block = True
+                                    
+                                    active_tool_ids[tc_id] = {
+                                        "primary_index": tc_index,
+                                        "claude_index": current_block_index
+                                    }
                             
-                            # Handle Arguments
-                            if "arguments" in function_data and tool_call["started"] and function_data["arguments"] is not None:
-                                partial_args = function_data["arguments"]
-                                tool_call["args_buffer"] += partial_args
+                            # Case 2: No ID (streaming arguments)
+                            else:
+                                # Look up ID from stream index
+                                known_id = stream_index_to_id.get(tc_index)
+                                if known_id and known_id in active_tool_ids:
+                                    target_claude_index = active_tool_ids[known_id]["claude_index"]
+                                else:
+                                    # No ID map found. This happens if:
+                                    # a) Stream started without ID (rare for OpenAI, possible for broken proxies)
+                                    # b) We filtered out the start (ghost call without ID)
+                                    
+                                    # Heuristic: If index > 0 and we haven't mapped it, it's likely a ghost call
+                                    if tc_index > 0:
+                                        logger.debug(f"Ignoring unmapped tool delta at index {tc_index}")
+                                        continue
+                                    
+                                    # Fallback for index 0 if something weird happened
+                                    if current_tool_calls.get(0, {}).get("claude_index") is not None:
+                                        target_claude_index = current_tool_calls[0]["claude_index"]
+                            
+                            # If we decided to process this delta
+                            if target_claude_index is not None:
+                                if tc_index not in current_tool_calls:
+                                    current_tool_calls[tc_index] = {
+                                        "id": None,
+                                        "name": None,
+                                        "args_buffer": "",
+                                        "json_sent": False,
+                                        "claude_index": target_claude_index,
+                                        "started": False
+                                    }
                                 
-                                # Send delta immediately
-                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': tool_call['claude_index'], 'delta': {'type': Constants.DELTA_INPUT_JSON, 'partial_json': partial_args}}, ensure_ascii=False)}\n\n"
+                                tool_call = current_tool_calls[tc_index]
+                                
+                                # Update Internal State
+                                if tc_id: tool_call["id"] = tc_id
+                                
+                                function_data = tc_delta.get(Constants.TOOL_FUNCTION, {})
+                                if function_data.get("name"):
+                                    tool_call["name"] = function_data["name"]
+                                
+                                # Emit START block if needed (only for the first time we see this ID/Block)
+                                if is_new_block:
+                                    tool_call["started"] = True # Mark local tracker as started too
+                                    # Ensure we have a name (or empty string placeholder if needed, though OpenAI usually sends name with ID)
+                                    name_val = tool_call["name"] or ""
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': target_claude_index, 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': name_val}}, ensure_ascii=False)}\n\n"
+                                
+                                # Emit DELTA for arguments
+                                if "arguments" in function_data and function_data["arguments"]:
+                                    partial_args = function_data["arguments"]
+                                    tool_call["args_buffer"] += partial_args
+                                    
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': target_claude_index, 'delta': {'type': Constants.DELTA_INPUT_JSON, 'partial_json': partial_args}}, ensure_ascii=False)}\n\n"
                                     
 
                     # Handle finish reason
