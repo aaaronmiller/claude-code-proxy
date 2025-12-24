@@ -238,8 +238,8 @@ class Config:
                 print(f"Warning: REASONING_MAX_TOKENS {self.reasoning_max_tokens} is negative. "
                       f"Setting to 0.")
                 self.reasoning_max_tokens = 0
-            elif self.reasoning_max_tokens > 24576:
-                print(f"Warning: REASONING_MAX_TOKENS {self.reasoning_max_tokens} exceeds maximum (24576). "
+            elif self.reasoning_max_tokens > 131072:
+                print(f"Warning: REASONING_MAX_TOKENS {self.reasoning_max_tokens} exceeds maximum (131072). "
                       f"Will be adjusted per provider limits.")
     
     def validate_api_key(self, api_key: str = None):

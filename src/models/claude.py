@@ -24,9 +24,20 @@ class ClaudeSystemContent(BaseModel):
     type: Literal["text"]
     text: str
 
+class ClaudeContentBlockThinking(BaseModel):
+    type: Literal["thinking"]
+    thinking: str
+    signature: Optional[str] = None
+
+class ClaudeContentBlockRedactedThinking(BaseModel):
+    type: Literal["redacted_thinking"]
+    data: Optional[str] = None
+    
+    model_config = {"extra": "allow"}
+
 class ClaudeMessage(BaseModel):
     role: Literal["user", "assistant"]
-    content: Union[str, List[Union[ClaudeContentBlockText, ClaudeContentBlockImage, ClaudeContentBlockToolUse, ClaudeContentBlockToolResult]]]
+    content: Union[str, List[Union[ClaudeContentBlockText, ClaudeContentBlockImage, ClaudeContentBlockToolUse, ClaudeContentBlockToolResult, ClaudeContentBlockThinking, ClaudeContentBlockRedactedThinking]]]
 
 class ClaudeTool(BaseModel):
     name: str

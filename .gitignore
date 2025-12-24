@@ -176,6 +176,15 @@ pyrightconfig.json
 # Claude Code Proxy specific
 # =========================
 
+# Profile storage (user configurations)
+configs/profiles/
+
+# Usage tracking database
+data/usage.db
+usage_tracking.db
+*.sqlite
+*.sqlite3
+
 # Build artifacts and output
 build/
 dist/
@@ -207,6 +216,9 @@ modes_backup_*.json
 .env.local
 .env.production
 .env.development
+
+# Context export (AI history)
+context.md
 
 # Recommendations exports
 recommendations_*.json

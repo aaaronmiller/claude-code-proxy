@@ -174,10 +174,10 @@ class ConfigValidator:
         if reasoning_max_tokens:
             try:
                 tokens = int(reasoning_max_tokens)
-                if tokens < 1024 or tokens > 24576:
+                if tokens < 1024 or tokens > 128000:
                     self.warnings.append(
                         f"REASONING_MAX_TOKENS={tokens} is outside recommended range\n"
-                        f"  → Claude: 1024-16000 tokens\n"
+                        f"  → Claude: 1024-128000 tokens\n"
                         f"  → Gemini: 0-24576 tokens"
                     )
             except ValueError:

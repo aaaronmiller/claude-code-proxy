@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+import httpx
 
 from src.core.config import config
 from src.core.logging import logger
@@ -19,16 +20,68 @@ PROFILES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class ConfigUpdate(BaseModel):
-    """Configuration update model"""
+    """Configuration update model - supports all web UI settings"""
+    # Core settings
+    provider_api_key: Optional[str] = None
+    provider_base_url: Optional[str] = None
+    proxy_auth_key: Optional[str] = None
+
+    # Legacy fallback names
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     openai_base_url: Optional[str] = None
+
+    # Server settings
+    host: Optional[str] = None
+    port: Optional[str] = None
+    log_level: Optional[str] = None
+
+    # Model settings
     big_model: Optional[str] = None
     middle_model: Optional[str] = None
     small_model: Optional[str] = None
+
+    # Reasoning settings
     reasoning_effort: Optional[str] = None
     reasoning_max_tokens: Optional[str] = None
+    reasoning_exclude: Optional[str] = None
+
+    # Token limits
+    max_tokens_limit: Optional[str] = None
+    min_tokens_limit: Optional[str] = None
+    request_timeout: Optional[str] = None
+
+    # Terminal display settings
+    terminal_display_mode: Optional[str] = None
+    terminal_color_scheme: Optional[str] = None
+    log_style: Optional[str] = None
+    terminal_show_workspace: Optional[str] = None
+    terminal_show_context_pct: Optional[str] = None
+    terminal_show_task_type: Optional[str] = None
+    terminal_show_speed: Optional[str] = None
+    terminal_show_cost: Optional[str] = None
+    terminal_show_duration_colors: Optional[str] = None
+    terminal_session_colors: Optional[str] = None
+    compact_logger: Optional[str] = None
+
+    # Dashboard settings
     track_usage: Optional[str] = None
+    enable_dashboard: Optional[str] = None
+    dashboard_layout: Optional[str] = None
+    dashboard_refresh: Optional[str] = None
+
+    # Hybrid mode settings
+    enable_big_endpoint: Optional[str] = None
+    big_endpoint: Optional[str] = None
+    big_api_key: Optional[str] = None
+    enable_middle_endpoint: Optional[str] = None
+    middle_endpoint: Optional[str] = None
+    middle_api_key: Optional[str] = None
+    enable_small_endpoint: Optional[str] = None
+    small_endpoint: Optional[str] = None
+    small_api_key: Optional[str] = None
+
+    # Legacy
     use_compact_logger: Optional[str] = None
 
 
@@ -40,18 +93,69 @@ class ProfileCreate(BaseModel):
 
 @router.get("/api/config")
 async def get_config():
-    """Get current configuration"""
+    """Get current configuration - returns all settings for web UI"""
     return {
+        # Core settings (use new names with fallback to legacy)
+        "provider_api_key": "***" if (os.getenv("PROVIDER_API_KEY") or config.openai_api_key) else "",
+        "provider_base_url": os.getenv("PROVIDER_BASE_URL") or config.openai_base_url,
+        "proxy_auth_key": "***" if (os.getenv("PROXY_AUTH_KEY") or config.anthropic_api_key) else "",
+
+        # Legacy names (for backward compatibility)
         "openai_api_key": "***" if config.openai_api_key else "",
         "anthropic_api_key": "***" if config.anthropic_api_key else "",
         "openai_base_url": config.openai_base_url,
+
+        # Server settings
+        "host": os.getenv("HOST", config.host if hasattr(config, 'host') else "0.0.0.0"),
+        "port": os.getenv("PORT", str(config.port) if hasattr(config, 'port') else "8082"),
+        "log_level": os.getenv("LOG_LEVEL", config.log_level if hasattr(config, 'log_level') else "INFO"),
+
+        # Model settings
         "big_model": config.big_model,
         "middle_model": config.middle_model,
         "small_model": config.small_model,
+
+        # Reasoning settings
         "reasoning_effort": config.reasoning_effort if hasattr(config, 'reasoning_effort') else "",
-        "reasoning_max_tokens": config.reasoning_max_tokens if hasattr(config, 'reasoning_max_tokens') else "",
+        "reasoning_max_tokens": str(config.reasoning_max_tokens) if hasattr(config, 'reasoning_max_tokens') and config.reasoning_max_tokens else "",
+        "reasoning_exclude": os.getenv("REASONING_EXCLUDE", "false"),
+
+        # Token limits
+        "max_tokens_limit": str(config.max_tokens_limit) if hasattr(config, 'max_tokens_limit') else "65536",
+        "min_tokens_limit": str(config.min_tokens_limit) if hasattr(config, 'min_tokens_limit') else "4096",
+        "request_timeout": str(config.request_timeout) if hasattr(config, 'request_timeout') else "120",
+
+        # Terminal display settings
+        "terminal_display_mode": os.getenv("TERMINAL_DISPLAY_MODE", "detailed"),
+        "terminal_color_scheme": os.getenv("TERMINAL_COLOR_SCHEME", "auto"),
+        "log_style": os.getenv("LOG_STYLE", "rich"),
+        "terminal_show_workspace": os.getenv("TERMINAL_SHOW_WORKSPACE", "true"),
+        "terminal_show_context_pct": os.getenv("TERMINAL_SHOW_CONTEXT_PCT", "true"),
+        "terminal_show_task_type": os.getenv("TERMINAL_SHOW_TASK_TYPE", "true"),
+        "terminal_show_speed": os.getenv("TERMINAL_SHOW_SPEED", "true"),
+        "terminal_show_cost": os.getenv("TERMINAL_SHOW_COST", "true"),
+        "terminal_show_duration_colors": os.getenv("TERMINAL_SHOW_DURATION_COLORS", "true"),
+        "terminal_session_colors": os.getenv("TERMINAL_SESSION_COLORS", "true"),
+        "compact_logger": os.getenv("USE_COMPACT_LOGGER", "false"),
+
+        # Dashboard settings
         "track_usage": os.getenv("TRACK_USAGE", "false"),
-        "use_compact_logger": os.getenv("USE_COMPACT_LOGGER", "false"),
+        "enable_dashboard": os.getenv("ENABLE_DASHBOARD", "false"),
+        "dashboard_layout": os.getenv("DASHBOARD_LAYOUT", "default"),
+        "dashboard_refresh": os.getenv("DASHBOARD_REFRESH", "0.5"),
+
+        # Hybrid mode settings
+        "enable_big_endpoint": os.getenv("ENABLE_BIG_ENDPOINT", "false"),
+        "big_endpoint": os.getenv("BIG_ENDPOINT", ""),
+        "big_api_key": "***" if os.getenv("BIG_API_KEY") else "",
+        "enable_middle_endpoint": os.getenv("ENABLE_MIDDLE_ENDPOINT", "false"),
+        "middle_endpoint": os.getenv("MIDDLE_ENDPOINT", ""),
+        "middle_api_key": "***" if os.getenv("MIDDLE_API_KEY") else "",
+        "enable_small_endpoint": os.getenv("ENABLE_SMALL_ENDPOINT", "false"),
+        "small_endpoint": os.getenv("SMALL_ENDPOINT", ""),
+        "small_api_key": "***" if os.getenv("SMALL_API_KEY") else "",
+
+        # Mode indicator
         "passthrough_mode": config.passthrough_mode if hasattr(config, 'passthrough_mode') else False,
     }
 
@@ -280,4 +384,64 @@ async def get_stats():
             "est_cost": 0,
             "avg_latency": 0,
             "recent_requests": []
+        }
+
+
+@router.post("/api/test-connection")
+async def test_provider_connection():
+    """Test connection to the configured provider"""
+    try:
+        provider_url = os.getenv("PROVIDER_BASE_URL") or config.openai_base_url
+        provider_key = os.getenv("PROVIDER_API_KEY") or config.openai_api_key
+
+        if not provider_url or not provider_key:
+            return {
+                "success": False,
+                "error": "Provider URL or API key not configured"
+            }
+
+        # Test by calling the /models endpoint
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{provider_url.rstrip('/')}/models",
+                headers={"Authorization": f"Bearer {provider_key}"}
+            )
+
+            if response.status_code == 200:
+                return {
+                    "success": True,
+                    "message": "Connection successful",
+                    "provider": provider_url
+                }
+            elif response.status_code == 401:
+                return {
+                    "success": False,
+                    "error": "Invalid API key (401 Unauthorized)"
+                }
+            elif response.status_code == 403:
+                return {
+                    "success": False,
+                    "error": "API key valid but insufficient permissions (403 Forbidden)"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Unexpected response: {response.status_code}"
+                }
+
+    except httpx.TimeoutException:
+        return {
+            "success": False,
+            "error": "Connection timeout - provider may be slow or unreachable"
+        }
+    except httpx.ConnectError:
+        return {
+            "success": False,
+            "error": "Cannot connect to provider - check URL"
+        }
+    except Exception as e:
+        logger.error(f"Connection test failed: {e}")
+        return {
+            "success": False,
+            "error": str(e)
         }

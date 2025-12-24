@@ -221,6 +221,14 @@ def convert_claude_to_openai(
         "messages": openai_messages,
         "stream": claude_request.stream,
     }
+    
+    # DEBUG: Log outgoing message history
+    logger.info(f"OUTGOING REQUEST: {len(openai_messages)} messages")
+    for idx, msg in enumerate(openai_messages):
+        role = msg.get("role", "?")
+        content = str(msg.get("content", ""))[:100]
+        tool_calls = "YES" if msg.get("tool_calls") else "NO"
+        logger.info(f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content={content}...")
 
     # Newer OpenAI models (o1, o3, o4, gpt-5) require max_completion_tokens instead of max_tokens
     if is_newer_model:
@@ -243,13 +251,18 @@ def convert_claude_to_openai(
         openai_tools = []
         for tool in claude_request.tools:
             if tool.name and tool.name.strip():
+                # Sanitize input schema to remove 'defer_loading' which causes Google API errors
+                input_schema = tool.input_schema.copy() if tool.input_schema else {}
+                if "defer_loading" in input_schema:
+                    del input_schema["defer_loading"]
+                
                 openai_tools.append(
                     {
                         "type": Constants.TOOL_FUNCTION,
-                        Constants.TOOL_FUNCTION: {
+                        "function": {
                             "name": tool.name,
                             "description": tool.description or "",
-                            "parameters": tool.input_schema,
+                            "parameters": input_schema,
                         },
                     }
                 )
@@ -474,14 +487,24 @@ def convert_claude_assistant_message(msg: ClaudeMessage) -> Dict[str, Any]:
                     },
                 }
             )
+        # Explicitly skip thinking blocks to avoid 422 errors
+        elif block.type == "thinking" or block.type == "redacted_thinking":
+            continue
 
     openai_message = {"role": Constants.ROLE_ASSISTANT}
 
     # Set content
     if text_parts:
         openai_message["content"] = "".join(text_parts)
-    else:
+    elif tool_calls:
+        # If we have tool calls, content should be None for most OpenAI-compatible models.
+        # This prevents Gemini from seeing an "interrupted" placeholder like "..." and 
+        # autonomously repeating the previous forensic steps (Ghost Calls).
         openai_message["content"] = None
+    else:
+        # If no text AND no tool calls (e.g. only thinking blocks), we MUST provide 
+        # some content to avoid a 400 error from the Google API.
+        openai_message["content"] = "(thinking)"
 
     # Set tool calls
     if tool_calls:

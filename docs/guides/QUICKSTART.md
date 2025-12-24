@@ -15,6 +15,35 @@ pip install -r requirements.txt
 
 Choose your LLM provider and configure accordingly:
 
+#### VibeProxy / Antigravity (Recommended - Free!)
+The easiest way to use Claude Code with premium models. No API keys needed.
+
+1. Install VibeProxy: https://github.com/automazeio/vibeproxy/releases
+2. Launch and authenticate with Google (Antigravity)
+3. Run the setup wizard:
+```bash
+python start_proxy.py --setup
+# Select "VibeProxy/Antigravity (DETECTED)" when it appears
+```
+
+Or configure manually:
+```bash
+cp .env.example .env
+# Edit .env:
+# PROVIDER_API_KEY="dummy"
+# PROVIDER_BASE_URL="http://127.0.0.1:8317/v1"
+# BIG_MODEL="gemini-claude-opus-4-5-thinking"
+# MIDDLE_MODEL="gemini-3-pro-preview"
+# SMALL_MODEL="gemini-3-flash"
+# REASONING_MAX_TOKENS="128000"
+```
+
+**Available Antigravity models:**
+- `gemini-claude-opus-4-5-thinking` - Claude Opus with 128k thinking
+- `gemini-claude-sonnet-4-5-thinking` - Claude Sonnet with thinking
+- `gemini-3-pro-preview` - Gemini 3 Pro
+- `gemini-3-flash` - Fast Gemini 3
+
 #### OpenAI
 ```bash
 cp .env.example .env
@@ -53,6 +82,15 @@ python start_proxy.py
 # In another terminal, use with Claude Code
 ANTHROPIC_BASE_URL=http://localhost:8082 claude
 ```
+
+### Web Configuration UI
+
+Once the proxy is running, access the web dashboard at `http://localhost:8082`:
+
+- Configure providers with one-click presets
+- Set model routing (BIG/MIDDLE/SMALL)
+- Manage profiles and settings
+- Monitor live request logs
 
 ## 🎯 How It Works
 

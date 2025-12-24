@@ -346,7 +346,7 @@ class RequestLogger:
                     thinking_tokens = details.get("reasoning_tokens", 0)
         
         # Get model limits for context window display
-        from src.utils.model_limits import get_model_limits
+        from src.services.usage.model_limits import get_model_limits
         context_limit = 0
         output_limit = 0
         if model_name:

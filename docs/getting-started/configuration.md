@@ -75,6 +75,20 @@ PROXY_AUTH_KEY="your-secret-key"
 
 ## Provider Setup
 
+### VibeProxy / Antigravity (Recommended)
+Free access to Claude and Gemini models via Google's Antigravity service. No API keys needed.
+```bash
+PROVIDER_API_KEY="dummy"  # Not used - OAuth handled by VibeProxy
+PROVIDER_BASE_URL="http://127.0.0.1:8317/v1"
+
+# Recommended models
+BIG_MODEL="gemini-claude-opus-4-5-thinking"     # Claude Opus with 128k thinking
+MIDDLE_MODEL="gemini-3-pro-preview"             # Gemini 3 Pro
+SMALL_MODEL="gemini-3-flash"                    # Fast Gemini 3
+REASONING_MAX_TOKENS="128000"
+```
+**Setup**: Install [VibeProxy](https://github.com/automazeio/vibeproxy/releases), authenticate with Google, then run `python start_proxy.py --setup`.
+
 ### OpenRouter (Recommended)
 352+ models, generous free tier, best for experimentation.
 ```bash
@@ -132,14 +146,15 @@ REASONING_EFFORT="high"  # Options: low, medium, high
 ### Token Budgets (Anthropic/Gemini)
 For models with explicit thinking budgets:
 ```bash
-REASONING_MAX_TOKENS="16000"  # Exact token count
+REASONING_MAX_TOKENS="128000"  # Range: 1024-128000 for Claude, 0-24576 for Gemini
 ```
 
 ### Suffix Notation (Power User)
 Override settings per-model using suffix notation:
 ```bash
-BIG_MODEL="o3-mini:high"          # Force High effort
-BIG_MODEL="claude-3-7-sonnet:16k" # Force 16k thinking tokens
+BIG_MODEL="o3-mini:high"              # Force High effort
+BIG_MODEL="claude-opus-4:128k"        # Force 128k thinking tokens
+BIG_MODEL="gemini-2.5-flash:16k"      # Force 16k thinking budget
 ```
 
 ---

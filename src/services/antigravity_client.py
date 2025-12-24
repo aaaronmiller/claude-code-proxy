@@ -1,208 +1,134 @@
-"""Antigravity API client for making requests to Google's internal endpoint.
-
-This module provides the HTTP client for making AI model requests
-to the Antigravity/daily-cloudcode-pa.sandbox.googleapis.com endpoint.
-"""
-
+import os
 import json
-import logging
-import aiohttp
-from typing import Dict, Any, Optional, AsyncIterator
-
-from src.services.antigravity import get_antigravity_token, get_antigravity_auth
-
-logger = logging.getLogger(__name__)
-
-# Antigravity API endpoints
-ANTIGRAVITY_BASE_URL = "https://daily-cloudcode-pa.sandbox.googleapis.com"
-
+import sqlite3
+import httpx
+from pathlib import Path
+from typing import Dict, List, Any, Optional
 
 class AntigravityClient:
-    """Client for Antigravity API (daily-cloudcode-pa.sandbox.googleapis.com)."""
+    """
+    Antigravity API client for making requests to Google's internal daily-cloudcode-pa endpoint.
+    Uses the OAuth token from Antigravity's VSCode state and the proprietary nested JSON payload format
+    reverse-engineered from CLIProxyAPI.
+    """
     
     def __init__(self):
-        self._session: Optional[aiohttp.ClientSession] = None
-    
-    async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create aiohttp session."""
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-        return self._session
-    
-    def _get_headers(self) -> Dict[str, str]:
-        """Get request headers with OAuth token."""
-        token = get_antigravity_token()
-        if not token:
-            raise ValueError("No Antigravity OAuth token available. Log into Antigravity IDE first.")
-        
-        return {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {token}",
-            "User-Agent": "Claude-Code-Proxy/1.0"
-        }
-    
-    async def create_chat_completion(
-        self,
-        messages: list,
-        model: str = "Gemini 3 Pro (High)",
-        max_tokens: int = 8192,
-        temperature: float = 1.0,
-        stream: bool = False,
-        **kwargs
-    ) -> Dict[str, Any]:
+        self.base_url = "https://daily-cloudcode-pa.sandbox.googleapis.com"
+        # self.base_url = "https://cloudcode-pa.googleapis.com" # Prod URL fallback
+        self.user_agent = "antigravity/1.11.5 darwin/arm64"
+        self._token = None
+        self._load_token()
+
+    def _load_token(self):
+        """Extracts the OAuth token from Antigravity's local SQLite database."""
+        db_path = Path.home() / 'Library/Application Support/Antigravity/User/globalStorage/state.vscdb'
+        try:
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM ItemTable WHERE key='antigravityAuthStatus'")
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                data = json.loads(result[0])
+                self._token = data.get('apiKey')
+        except Exception as e:
+            print(f"Error loading Antigravity token: {e}")
+
+    def create_chat_completion(self, messages: List[Dict[str, str]], model: str = "gemini-3-pro-high", **kwargs) -> Dict[str, Any]:
         """
-        Create a chat completion using Antigravity API.
+        Creates a chat completion using the Antigravity internal API.
         
         Args:
             messages: List of message dicts with 'role' and 'content'
-            model: Antigravity model name (e.g., "Gemini 3 Pro (High)")
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            stream: Whether to stream the response
-            **kwargs: Additional parameters
-            
-        Returns:
-            Response dict in OpenAI format
+            model: Model identifier (defaults to gemini-3-pro-high)
+            **kwargs: Additional generation config parameters
         """
-        session = await self._get_session()
-        headers = self._get_headers()
-        
-        # Convert OpenAI-style messages to Gemini-style contents
+        if not self._token:
+            self._load_token()
+            if not self._token:
+                raise ValueError("No Antigravity token found. Please login to Antigravity.")
+
+        # Convert standard messages to Antigravity "contents" format
         contents = []
-        system_instruction = None
-        
         for msg in messages:
-            role = msg.get('role', 'user')
-            content = msg.get('content', '')
-            
-            if role == 'system':
-                # Gemini uses systemInstruction separately
-                system_instruction = {"parts": [{"text": content}]}
-            else:
-                # Map roles: user -> user, assistant -> model
-                gemini_role = "model" if role == "assistant" else "user"
-                contents.append({
-                    "role": gemini_role,
-                    "parts": [{"text": content}]
-                })
-        
-        # Build Gemini-style payload
+            role = "model" if msg["role"] == "assistant" else "user"
+            contents.append({
+                "role": role,
+                "parts": [{"text": msg["content"]}]
+            })
+
+        # Build generation config
+        generation_config = {
+            "maxOutputTokens": kwargs.get("max_tokens", 4096),
+            "temperature": kwargs.get("temperature", 0.7),
+            "topP": kwargs.get("top_p", 0.95),
+            "topK": kwargs.get("top_k", 40),
+        }
+
+        # Construct payload with proprietary nested structure
+        # Structure found from CLIProxyAPI: {"project":"", "request": {"contents":[]}, "model":"..."}
         payload = {
-            "contents": contents,
-            "generationConfig": {
-                "maxOutputTokens": max_tokens,
-                "temperature": temperature,
+            "project": "",
+            "model": model,
+            "request": {
+                "contents": contents,
+                "generationConfig": generation_config
             }
         }
-        
-        if system_instruction:
-            payload["systemInstruction"] = system_instruction
-        
-        endpoint = f"{ANTIGRAVITY_BASE_URL}/v1internal:streamGenerateContent"
-        if not stream:
-            endpoint = f"{ANTIGRAVITY_BASE_URL}/v1internal:generateContent"
-        
-        logger.info(f"Antigravity request: model={model}, contents={len(contents)}")
-        
-        try:
-            async with session.post(
-                endpoint,
-                headers=headers,
-                json=payload,
-                ssl=False  # Disable SSL verification for testing
-            ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    logger.error(f"Antigravity API error: {response.status} - {error_text}")
-                    raise Exception(f"Antigravity API error: {response.status} - {error_text}")
-                
-                data = await response.json()
-                
-                # Convert to OpenAI-compatible format
-                return self._convert_to_openai_format(data, model)
-                
-        except aiohttp.ClientError as e:
-            logger.error(f"Antigravity connection error: {e}")
-            raise
-    
-    async def create_chat_completion_stream(
-        self,
-        messages: list,
-        model: str = "Gemini 3 Pro (High)",
-        max_tokens: int = 8192,
-        temperature: float = 1.0,
-        **kwargs
-    ) -> AsyncIterator[Dict[str, Any]]:
-        """
-        Create a streaming chat completion.
-        
-        Yields:
-            Chunks in OpenAI SSE format
-        """
-        session = await self._get_session()
-        headers = self._get_headers()
-        
-        payload = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self._token}",
+            "User-Agent": self.user_agent,
+            "Accept": "application/json"
         }
+
+        endpoint = "/v1internal:generateContent"
+        url = f"{self.base_url}{endpoint}"
         
-        for key, value in kwargs.items():
-            if value is not None:
-                payload[key] = value
-        
-        endpoint = f"{ANTIGRAVITY_BASE_URL}/v1internal:streamGenerateContent?alt=sse"
-        
-        logger.info(f"Antigravity stream request: model={model}")
-        
+        # print(f"Sending request to {url}")
+        # print(f"Payload: {json.dumps(payload, indent=2)}")
+
         try:
-            async with session.post(
-                endpoint,
-                headers=headers,
-                json=payload,
-                ssl=False
-            ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise Exception(f"Antigravity API error: {response.status} - {error_text}")
-                
-                # Parse SSE stream
-                async for line in response.content:
-                    line = line.decode('utf-8').strip()
-                    if line.startswith('data: '):
-                        data_str = line[6:]  # Remove 'data: ' prefix
-                        if data_str == '[DONE]':
-                            break
-                        try:
-                            data = json.loads(data_str)
-                            yield self._convert_chunk_to_openai_format(data, model)
-                        except json.JSONDecodeError:
-                            continue
-                            
-        except aiohttp.ClientError as e:
-            logger.error(f"Antigravity stream error: {e}")
+            # Using verify=False as we found in prior steps that SSL certs might be an issue with some proxies,
+            # though direct connection should work. Keeping it False for initial success.
+            response = httpx.post(url, headers=headers, json=payload, timeout=60.0, verify=False)
+            response.raise_for_status()
+            
+            result = response.json()
+            return self._convert_response(result)
+            
+        except httpx.HTTPStatusError as e:
+            print(f"Antigravity API Error: {e.response.status_code} - {e.response.text}")
             raise
-    
-    def _convert_to_openai_format(self, response: Dict, model: str) -> Dict[str, Any]:
-        """Convert Antigravity response to OpenAI format."""
-        # Extract text content - adjust based on actual response format
-        content = ""
-        if "candidates" in response and response["candidates"]:
-            candidate = response["candidates"][0]
-            if "content" in candidate and "parts" in candidate["content"]:
-                parts = candidate["content"]["parts"]
-                content = "".join(p.get("text", "") for p in parts)
-        elif "text" in response:
-            content = response["text"]
-        elif "content" in response:
-            content = response["content"]
+        except Exception as e:
+            print(f"Request failed: {e}")
+            raise
+
+    def _convert_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Converts Antigravity response to OpenAI-compatible format."""
         
+        # Unpack 'response' wrapper if present
+        data = response_data
+        if "response" in response_data:
+            data = response_data["response"]
+            
+        content = ""
+        if "candidates" in data and len(data["candidates"]) > 0:
+            candidate = data["candidates"][0]
+            if "content" in candidate:
+                content_obj = candidate["content"]
+                if "parts" in content_obj:
+                    parts = content_obj["parts"]
+                    if parts:
+                        content = "".join([p.get("text", "") for p in parts])
+
         return {
-            "id": f"chatcmpl-antigravity-{id(response)}",
+            "id": "antigravity-chat",
             "object": "chat.completion",
-            "model": model,
+            "created": 0,
+            "model": "antigravity-model",
             "choices": [{
                 "index": 0,
                 "message": {
@@ -212,53 +138,8 @@ class AntigravityClient:
                 "finish_reason": "stop"
             }],
             "usage": {
-                "prompt_tokens": response.get("usageMetadata", {}).get("promptTokenCount", 0),
-                "completion_tokens": response.get("usageMetadata", {}).get("candidatesTokenCount", 0),
-                "total_tokens": response.get("usageMetadata", {}).get("totalTokenCount", 0)
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
             }
         }
-    
-    def _convert_chunk_to_openai_format(self, chunk: Dict, model: str) -> Dict[str, Any]:
-        """Convert streaming chunk to OpenAI format."""
-        content = ""
-        if "candidates" in chunk and chunk["candidates"]:
-            candidate = chunk["candidates"][0]
-            if "content" in candidate and "parts" in candidate["content"]:
-                parts = candidate["content"]["parts"]
-                content = "".join(p.get("text", "") for p in parts)
-        
-        return {
-            "id": f"chatcmpl-antigravity-stream",
-            "object": "chat.completion.chunk",
-            "model": model,
-            "choices": [{
-                "index": 0,
-                "delta": {
-                    "content": content
-                },
-                "finish_reason": None
-            }]
-        }
-    
-    async def close(self):
-        """Close the client session."""
-        if self._session and not self._session.closed:
-            await self._session.close()
-
-
-# Singleton instance
-_client: Optional[AntigravityClient] = None
-
-
-def get_antigravity_client() -> AntigravityClient:
-    """Get or create the Antigravity client singleton."""
-    global _client
-    if _client is None:
-        _client = AntigravityClient()
-    return _client
-
-
-async def is_antigravity_available() -> bool:
-    """Check if Antigravity is available and token is valid."""
-    auth = get_antigravity_auth()
-    return auth.is_available()

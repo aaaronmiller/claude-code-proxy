@@ -9,6 +9,8 @@ class Constants:
     CONTENT_IMAGE = "image"
     CONTENT_TOOL_USE = "tool_use"
     CONTENT_TOOL_RESULT = "tool_result"
+    CONTENT_THINKING = "thinking"
+    CONTENT_REDACTED_THINKING = "redacted_thinking"
     
     TOOL_FUNCTION = "function"
     
@@ -27,3 +29,4 @@ class Constants:
     
     DELTA_TEXT = "text_delta"
     DELTA_INPUT_JSON = "input_json_delta"
+    DELTA_THINKING = "thinking_delta"

@@ -3,147 +3,377 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Claude Code Proxy - Configuration</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <title>Claude Code Proxy</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme-cyber.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🔧 Claude Code Proxy</h1>
+            <h1>CLAUDE CODE PROXY</h1>
             <p class="subtitle">Configuration & Monitoring Dashboard</p>
             <div class="status-bar">
                 <span id="proxy-status" class="status-indicator">●</span>
-                <span id="proxy-status-text">Checking...</span>
+                <span id="proxy-status-text">Initializing...</span>
+                <span class="separator">|</span>
+                <span id="provider-info">Provider: <strong id="current-provider">Loading...</strong></span>
                 <span class="separator">|</span>
                 <span id="mode-indicator">Mode: <strong id="current-mode">Loading...</strong></span>
             </div>
         </header>
 
-        <nav class="tabs">
-            <button class="tab-button active" onclick="switchTab('config')">⚙️ Configuration</button>
-            <button class="tab-button" onclick="switchTab('profiles')">📁 Profiles</button>
-            <button class="tab-button" onclick="switchTab('models')">🤖 Models</button>
-            <button class="tab-button" onclick="switchTab('monitor')">📊 Monitor</button>
+        <nav class="tabs" role="tablist">
+            <button class="tab-button active" onclick="switchTab('config', this)" role="tab" aria-selected="true" aria-controls="config-tab">CORE</button>
+            <button class="tab-button" onclick="switchTab('models', this)" role="tab" aria-selected="false" aria-controls="models-tab">MODELS</button>
+            <button class="tab-button" onclick="switchTab('routing', this)" role="tab" aria-selected="false" aria-controls="routing-tab">ROUTING</button>
+            <button class="tab-button" onclick="switchTab('terminal', this)" role="tab" aria-selected="false" aria-controls="terminal-tab">TERMINAL</button>
+            <button class="tab-button" onclick="switchTab('profiles', this)" role="tab" aria-selected="false" aria-controls="profiles-tab">PROFILES</button>
+            <button class="tab-button" onclick="switchTab('monitor', this)" role="tab" aria-selected="false" aria-controls="monitor-tab">MONITOR</button>
+            <button class="tab-button" onclick="switchTab('logs', this)" role="tab" aria-selected="false" aria-controls="logs-tab">LOGS</button>
         </nav>
 
-        <!-- Configuration Tab -->
+        <!-- CORE Configuration Tab -->
         <div id="config-tab" class="tab-content active">
             <div class="section">
-                <h2>🔑 API Configuration</h2>
+                <h2>Provider Configuration</h2>
                 <div class="form-group">
-                    <label for="openai-api-key">OpenAI API Key</label>
-                    <input type="password" id="openai-api-key" placeholder="sk-..." />
-                    <small>Leave empty to enable passthrough mode (users provide their own keys)</small>
-                </div>
-                <div class="form-group">
-                    <label for="anthropic-api-key">Anthropic API Key (Client Validation)</label>
-                    <input type="password" id="anthropic-api-key" placeholder="sk-ant-..." />
-                    <small>Optional: Require clients to provide this key</small>
-                </div>
-                <div class="form-group">
-                    <label for="openai-base-url">OpenAI Base URL</label>
-                    <input type="text" id="openai-base-url" placeholder="https://api.openai.com/v1" />
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>🎯 Model Configuration</h2>
-                <div class="form-group">
-                    <label for="big-model">BIG Model (Claude Opus)</label>
-                    <input type="text" id="big-model" placeholder="gpt-4o" />
-                </div>
-                <div class="form-group">
-                    <label for="middle-model">MIDDLE Model (Claude Sonnet)</label>
-                    <input type="text" id="middle-model" placeholder="gpt-4o" />
-                </div>
-                <div class="form-group">
-                    <label for="small-model">SMALL Model (Claude Haiku)</label>
-                    <input type="text" id="small-model" placeholder="gpt-4o-mini" />
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>🧠 Reasoning Configuration</h2>
-                <div class="form-group">
-                    <label for="reasoning-effort">Reasoning Effort</label>
-                    <select id="reasoning-effort">
-                        <option value="">Not set</option>
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
+                    <label for="provider-preset">Quick Setup</label>
+                    <select id="provider-preset" onchange="applyProviderPreset()">
+                        <option value="">Select a provider preset...</option>
+                        <option value="vibeproxy">🌌 VibeProxy / Antigravity (Local OAuth)</option>
+                        <option value="openrouter">🚀 OpenRouter (352+ models)</option>
+                        <option value="gemini">🌟 Google Gemini</option>
+                        <option value="openai">🤖 OpenAI</option>
+                        <option value="ollama">🏠 Ollama (Local)</option>
+                        <option value="lmstudio">💻 LM Studio (Local)</option>
+                        <option value="custom">⚙️ Custom Provider</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="reasoning-max-tokens">Max Reasoning Tokens</label>
-                    <input type="number" id="reasoning-max-tokens" placeholder="8000" />
+                    <label for="provider-api-key">Provider API Key</label>
+                    <input type="password" id="provider-api-key" placeholder="sk-..." />
+                    <small>For VibeProxy/Ollama, use "dummy"</small>
+                </div>
+                <div class="form-group">
+                    <label for="provider-base-url">Provider Base URL</label>
+                    <input type="text" id="provider-base-url" placeholder="https://api.openai.com/v1" />
+                </div>
+                <div class="form-group">
+                    <label for="proxy-auth-key">Proxy Auth Key (Optional)</label>
+                    <input type="password" id="proxy-auth-key" placeholder="Require clients to use this key" />
+                    <small>Leave empty for open access</small>
                 </div>
             </div>
 
             <div class="section">
-                <h2>📈 Monitoring & Logging</h2>
-                <div class="form-group checkbox-group">
-                    <label>
-                        <input type="checkbox" id="track-usage" />
-                        Enable Usage Tracking (SQLite)
-                    </label>
+                <h2>Server Settings</h2>
+                <div class="form-group">
+                    <label for="server-host">Host</label>
+                    <input type="text" id="server-host" placeholder="0.0.0.0" value="0.0.0.0" />
                 </div>
-                <div class="form-group checkbox-group">
-                    <label>
-                        <input type="checkbox" id="compact-logger" />
-                        Use Compact Logger
-                    </label>
+                <div class="form-group">
+                    <label for="server-port">Port</label>
+                    <input type="number" id="server-port" placeholder="8082" value="8082" />
+                </div>
+                <div class="form-group">
+                    <label for="log-level">Log Level</label>
+                    <select id="log-level">
+                        <option value="DEBUG">DEBUG</option>
+                        <option value="INFO" selected>INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="ERROR">ERROR</option>
+                    </select>
                 </div>
             </div>
 
             <div class="actions">
                 <button class="btn btn-primary" onclick="saveConfig()">💾 Save & Apply</button>
-                <button class="btn btn-secondary" onclick="reloadConfig()">🔄 Reload from Env</button>
-                <button class="btn btn-secondary" onclick="exportConfig()">📥 Export Config</button>
+                <button class="btn btn-secondary" onclick="reloadConfig()">🔄 Reload from .env</button>
+                <button class="btn btn-secondary" onclick="testConnection()">🔌 Test Connection</button>
             </div>
         </div>
 
-        <!-- Profiles Tab -->
-        <div id="profiles-tab" class="tab-content">
-            <div class="section">
-                <h2>📁 Configuration Profiles</h2>
-                <p>Save and load different configuration sets for quick switching</p>
-
-                <div class="profile-actions">
-                    <input type="text" id="new-profile-name" placeholder="Profile name..." />
-                    <button class="btn btn-primary" onclick="saveProfile()">💾 Save Current as Profile</button>
-                </div>
-
-                <div id="profiles-list" class="profiles-list">
-                    <p class="loading">Loading profiles...</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Models Tab -->
+        <!-- MODELS Configuration Tab -->
         <div id="models-tab" class="tab-content">
             <div class="section">
-                <h2>🤖 Available Models</h2>
+                <h2>Model Routing</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Claude Code requests are routed: opus → BIG, sonnet → MIDDLE, haiku → SMALL
+                </p>
+                <div class="form-group">
+                    <label for="big-model">BIG Model (Claude Opus)</label>
+                    <input type="text" id="big-model" placeholder="gemini-claude-opus-4-5-thinking" />
+                    <small>For complex reasoning tasks</small>
+                </div>
+                <div class="form-group">
+                    <label for="middle-model">MIDDLE Model (Claude Sonnet)</label>
+                    <input type="text" id="middle-model" placeholder="gemini-3-pro-preview" />
+                    <small>For general coding tasks</small>
+                </div>
+                <div class="form-group">
+                    <label for="small-model">SMALL Model (Claude Haiku)</label>
+                    <input type="text" id="small-model" placeholder="gemini-3-flash" />
+                    <small>For fast, simple tasks</small>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Reasoning / Extended Thinking</h2>
+                <div class="form-group">
+                    <label for="reasoning-effort">OpenAI Reasoning Effort (o-series)</label>
+                    <select id="reasoning-effort">
+                        <option value="">Not set (disabled)</option>
+                        <option value="low">Low (~20% thinking)</option>
+                        <option value="medium">Medium (~50% thinking)</option>
+                        <option value="high">High (~80% thinking)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="reasoning-max-tokens">Max Thinking Tokens (Claude/Gemini)</label>
+                    <input type="number" id="reasoning-max-tokens" placeholder="128000" min="1024" max="128000" />
+                    <small>Claude: 1024-128000 | Gemini: 0-24576</small>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="reasoning-exclude" />
+                        Hide reasoning tokens from response (OpenAI only)
+                    </label>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Token Limits</h2>
+                <div class="form-group">
+                    <label for="max-tokens-limit">Max Output Tokens</label>
+                    <input type="number" id="max-tokens-limit" placeholder="65536" value="65536" />
+                </div>
+                <div class="form-group">
+                    <label for="min-tokens-limit">Min Output Tokens</label>
+                    <input type="number" id="min-tokens-limit" placeholder="4096" value="4096" />
+                </div>
+                <div class="form-group">
+                    <label for="request-timeout">Request Timeout (seconds)</label>
+                    <input type="number" id="request-timeout" placeholder="120" value="120" />
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Available Models</h2>
                 <div class="search-box">
                     <input type="text" id="model-search" placeholder="Search models..." onkeyup="filterModels()" />
                     <select id="model-provider-filter" onchange="filterModels()">
                         <option value="">All Providers</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="anthropic">Anthropic</option>
-                        <option value="google">Google</option>
-                        <option value="meta">Meta</option>
-                        <option value="qwen">Qwen</option>
+                        <option value="gemini">Gemini</option>
+                        <option value="claude">Claude</option>
+                        <option value="gpt">GPT</option>
+                        <option value="llama">Llama</option>
                     </select>
                 </div>
                 <div id="models-list" class="models-list">
                     <p class="loading">Loading models...</p>
                 </div>
             </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" onclick="saveConfig()">💾 Save & Apply</button>
+            </div>
         </div>
 
-        <!-- Monitor Tab -->
+        <!-- ROUTING (Hybrid Mode) Tab -->
+        <div id="routing-tab" class="tab-content">
+            <div class="section">
+                <h2>Hybrid Mode</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Route different model tiers to different providers (e.g., local Ollama for BIG, cloud for SMALL)
+                </p>
+
+                <h3 style="color: var(--accent-cyan); margin: 1.5rem 0 1rem; font-size: 1rem;">BIG Model Routing</h3>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="enable-big-endpoint" onchange="toggleHybridSection('big')" />
+                        Enable custom endpoint for BIG model
+                    </label>
+                </div>
+                <div id="big-hybrid-section" style="display: none; margin-left: 1.5rem;">
+                    <div class="form-group">
+                        <label for="big-endpoint">BIG Endpoint URL</label>
+                        <input type="text" id="big-endpoint" placeholder="http://localhost:11434/v1" />
+                    </div>
+                    <div class="form-group">
+                        <label for="big-api-key">BIG API Key</label>
+                        <input type="password" id="big-api-key" placeholder="dummy or your-key" />
+                    </div>
+                </div>
+
+                <h3 style="color: var(--accent-cyan); margin: 1.5rem 0 1rem; font-size: 1rem;">MIDDLE Model Routing</h3>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="enable-middle-endpoint" onchange="toggleHybridSection('middle')" />
+                        Enable custom endpoint for MIDDLE model
+                    </label>
+                </div>
+                <div id="middle-hybrid-section" style="display: none; margin-left: 1.5rem;">
+                    <div class="form-group">
+                        <label for="middle-endpoint">MIDDLE Endpoint URL</label>
+                        <input type="text" id="middle-endpoint" placeholder="https://openrouter.ai/api/v1" />
+                    </div>
+                    <div class="form-group">
+                        <label for="middle-api-key">MIDDLE API Key</label>
+                        <input type="password" id="middle-api-key" placeholder="sk-or-..." />
+                    </div>
+                </div>
+
+                <h3 style="color: var(--accent-cyan); margin: 1.5rem 0 1rem; font-size: 1rem;">SMALL Model Routing</h3>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="enable-small-endpoint" onchange="toggleHybridSection('small')" />
+                        Enable custom endpoint for SMALL model
+                    </label>
+                </div>
+                <div id="small-hybrid-section" style="display: none; margin-left: 1.5rem;">
+                    <div class="form-group">
+                        <label for="small-endpoint">SMALL Endpoint URL</label>
+                        <input type="text" id="small-endpoint" placeholder="http://localhost:1234/v1" />
+                    </div>
+                    <div class="form-group">
+                        <label for="small-api-key">SMALL API Key</label>
+                        <input type="password" id="small-api-key" placeholder="dummy or your-key" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" onclick="saveConfig()">💾 Save & Apply</button>
+            </div>
+        </div>
+
+        <!-- TERMINAL Output Tab -->
+        <div id="terminal-tab" class="tab-content">
+            <div class="section">
+                <h2>Display Settings</h2>
+                <div class="form-group">
+                    <label for="terminal-display-mode">Display Mode</label>
+                    <select id="terminal-display-mode">
+                        <option value="minimal">Minimal</option>
+                        <option value="normal">Normal</option>
+                        <option value="detailed" selected>Detailed</option>
+                        <option value="debug">Debug</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="terminal-color-scheme">Color Scheme</label>
+                    <select id="terminal-color-scheme">
+                        <option value="auto">Auto (detect terminal)</option>
+                        <option value="vibrant">Vibrant</option>
+                        <option value="subtle">Subtle</option>
+                        <option value="mono">Monochrome</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="log-style">Log Style</label>
+                    <select id="log-style">
+                        <option value="rich">Rich (colors + progress)</option>
+                        <option value="plain">Plain (no colors)</option>
+                        <option value="compact">Compact (minimal)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Metrics Display</h2>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="terminal-show-workspace" checked /> Show Workspace Name</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="terminal-show-context-pct" checked /> Show Context Window %</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="terminal-show-task-type" checked /> Show Task Type Icons</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="terminal-show-speed" checked /> Show Tokens/Second</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="terminal-show-cost" checked /> Show Cost Estimates</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="terminal-show-duration-colors" checked /> Color-Code Durations</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="terminal-session-colors" checked /> Unique Session Colors</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="compact-logger" /> Use Compact Logger</label>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Dashboard</h2>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="enable-dashboard" /> Enable Live Terminal Dashboard</label>
+                </div>
+                <div class="form-group">
+                    <label for="dashboard-layout">Dashboard Layout</label>
+                    <select id="dashboard-layout">
+                        <option value="default">Default</option>
+                        <option value="compact">Compact</option>
+                        <option value="detailed">Detailed</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="dashboard-refresh">Refresh Rate (seconds)</label>
+                    <input type="number" id="dashboard-refresh" placeholder="0.5" value="0.5" step="0.1" min="0.1" max="5" />
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Usage Tracking</h2>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="track-usage" /> Enable Usage Tracking (SQLite)</label>
+                </div>
+                <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                    Stores request metadata locally. No message content saved. No data sent anywhere.
+                </small>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" onclick="saveConfig()">💾 Save & Apply</button>
+            </div>
+        </div>
+
+        <!-- PROFILES Tab -->
+        <div id="profiles-tab" class="tab-content">
+            <div class="section">
+                <h2>Configuration Profiles</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Save and load different configuration sets for quick switching
+                </p>
+
+                <div class="profile-actions">
+                    <input type="text" id="new-profile-name" placeholder="Profile name..." />
+                    <button class="btn btn-primary" onclick="saveProfile()">💾 Save Current</button>
+                </div>
+
+                <div id="profiles-list" class="profiles-list">
+                    <p class="loading">Loading profiles...</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Import / Export</h2>
+                <div class="actions">
+                    <button class="btn btn-secondary" onclick="exportConfig()">📥 Export .env</button>
+                    <button class="btn btn-secondary" onclick="importConfig()">📤 Import .env</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MONITOR Tab -->
         <div id="monitor-tab" class="tab-content">
             <div class="section">
-                <h2>📊 Proxy Status</h2>
+                <h2>Proxy Status</h2>
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-label">Requests Today</div>
@@ -166,9 +396,41 @@
             </div>
 
             <div class="section">
-                <h2>🔥 Recent Requests</h2>
+                <h2>Provider Health</h2>
+                <div id="provider-health" class="profiles-list">
+                    <div class="profile-item">
+                        <span>Main Provider</span>
+                        <span id="main-provider-health" style="color: var(--accent-green);">● Healthy</span>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" onclick="checkProviderHealth()" style="margin-top: 1rem;">🔌 Check Health</button>
+            </div>
+
+            <div class="section">
+                <h2>Recent Requests</h2>
                 <div id="recent-requests" class="requests-list">
                     <p class="loading">Loading recent requests...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- LOGS Tab -->
+        <div id="logs-tab" class="tab-content">
+            <div class="section">
+                <h2>Live Request Log</h2>
+                <div class="search-box" style="margin-bottom: 1rem;">
+                    <input type="text" id="log-filter" placeholder="Filter logs..." onkeyup="filterLogs()" aria-label="Filter log messages" />
+                    <select id="log-level-filter" onchange="filterLogs()" aria-label="Filter by log level">
+                        <option value="">All Levels</option>
+                        <option value="info">Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="error">Error</option>
+                        <option value="success">Success</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="clearLogs()">Clear</button>
+                </div>
+                <div id="live-logs" style="background: var(--bg-primary); border: 1px solid var(--border-default); border-radius: 4px; padding: 1rem; height: 400px; overflow-y: auto; font-family: var(--font-mono); font-size: 0.85rem;">
+                    <div style="color: var(--text-muted);">[Connecting to log stream...]<span class="cursor"></span></div>
                 </div>
             </div>
         </div>

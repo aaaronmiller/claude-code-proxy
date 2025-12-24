@@ -204,6 +204,19 @@ class ProviderDetector:
             'gpt-oss-120b': 'gpt-oss-120b-medium',
         }
 
+        # DYNAMIC MAPPING: Check config for Haiku override (users may map SMALL_MODEL to openrouter/etc)
+        if 'haiku' in model_name.lower():
+            # Try to load config safely (lazy import to avoid cycles)
+            try:
+                from src.core.config import config
+                if config.small_model and config.small_model != 'gpt-4o-mini' and 'haiku' not in config.small_model.lower():
+                    # If user set a specific SMALL_MODEL that isn't the default or another Haiku alias
+                    return config.small_model
+            except ImportError:
+                pass
+            # Fallback for Haiku if no override or override is invalid/circular
+            return 'gemini-3-flash'
+
         # Return mapped name or original
         return VIBEPROXY_MODEL_MAP.get(model_name.lower(), model_name)
     

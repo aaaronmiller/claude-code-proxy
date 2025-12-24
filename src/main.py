@@ -165,9 +165,41 @@ def main(env_updates: dict = None, skip_validation: bool = False):
         validation_passed = validate_config_on_startup(strict=False)
 
         if not validation_passed:
-            print("\n💡 Run 'python start_proxy.py --setup' to fix configuration issues")
-            print("💡 Or use --skip-validation to bypass this check")
-            sys.exit(1)
+            # Offer to launch wizard interactively
+            print("\n💡 Configuration issues detected!")
+
+            # Check if running in interactive terminal
+            if sys.stdin.isatty() and "--no-wizard" not in sys.argv:
+                try:
+                    response = input("Would you like to run the setup wizard now? [Y/n]: ").strip().lower()
+                    if response in ["", "y", "yes"]:
+                        print("\n🧙 Launching Setup Wizard...\n")
+                        from src.cli.wizard import SetupWizard
+                        wizard = SetupWizard()
+                        wizard.run()
+
+                        # Reload configuration after wizard
+                        print("\n🔄 Reloading configuration...")
+                        from dotenv import load_dotenv
+                        load_dotenv(override=True)
+                        config.__init__()
+
+                        # Re-validate
+                        validation_passed = validate_config_on_startup(strict=False)
+                        if not validation_passed:
+                            print("\n❌ Configuration still has issues. Please check .env manually.")
+                            sys.exit(1)
+                    else:
+                        print("\n💡 Run 'python start_proxy.py --setup' to fix configuration issues")
+                        print("💡 Or use --skip-validation to bypass this check")
+                        sys.exit(1)
+                except (EOFError, KeyboardInterrupt):
+                    print("\n\n❌ Setup cancelled.")
+                    sys.exit(1)
+            else:
+                print("\n💡 Run 'python start_proxy.py --setup' to fix configuration issues")
+                print("💡 Or use --skip-validation to bypass this check")
+                sys.exit(1)
 
     # Parse log level - extract just the first word to handle comments
     log_level = config.log_level.split()[0].lower()

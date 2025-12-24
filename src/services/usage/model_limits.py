@@ -4,7 +4,7 @@ Model context window and output limits database.
 Loads model limits from scraped OpenRouter data (CSV/JSON files).
 Falls back to static database if files don't exist.
 
-Run `python scripts/scrape_openrouter_models.py` to update the database.
+Run `python dev/scripts/scrape_openrouter_models.py` to update the database.
 """
 
 from typing import Dict, Optional, Tuple
@@ -64,6 +64,10 @@ def _get_fallback_limits() -> Dict[str, Dict[str, int]]:
         # Google Gemini
         "google/gemini-2.5-flash-preview-04-17": {"context": 1000000, "output": 8192},
         "google/gemini-2.0-flash": {"context": 1000000, "output": 8192},
+        "google/gemini-3-flash": {"context": 1000000, "output": 8192},
+        "gemini-3-flash": {"context": 1000000, "output": 8192},
+        "google/gemini-3-pro-preview": {"context": 1000000, "output": 8192},
+        "gemini-3-pro-preview": {"context": 1000000, "output": 8192},
         
         # Meta Llama
         "meta-llama/llama-3.3-70b": {"context": 128000, "output": 4096},
