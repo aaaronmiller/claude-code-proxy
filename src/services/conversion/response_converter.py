@@ -466,6 +466,7 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                                         "primary_index": tc_index,
                                         "claude_index": current_block_index
                                     }
+                                    logger.debug(f"New tool call detected: index={tc_index}, id={tc_id} -> claude_index={current_block_index}")
                             
                             # Case 2: No ID (streaming arguments)
                             else:
@@ -486,6 +487,7 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                                     # Fallback for index 0 if something weird happened
                                     if current_tool_calls.get(0, {}).get("claude_index") is not None:
                                         target_claude_index = current_tool_calls[0]["claude_index"]
+                                        logger.debug(f"Fallback: mapping index 0 to existing claude_index {target_claude_index}")
                             
                             # If we decided to process this delta
                             if target_claude_index is not None:
