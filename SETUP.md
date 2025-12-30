@@ -7,7 +7,8 @@ This guide explains how to set up the Claude Code Proxy with the new Auto-Healin
 Use these commands to start the respective software:
 
 -   **Proxy Server (`ccproxy`)**: Runs the proxy. Needs your **REAL** API keys (e.g., `sk-ant-...`).
--   **Client (`cproxy-init`)**: Runs Claude Code. Sends a **DUMMY** key (`pass`) to the proxy.
+-   **Client (`cproxy-init` or 'cproxy-continue')**: Runs Claude Code. Sends a **DUMMY** key (`pass`) to the proxy.
+-   **Swap Anthropic Keys ('cproxy')**: Toggles between Anthropic and Proxy (sets `ANTHROPIC_BASE_URL`)
 -   **Wizard (`api_key_wizard.sh`)**: Interactive tool to fix your API keys in `~/.zshrc` when errors occur.
 -   **Wrapper (`run_router.sh`)**: Automatically runs the Wizard if the client gets a 401 error.
 
@@ -19,6 +20,18 @@ Add the following aliases to your `~/.zshrc` (or `~/.bash_profile`):
 # -----------------------------------------------------------------------------
 # CLAUDE CODE PROXY ALIASES
 # -----------------------------------------------------------------------------
+# Function for proxy swap to allow ahtropic or proxy to be run
+cproxy() { # Toggle Claude Code proxy on/off
+  if [[ -n "$ANTHROPIC_BASE_URL" ]]; then
+    unset ANTHROPIC_BASE_URL ANTHROPIC_CUSTOM_HEADERS
+    export PROXY_AUTH_KEY="${CLAUDE_REAL_KEY:-$PROXY_AUTH_KEY}"
+    echo "🎯 Direct to Anthropic"
+  else
+    export CLAUDE_REAL_KEY="${PROXY_AUTH_KEY}"
+    export ANTHROPIC_BASE_URL="${CLAUDE_PROXY_URL:-http://localhost:8082}"
+    echo "🔀 Proxy: $ANTHROPIC_BASE_URL"
+  fi
+}
 
 # PROXY SERVER (Terminal A)
 # Sources profile to ensure REAL keys are loaded.

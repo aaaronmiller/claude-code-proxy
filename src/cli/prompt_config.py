@@ -292,35 +292,47 @@ def select_injection_mode():
 
 def main():
     """Main configuration flow"""
-    print_header()
+    while True:
+        # Clear screen and show menu
+        print_header()
+        print("\n\033[1;36mℹ️  This tool configures prompt injection for Claude Code.\033[0m")
+        print("   Dashboard module data will be injected into your prompts.")
+        print()
 
-    print("\n\033[1;36mℹ️  This tool configures prompt injection for Claude Code.\033[0m")
-    print("   Dashboard module data will be injected into your prompts,")
-    print("   giving Claude visibility into proxy performance and status.")
-    print()
+        print("\n\033[1;33mOptions:\033[0m")
+        print("   1. ⚙️  Configure Prompt Injection")
+        print("   0. 🔙 Back to Main Menu")
 
-    # Show available options
-    print_module_info()
-    print_size_info()
+        choice = input("\n   Your selection: ").strip()
 
-    # Interactive selection
-    modules = select_modules()
-    size = select_size()
-    injection_mode = select_injection_mode()
+        if choice == '0':
+            return
+        elif choice != '1':
+            continue
 
-    # Show preview
-    show_preview(modules, size)
+        # Show available options
+        print_module_info()
+        print_size_info()
 
-    # Confirm
-    print(f"\n\033[1;33m✓ Selected: {len(modules)} modules, {size} size, {injection_mode} mode\033[0m")
-    confirm = input("\n   Generate configuration? (y/n): ").strip().lower()
+        # Interactive selection
+        modules = select_modules()
+        size = select_size()
+        injection_mode = select_injection_mode()
 
-    if confirm == 'y':
-        generate_commands(modules, size, injection_mode)
-        print("\n\033[1;32m✓ Configuration complete!\033[0m\n")
-    else:
-        print("\n\033[90mCancelled.\033[0m\n")
-        sys.exit(0)
+        # Show preview
+        show_preview(modules, size)
+
+        # Confirm
+        print(f"\n\033[1;33m✓ Selected: {len(modules)} modules, {size} size, {injection_mode} mode\033[0m")
+        confirm = input("\n   Generate configuration? (y/n): ").strip().lower()
+
+        if confirm == 'y':
+            generate_commands(modules, size, injection_mode)
+            print("\n\033[1;32m✓ Configuration complete!\033[0m\n")
+            input("Press Enter to return...")
+        else:
+            print("\n\033[90mCancelled.\033[0m\n")
+            input("Press Enter to return...")
 
 
 if __name__ == "__main__":

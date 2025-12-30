@@ -4,10 +4,12 @@ from fastapi.responses import FileResponse
 from src.api.endpoints import router as api_router
 from src.api.web_ui import router as web_ui_router
 from src.api.websocket_dashboard import router as websocket_router
+from src.api.websocket_logs import router as ws_logs_router
 from src.api.analytics import router as analytics_router
 from src.api.billing import router as billing_router
 from src.api.benchmarks import router as benchmarks_router
 from src.api.users import router as users_router
+from src.api.openai_endpoints import router as openai_router
 import uvicorn
 import sys
 import os
@@ -18,8 +20,10 @@ app = FastAPI(title="Claude-to-OpenAI API Proxy", version="1.0.0")
 
 # Include API routers
 app.include_router(api_router)
+app.include_router(openai_router)  # OpenAI-compatible endpoint for cross-IDE support
 app.include_router(web_ui_router)
 app.include_router(websocket_router)
+app.include_router(ws_logs_router)  # Live log streaming
 app.include_router(analytics_router)
 app.include_router(billing_router)
 app.include_router(benchmarks_router)

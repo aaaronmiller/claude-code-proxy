@@ -1,0 +1,93 @@
+# --- THE HEAVY HITTERS (KILL THESE FIRST) ---
+node_modules/
+.git/
+.svn/
+.hg/
+
+# --- BUILD ARTIFACTS (NO AI NEEDS TO READ THESE) ---
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+.vuepress/dist
+.cache/
+.parcel-cache/
+coverage/
+.turbo/
+.vercel/
+
+# --- DEPENDENCY LOCKFILES (The #1 Cause of "Progressive Lag") ---
+# These files are often 50k+ lines of pure text. They kill the tokenizer.
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lockb
+npm-shrinkwrap.json
+
+# --- LARGE STATIC ASSETS (Vectors are useless here) ---
+*.svg
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.webp
+*.mp4
+*.mov
+*.mp3
+*.wav
+*.pdf
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+
+# --- MINIFIED & MAP FILES (Tokens cost double here) ---
+*.min.js
+*.min.css
+*.map
+*.bundle.js
+
+# --- EDITOR/OS JUNK ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.gemini/
+.codeium/
+.windsurf/
+**/.history/
+**/.local-history/
+
+# --- PYTHON/BACKEND SPECIFIC (If you have mixed repos) ---
+__pycache__/
+*.pyc
+venv/
+.venv/
+env/
+.env
+.tox/
+.pytest_cache
+
+
+```
+# --- THE NUCLEAR RECURSIVE BLOCK ---
+# The **/ prefix is critical for your nested projects
+**/node_modules/
+**/bower_components/
+**/jspm_packages/
+
+# --- KILL THE DATASETS ---
+# Block the folder holding that 500MB of text
+# (Replace 'data' with whatever your folder is named)
+**/data/
+**/datasets/
+**/logs/
+**/*.csv
+**/*.jsonl
+**/*.txt
+**/*.log
+**/*.xml

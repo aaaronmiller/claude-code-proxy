@@ -1,0 +1,55 @@
+{
+    "name": "Expert Panel",
+    "description": "A moderator-led panel discussion using star topology, where a central moderator facilitates conversation between expert panelists.",
+    "models": [
+        {
+            "slot_id": 1,
+            "model_id": "openai/gpt-4o-mini",
+            "system_prompt_inline": "You are an experienced panel moderator. Guide the discussion, ask follow-up questions, summarize key points, and ensure all panelists have equal opportunity to contribute. Keep the conversation focused and productive.",
+            "jinja_template": "basic",
+            "temperature": 0.6,
+            "max_tokens": 800
+        },
+        {
+            "slot_id": 2,
+            "model_id": "openai/gpt-4o-mini",
+            "system_prompt_inline": "You are a technology expert on the panel. Provide insights about technical feasibility, innovation trends, and digital transformation. Reference current developments and future possibilities.",
+            "jinja_template": "basic",
+            "temperature": 0.7,
+            "max_tokens": 1200
+        },
+        {
+            "slot_id": 3,
+            "model_id": "openai/gpt-4o-mini",
+            "system_prompt_inline": "You are an ethics and policy expert on the panel. Discuss societal implications, regulatory considerations, and ethical frameworks. Consider diverse stakeholder perspectives.",
+            "jinja_template": "basic",
+            "temperature": 0.7,
+            "max_tokens": 1200
+        },
+        {
+            "slot_id": 4,
+            "model_id": "openai/gpt-4o-mini",
+            "system_prompt_inline": "You are an industry practitioner on the panel. Share real-world experience, case studies, and practical challenges. Ground the discussion in business realities.",
+            "jinja_template": "basic",
+            "temperature": 0.7,
+            "max_tokens": 1200
+        }
+    ],
+    "topology": {
+        "type": "star",
+        "center": 1,
+        "spokes": [
+            2,
+            3,
+            4
+        ]
+    },
+    "paradigm": "report",
+    "rounds": 3,
+    "infinite": false,
+    "stop_conditions": {
+        "max_time_seconds": 1200,
+        "max_cost_dollars": 5.0
+    },
+    "initial_prompt": "Welcome to today's expert panel on 'The Future of AI in Healthcare'.\n\nModerator, please introduce the topic and invite our panelists to share their opening perspectives."
+}

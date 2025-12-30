@@ -230,7 +230,7 @@ def convert_claude_to_openai(
         tool_calls = "YES" if msg.get("tool_calls") else "NO"
         logger.info(f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content={content}...")
 
-    # Newer OpenAI models (o1, o3, o4, gpt-5) require max_completion_tokens instead of max_tokens
+    # Newer OpenAI models models (o1, o3, o4, gpt-5) require max_completion_tokens instead of max_tokens
     if is_newer_model:
         openai_request["max_completion_tokens"] = token_limit
         # Newer reasoning models require temperature=1
@@ -238,7 +238,16 @@ def convert_claude_to_openai(
         logger.debug(f"Converted request (newer model): model={openai_model}, messages={len(openai_messages)}, max_completion_tokens={token_limit}, temperature=1")
     else:
         openai_request["max_tokens"] = token_limit
-        openai_request["temperature"] = claude_request.temperature
+        
+        # TEMPERATURE OVERRIDE FOR GEMINI FLASH ROUTER
+        # Gemini Flash at temp 1.0 loops. Force 0.0 if acting as Small (Haiku) replacement.
+        model_size = _get_model_size_from_model_id(openai_model)
+        if model_size == "small" and "gemini" in openai_model.lower() and "flash" in openai_model.lower():
+            openai_request["temperature"] = 0
+            logger.debug(f"Forced temperature=0 for Gemini Flash (Small) to prevent router loops")
+        else:
+            openai_request["temperature"] = claude_request.temperature
+            
         logger.debug(f"Converted request: model={openai_model}, messages={len(openai_messages)}, max_tokens={token_limit}")
     # Add optional parameters
     if claude_request.stop_sequences:
@@ -477,13 +486,26 @@ def convert_claude_assistant_message(msg: ClaudeMessage) -> Dict[str, Any]:
         if block.type == Constants.CONTENT_TEXT:
             text_parts.append(block.text)
         elif block.type == Constants.CONTENT_TOOL_USE:
+            # Reconstruct tool call
+            tool_name = block.name
+            arguments = block.input
+            
+            # REVERSE RENAMING: If tool is Bash/Repl, convert 'command' back to 'prompt'
+            # This ensures Gemini sees the parameter name IT expects in the history, 
+            # preventing it from getting confused and retrying.
+            if tool_name.lower() in ["bash", "repl"] and isinstance(arguments, dict):
+                # Copy dict to avoid modifying original object if shared
+                arguments = arguments.copy()
+                if "command" in arguments and "prompt" not in arguments:
+                    arguments["prompt"] = arguments.pop("command")
+            
             tool_calls.append(
                 {
                     "id": block.id,
                     "type": Constants.TOOL_FUNCTION,
                     Constants.TOOL_FUNCTION: {
-                        "name": block.name,
-                        "arguments": json.dumps(block.input, ensure_ascii=False),
+                        "name": tool_name,
+                        "arguments": json.dumps(arguments, ensure_ascii=False),
                     },
                 }
             )
@@ -514,17 +536,25 @@ def convert_claude_assistant_message(msg: ClaudeMessage) -> Dict[str, Any]:
 
 
 def convert_claude_tool_results(msg: ClaudeMessage) -> List[Dict[str, Any]]:
-    """Convert Claude tool results to OpenAI format."""
+    """Convert Claude tool results to OpenAI format with deduplication."""
     tool_messages = []
+    seen_tool_ids = set()  # Deduplicate by tool_use_id
 
     if isinstance(msg.content, list):
         for block in msg.content:
             if block.type == Constants.CONTENT_TOOL_RESULT:
+                tool_id = block.tool_use_id
+                # Skip duplicate tool results (same tool_use_id)
+                if tool_id in seen_tool_ids:
+                    logger.debug(f"DEDUP: Skipping duplicate tool_result for tool_use_id={tool_id}")
+                    continue
+                seen_tool_ids.add(tool_id)
+
                 content = parse_tool_result_content(block.content)
                 tool_messages.append(
                     {
                         "role": Constants.ROLE_TOOL,
-                        "tool_call_id": block.tool_use_id,
+                        "tool_call_id": tool_id,
                         "content": content,
                     }
                 )

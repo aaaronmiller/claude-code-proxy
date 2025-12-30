@@ -1,0 +1,33 @@
+{
+    "name": "Two-Model Debate",
+    "description": "Two AI models engage in structured debate on a topic, taking opposing positions.",
+    "models": [
+        {
+            "slot_id": 1,
+            "model_id": "openai/gpt-4o-mini",
+            "system_prompt_inline": "You are a debate participant arguing FOR the proposition. Present compelling arguments, cite evidence, and respond to counterarguments. Be rigorous but respectful. Structure your responses clearly.",
+            "jinja_template": "basic",
+            "temperature": 0.7,
+            "max_tokens": 1500
+        },
+        {
+            "slot_id": 2,
+            "model_id": "openai/gpt-4o-mini",
+            "system_prompt_inline": "You are a debate participant arguing AGAINST the proposition. Challenge the other side's arguments, present counterevidence, and expose weaknesses in their reasoning. Be rigorous but respectful.",
+            "jinja_template": "basic",
+            "temperature": 0.7,
+            "max_tokens": 1500
+        }
+    ],
+    "topology": {
+        "type": "ring"
+    },
+    "paradigm": "debate",
+    "rounds": 5,
+    "infinite": false,
+    "stop_conditions": {
+        "max_time_seconds": 600,
+        "max_cost_dollars": 2.0
+    },
+    "initial_prompt": "Debate Topic: Should artificial general intelligence (AGI) development be paused until safety measures are established?\n\nBegin by presenting your opening arguments."
+}

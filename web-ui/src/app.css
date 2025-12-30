@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   CYBERPUNK THEME - "LEET" AESTHETIC
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* Background colors */
+  --color-cyber-bg: #0a0a0f;
+  --color-cyber-surface: #12121a;
+  --color-cyber-elevated: #1a1a24;
+  --color-cyber-card: #16161e;
+  
+  /* Accent colors */
+  --color-cyber-cyan: #00fff2;
+  --color-cyber-magenta: #ff00ff;
+  --color-cyber-green: #00ff88;
+  --color-cyber-amber: #ffaa00;
+  --color-cyber-red: #ff3366;
+  --color-cyber-purple: #9945ff;
+  
+  /* Text colors */
+  --color-cyber-text: #e0e0e0;
+  --color-cyber-muted: #808080;
+  --color-cyber-dim: #4a4a5a;
+  
+  /* Border colors */
+  --color-cyber-border: #2a2a3a;
+  --color-cyber-glow: rgba(0, 255, 242, 0.3);
+  
+  /* Fonts */
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+/* Base styles */
+html {
+  background-color: var(--color-cyber-bg);
+  color: var(--color-cyber-text);
+  font-family: var(--font-sans);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-cyber-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-cyber-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-cyber-cyan);
+}
+
+/* Glow effects */
+.glow-cyan {
+  box-shadow: 0 0 20px var(--color-cyber-glow);
+}
+
+.text-glow {
+  text-shadow: 0 0 10px var(--color-cyber-cyan);
+}
+
+/* Terminal cursor animation */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: '█';
+  animation: blink 1s step-end infinite;
+  color: var(--color-cyber-cyan);
+}
+
+/* Gradient borders */
+.gradient-border {
+  position: relative;
+  background: var(--color-cyber-surface);
+  border-radius: 8px;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--color-cyber-cyan), var(--color-cyber-magenta));
+  z-index: -1;
+}
+
+/* Status indicators */
+.status-online {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Card hover effect */
+.cyber-card {
+  background: var(--color-cyber-surface);
+  border: 1px solid var(--color-cyber-border);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.cyber-card:hover {
+  border-color: var(--color-cyber-cyan);
+  box-shadow: 0 0 20px rgba(0, 255, 242, 0.1);
+}
+
+/* Button styles */
+.cyber-btn {
+  background: linear-gradient(135deg, var(--color-cyber-cyan), var(--color-cyber-purple));
+  color: black;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.cyber-btn:hover {
+  box-shadow: 0 0 20px var(--color-cyber-glow);
+  transform: translateY(-1px);
+}
+
+/* Input styles */
+.cyber-input {
+  background: var(--color-cyber-bg);
+  border: 1px solid var(--color-cyber-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-cyber-text);
+  font-family: var(--font-mono);
+  transition: all 0.2s ease;
+}
+
+.cyber-input:focus {
+  outline: none;
+  border-color: var(--color-cyber-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 255, 242, 0.1);
+}
+
+/* Tab navigation */
+.cyber-tab {
+  padding: 0.5rem 1rem;
+  color: var(--color-cyber-muted);
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.cyber-tab:hover {
+  color: var(--color-cyber-text);
+}
+
+.cyber-tab.active {
+  color: var(--color-cyber-cyan);
+  border-bottom-color: var(--color-cyber-cyan);
+}

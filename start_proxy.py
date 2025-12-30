@@ -46,6 +46,8 @@ For more details, see docs/guides/configuration.md
                        help='Model for Claude Haiku requests')
     model_group.add_argument('--select-models', action='store_true',
                        help='Launch interactive model selector')
+    model_group.add_argument('--model-cascade', dest='model_cascade', action='store_true',
+                       help='Enable model cascade fallback on provider errors')
 
     # Reasoning arguments
     reasoning_group.add_argument('--reasoning-effort', dest='reasoning_effort',
@@ -79,6 +81,8 @@ For more details, see docs/guides/configuration.md
                        help='Shorthand for --save-mode')
 
     # Crosstalk options
+    crosstalk_group.add_argument('--crosstalk-studio', action='store_true',
+                       help='Launch Crosstalk Studio TUI (visual multi-model chat)')
     crosstalk_group.add_argument('--crosstalk-init', action='store_true',
                        help='Launch interactive crosstalk setup wizard')
     crosstalk_group.add_argument('--crosstalk', dest='crosstalk_models',
@@ -112,9 +116,29 @@ For more details, see docs/guides/configuration.md
                        help='Launch unified settings TUI (models, terminal, dashboard, prompts)')
     tools_group.add_argument('--doctor', action='store_true',
                        help='Run health check and auto-fix common issues')
+    tools_group.add_argument('--configure-advanced', action='store_true',
+                       help='Launch advanced configuration TUI (reasoning, prompts, hybrid mode)')
     tools_group.add_argument('--fix-keys', action='store_true',
                        help='(Deprecated, use --doctor) Launch API key repair wizard')
     
+    # Quick Model Configuration
+    model_config_group = parser.add_argument_group('⚡ Quick Model Setup')
+    model_config_group.add_argument('--set-big', metavar='MODEL',
+                       help='Quick set BIG model (e.g., vibeproxy/gemini-opus)')
+    model_config_group.add_argument('--set-middle', metavar='MODEL',
+                       help='Quick set MIDDLE model (e.g., vibeproxy/gemini-pro-3)')
+    model_config_group.add_argument('--set-small', metavar='MODEL',
+                       help='Quick set SMALL model (e.g., openrouter/gpt-4o-mini)')
+    model_config_group.add_argument('--show-models', action='store_true',
+                       help='Show available models from all configured endpoints')
+    model_config_group.add_argument('--check-endpoints', action='store_true',
+                       help='Check endpoint connectivity and API key validity')
+    model_config_group.add_argument('--update-models', action='store_true',
+                       help='Scrape latest model stats (pricing, limits) from providers')
+    model_config_group.add_argument('--rank-models', action='store_true',
+                       help='AI-rank free models for coding capability')
+
+
     # Validation & Diagnostics
     validation_group.add_argument('--config', dest='show_config', action='store_true',
                        help='Show current configuration and exit')
@@ -135,6 +159,12 @@ For more details, see docs/guides/configuration.md
         settings_main()
         return
 
+    # Handle crosstalk-studio (visual TUI)
+    if getattr(args, 'crosstalk_studio', False):
+        from src.cli.crosstalk_studio import main as crosstalk_main
+        crosstalk_main()
+        return
+
     # Handle doctor (health check + auto-fix)
     if args.doctor or args.fix_keys:
         from src.cli.fix_keys import main as fix_keys_main
@@ -143,10 +173,68 @@ For more details, see docs/guides/configuration.md
         fix_keys_main()
         return
 
+    # Handle advanced configuration TUI
+    if getattr(args, 'configure_advanced', False):
+        from src.cli.advanced_config import main as advanced_main
+        advanced_main()
+        return
+
     if args.client:
         from src.cli.client_wrapper import main as client_main
         # Pass unknown args to client wrapper (the command to run)
         client_main(unknown)
+        return
+
+    # Handle quick model configuration
+    if args.set_big or args.set_middle or args.set_small:
+        from src.cli.quick_config import set_model
+        changes = False
+        if args.set_big:
+            print("\n🔧 Configuring BIG model...")
+            if set_model("big", args.set_big):
+                changes = True
+        if args.set_middle:
+            print("\n🔧 Configuring MIDDLE model...")
+            if set_model("middle", args.set_middle):
+                changes = True
+        if args.set_small:
+            print("\n🔧 Configuring SMALL model...")
+            if set_model("small", args.set_small):
+                changes = True
+        if changes:
+            print("\n💡 Restart the proxy for changes to take effect.")
+        return
+
+    # Handle show-models
+    if args.show_models:
+        import asyncio
+        from src.cli.quick_config import show_models
+        asyncio.run(show_models())
+        return
+
+    # Handle check-endpoints
+    if args.check_endpoints:
+        import asyncio
+        from src.cli.quick_config import check_endpoints
+        asyncio.run(check_endpoints())
+        return
+
+    # Handle update-models (scrape latest stats)
+    if args.update_models:
+        import asyncio
+        from src.services.models.scrape_model_stats import update_model_database, get_scraper_model
+        print(f"🤖 Using model: {get_scraper_model()}")
+        print("   (Set SCRAPER_MODEL env var to use a different model)")
+        asyncio.run(update_model_database("openrouter"))
+        return
+
+    # Handle rank-models (AI-powered coding model ranking)
+    if args.rank_models:
+        import asyncio
+        from src.services.models.model_ranker import update_rankings, get_ranker_model
+        print(f"🤖 Using model: {get_ranker_model()}")
+        print("   (Set RANKER_MODEL env var to use a different model)")
+        asyncio.run(update_rankings())
         return
 
     # Handle validation check

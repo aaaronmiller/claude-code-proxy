@@ -3,12 +3,432 @@ import uuid
 from fastapi import HTTPException, Request
 from src.core.constants import Constants
 from src.models.claude import ClaudeMessagesRequest
+from src.services.providers.provider_detector import (
+    NormalizationLevel,
+    get_normalization_level,
+)
 
+
+def normalize_tool_arguments(tool_name: str, arguments: dict, provider: str = "gemini") -> dict:
+    """
+    Normalize tool arguments to match Claude Code CLI's expected schemas.
+    
+    This function transforms parameter names that may differ between providers
+    (e.g., Gemini's "prompt" → Claude's "command" for Bash tools).
+    
+    Normalization intensity varies by provider:
+    - NONE (openai, azure): Pass through unchanged
+    - LIGHT (openrouter, openai_compatible): Common mismatches only
+    - FULL (gemini): All 18+ tool transformations
+    
+    Handles ALL Claude Code CLI tools:
+    - Tier 1: Bash, Repl, Read, Write, Edit, MultiEdit
+    - Tier 2: Glob, Grep, LS
+    - Tier 3: Task, AgentDispatch
+    - Tier 4: TodoWrite, TodoRead
+    - Tier 5: WebFetch, WebSearch, Browser
+    - Tier 6: NotebookEdit, NotebookRead
+    
+    Args:
+        tool_name: The name of the tool being called
+        arguments: The raw arguments dict from the provider
+        provider: The provider type (gemini, openrouter, openai, etc.)
+    
+    Returns:
+        Normalized arguments dict matching Claude CLI schema
+    """
+    # Get normalization level based on provider
+    normalization_level = get_normalization_level(provider)
+    
+    # Skip normalization entirely for providers that don't need it
+    if normalization_level == NormalizationLevel.NONE.value:
+        return arguments
+    
+    # Light normalization for OpenRouter and unknown providers
+    if normalization_level == NormalizationLevel.LIGHT.value:
+        return _light_normalize(tool_name, arguments)
+    
+    # Full normalization for Gemini
+    return _full_normalize(tool_name, arguments)
+
+
+def _light_normalize(tool_name: str, arguments: dict) -> dict:
+    """
+    Light normalization for OpenRouter and OpenAI-compatible providers.
+    
+    Only handles the most common mismatches that may occur.
+    """
+    tool_name_lower = tool_name.lower() if tool_name else ""
+    
+    # Bash/Repl: Most common mismatch
+    if tool_name_lower in ["bash", "repl"]:
+        if "prompt" in arguments and "command" not in arguments:
+            arguments["command"] = arguments.pop("prompt")
+    
+    # Read: Common path variant
+    if tool_name_lower == "read":
+        if "path" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("path")
+    
+    return arguments
+
+
+def _full_normalize(tool_name: str, arguments: dict) -> dict:
+    """
+    Full normalization for Gemini provider.
+    
+    Handles all 18+ Claude Code CLI tools with comprehensive parameter mapping.
+    """
+    tool_name_lower = tool_name.lower() if tool_name else ""
+    
+    # ============================================================
+    # TIER 1: Core File Operations
+    # ============================================================
+    
+    # Bash/Repl: Claude CLI expects 'command', Gemini may output 'prompt' or 'code'
+    if tool_name_lower in ["bash", "repl"]:
+        if "prompt" in arguments and "command" not in arguments:
+            arguments["command"] = arguments.pop("prompt")
+        elif "code" in arguments and "command" not in arguments:
+            arguments["command"] = arguments.pop("code")
+    
+    # Read: Claude CLI expects 'file_path', Gemini may output 'path' or 'filename'
+    if tool_name_lower == "read":
+        if "path" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("path")
+        elif "filename" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("filename")
+        elif "file" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("file")
+    
+    # Write: Claude CLI expects 'file_path' + 'content'
+    if tool_name_lower == "write":
+        if "path" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("path")
+        elif "filename" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("filename")
+        elif "file" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("file")
+        # Content variants
+        if "text" in arguments and "content" not in arguments:
+            arguments["content"] = arguments.pop("text")
+        elif "data" in arguments and "content" not in arguments:
+            arguments["content"] = arguments.pop("data")
+    
+    # Edit: Claude CLI expects 'file_path', 'old_text', 'new_text'
+    if tool_name_lower == "edit":
+        if "path" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("path")
+        elif "file" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("file")
+        # Text variants
+        if "original" in arguments and "old_text" not in arguments:
+            arguments["old_text"] = arguments.pop("original")
+        elif "before" in arguments and "old_text" not in arguments:
+            arguments["old_text"] = arguments.pop("before")
+        if "replacement" in arguments and "new_text" not in arguments:
+            arguments["new_text"] = arguments.pop("replacement")
+        elif "after" in arguments and "new_text" not in arguments:
+            arguments["new_text"] = arguments.pop("after")
+    
+    # MultiEdit: Claude CLI expects 'file_path' + 'edits' array
+    if tool_name_lower == "multiedit":
+        if "path" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("path")
+        elif "file" in arguments and "file_path" not in arguments:
+            arguments["file_path"] = arguments.pop("file")
+        # Edits array variants
+        if "changes" in arguments and "edits" not in arguments:
+            arguments["edits"] = arguments.pop("changes")
+        elif "modifications" in arguments and "edits" not in arguments:
+            arguments["edits"] = arguments.pop("modifications")
+    
+    # ============================================================
+    # TIER 2: Search & Navigation
+    # ============================================================
+    
+    # Glob: Claude CLI expects 'pattern'
+    if tool_name_lower == "glob":
+        if "glob" in arguments and "pattern" not in arguments:
+            arguments["pattern"] = arguments.pop("glob")
+        elif "glob_pattern" in arguments and "pattern" not in arguments:
+            arguments["pattern"] = arguments.pop("glob_pattern")
+    
+    # Grep: Claude CLI expects 'pattern' + optional 'path'
+    if tool_name_lower == "grep":
+        if "query" in arguments and "pattern" not in arguments:
+            arguments["pattern"] = arguments.pop("query")
+        elif "search" in arguments and "pattern" not in arguments:
+            arguments["pattern"] = arguments.pop("search")
+        elif "regex" in arguments and "pattern" not in arguments:
+            arguments["pattern"] = arguments.pop("regex")
+        # Path variants
+        if "directory" in arguments and "path" not in arguments:
+            arguments["path"] = arguments.pop("directory")
+        elif "dir" in arguments and "path" not in arguments:
+            arguments["path"] = arguments.pop("dir")
+    
+    # LS: Claude CLI expects 'path'
+    if tool_name_lower == "ls":
+        if "directory" in arguments and "path" not in arguments:
+            arguments["path"] = arguments.pop("directory")
+        elif "dir" in arguments and "path" not in arguments:
+            arguments["path"] = arguments.pop("dir")
+        elif "folder" in arguments and "path" not in arguments:
+            arguments["path"] = arguments.pop("folder")
+    
+    # ============================================================
+    # TIER 3: Task & Agent
+    # ============================================================
+    
+    # Task: Claude CLI expects 'prompt' + 'description' + 'subagent_type'
+    if tool_name_lower == "task":
+        if "description" in arguments and "prompt" not in arguments:
+            arguments["prompt"] = arguments["description"]
+        elif "prompt" in arguments and "description" not in arguments:
+            arguments["description"] = arguments["prompt"]
+        # Check agent type variants FIRST before setting default
+        if "agent_type" in arguments and "subagent_type" not in arguments:
+            arguments["subagent_type"] = arguments.pop("agent_type")
+        elif "type" in arguments and "subagent_type" not in arguments:
+            arguments["subagent_type"] = arguments.pop("type")
+        # Apply default LAST if still missing
+        if "subagent_type" not in arguments:
+            arguments["subagent_type"] = "Explore"
+    
+    # AgentDispatch: Claude CLI expects 'agent_id' + 'task'
+    if tool_name_lower == "agentdispatch":
+        if "id" in arguments and "agent_id" not in arguments:
+            arguments["agent_id"] = arguments.pop("id")
+        if "prompt" in arguments and "task" not in arguments:
+            arguments["task"] = arguments.pop("prompt")
+        elif "instruction" in arguments and "task" not in arguments:
+            arguments["task"] = arguments.pop("instruction")
+    
+    # ============================================================
+    # TIER 4: Todo Management
+    # ============================================================
+    
+    # TodoWrite: tasks → todos + normalize status values
+    if tool_name_lower == "todowrite":
+        if "tasks" in arguments and "todos" not in arguments:
+            arguments["todos"] = arguments["tasks"]
+        if "tasks" in arguments:
+            del arguments["tasks"]
+        # Items variant
+        if "items" in arguments and "todos" not in arguments:
+            arguments["todos"] = arguments.pop("items")
+        if "todos" in arguments and isinstance(arguments["todos"], list):
+            valid_statuses = {"pending", "in_progress", "completed"}
+            for todo in arguments["todos"]:
+                if isinstance(todo, dict) and "status" in todo:
+                    status = todo["status"]
+                    if status not in valid_statuses:
+                        if "complete" in status.lower():
+                            todo["status"] = "completed"
+                        elif "progress" in status.lower():
+                            todo["status"] = "in_progress"
+                        else:
+                            todo["status"] = "pending"
+    
+    # TodoRead: No parameters typically, but handle variants
+    if tool_name_lower == "todoread":
+        # No normalization needed - usually parameterless
+        pass
+    
+    # ============================================================
+    # TIER 5: Web & Browser
+    # ============================================================
+    
+    # WebFetch: Claude CLI expects 'url'
+    if tool_name_lower == "webfetch":
+        if "link" in arguments and "url" not in arguments:
+            arguments["url"] = arguments.pop("link")
+        elif "href" in arguments and "url" not in arguments:
+            arguments["url"] = arguments.pop("href")
+        elif "address" in arguments and "url" not in arguments:
+            arguments["url"] = arguments.pop("address")
+    
+    # WebSearch: Claude CLI expects 'query'
+    if tool_name_lower == "websearch":
+        if "search" in arguments and "query" not in arguments:
+            arguments["query"] = arguments.pop("search")
+        elif "q" in arguments and "query" not in arguments:
+            arguments["query"] = arguments.pop("q")
+        elif "term" in arguments and "query" not in arguments:
+            arguments["query"] = arguments.pop("term")
+    
+    # Browser: Claude CLI expects 'url' + 'action'
+    if tool_name_lower == "browser":
+        if "link" in arguments and "url" not in arguments:
+            arguments["url"] = arguments.pop("link")
+        elif "address" in arguments and "url" not in arguments:
+            arguments["url"] = arguments.pop("address")
+        # Action variants
+        if "command" in arguments and "action" not in arguments:
+            arguments["action"] = arguments.pop("command")
+        elif "operation" in arguments and "action" not in arguments:
+            arguments["action"] = arguments.pop("operation")
+    
+    # ============================================================
+    # TIER 6: Notebook Operations
+    # ============================================================
+    
+    # NotebookEdit: Claude CLI expects 'notebook_path' + 'cell_id' + 'content'
+    if tool_name_lower == "notebookedit":
+        if "path" in arguments and "notebook_path" not in arguments:
+            arguments["notebook_path"] = arguments.pop("path")
+        elif "file" in arguments and "notebook_path" not in arguments:
+            arguments["notebook_path"] = arguments.pop("file")
+        # Cell ID variants
+        if "cell" in arguments and "cell_id" not in arguments:
+            arguments["cell_id"] = arguments.pop("cell")
+        elif "index" in arguments and "cell_id" not in arguments:
+            arguments["cell_id"] = arguments.pop("index")
+    
+    # NotebookRead: Claude CLI expects 'notebook_path'
+    if tool_name_lower == "notebookread":
+        if "path" in arguments and "notebook_path" not in arguments:
+            arguments["notebook_path"] = arguments.pop("path")
+        elif "file" in arguments and "notebook_path" not in arguments:
+            arguments["notebook_path"] = arguments.pop("file")
+    
+    return arguments
+
+
+def streaming_transform_partial(partial_args: str, tool_name: str, provider: str = "gemini") -> str:
+    """
+    Apply provider-aware string transformations for streaming tool call arguments.
+    
+    This is the streaming equivalent of normalize_tool_arguments - it operates on
+    partial JSON strings rather than parsed objects.
+    
+    Args:
+        partial_args: Partial JSON string from streaming response
+        tool_name: Name of the tool being called
+        provider: Provider type (gemini, openrouter, openai, etc.)
+    
+    Returns:
+        Transformed partial JSON string
+    """
+    from src.services.providers.provider_detector import (
+        NormalizationLevel,
+        get_normalization_level,
+    )
+    
+    normalization_level = get_normalization_level(provider)
+    
+    # Skip transformation entirely for providers that don't need it
+    if normalization_level == NormalizationLevel.NONE.value:
+        return partial_args
+    
+    tool_name_lower = tool_name.lower() if tool_name else ""
+    transformed = partial_args
+    
+    # Light transformation for OpenRouter/openai_compatible
+    if normalization_level == NormalizationLevel.LIGHT.value:
+        if tool_name_lower in ["bash", "repl"]:
+            transformed = transformed.replace('"prompt":', '"command":')
+        elif tool_name_lower == "read":
+            transformed = transformed.replace('"path":', '"file_path":')
+        return transformed
+    
+    # Full transformation for Gemini (FULL level)
+    # TIER 1: Core File Operations
+    if tool_name_lower in ["bash", "repl"]:
+        transformed = transformed.replace('"prompt":', '"command":')
+        transformed = transformed.replace('"code":', '"command":')
+    
+    elif tool_name_lower == "read":
+        transformed = transformed.replace('"path":', '"file_path":')
+        transformed = transformed.replace('"filename":', '"file_path":')
+        transformed = transformed.replace('"file":', '"file_path":')
+    
+    elif tool_name_lower == "write":
+        transformed = transformed.replace('"path":', '"file_path":')
+        transformed = transformed.replace('"filename":', '"file_path":')
+        transformed = transformed.replace('"file":', '"file_path":')
+        transformed = transformed.replace('"text":', '"content":')
+        transformed = transformed.replace('"data":', '"content":')
+    
+    elif tool_name_lower == "edit":
+        transformed = transformed.replace('"path":', '"file_path":')
+        transformed = transformed.replace('"file":', '"file_path":')
+        transformed = transformed.replace('"original":', '"old_text":')
+        transformed = transformed.replace('"before":', '"old_text":')
+        transformed = transformed.replace('"replacement":', '"new_text":')
+        transformed = transformed.replace('"after":', '"new_text":')
+    
+    elif tool_name_lower == "multiedit":
+        transformed = transformed.replace('"path":', '"file_path":')
+        transformed = transformed.replace('"file":', '"file_path":')
+        transformed = transformed.replace('"changes":', '"edits":')
+        transformed = transformed.replace('"modifications":', '"edits":')
+    
+    # TIER 2: Search & Navigation
+    elif tool_name_lower == "glob":
+        transformed = transformed.replace('"glob":', '"pattern":')
+        transformed = transformed.replace('"glob_pattern":', '"pattern":')
+    
+    elif tool_name_lower == "grep":
+        transformed = transformed.replace('"query":', '"pattern":')
+        transformed = transformed.replace('"search":', '"pattern":')
+        transformed = transformed.replace('"regex":', '"pattern":')
+        transformed = transformed.replace('"directory":', '"path":')
+        transformed = transformed.replace('"dir":', '"path":')
+    
+    elif tool_name_lower == "ls":
+        transformed = transformed.replace('"directory":', '"path":')
+        transformed = transformed.replace('"dir":', '"path":')
+        transformed = transformed.replace('"folder":', '"path":')
+    
+    # TIER 3: Task & Agent
+    elif tool_name_lower == "task":
+        transformed = transformed.replace('"agent_type":', '"subagent_type":')
+        transformed = transformed.replace('"type":', '"subagent_type":')
+    
+    elif tool_name_lower == "agentdispatch":
+        transformed = transformed.replace('"id":', '"agent_id":')
+        transformed = transformed.replace('"prompt":', '"task":')
+        transformed = transformed.replace('"instruction":', '"task":')
+    
+    # TIER 4: Todo Management
+    elif tool_name_lower == "todowrite":
+        transformed = transformed.replace('"tasks":', '"todos":')
+        transformed = transformed.replace('"items":', '"todos":')
+    
+    # TIER 5: Web & Browser
+    elif tool_name_lower == "webfetch":
+        transformed = transformed.replace('"link":', '"url":')
+        transformed = transformed.replace('"href":', '"url":')
+        transformed = transformed.replace('"address":', '"url":')
+    
+    elif tool_name_lower == "websearch":
+        transformed = transformed.replace('"search":', '"query":')
+        transformed = transformed.replace('"q":', '"query":')
+        transformed = transformed.replace('"term":', '"query":')
+    
+    elif tool_name_lower == "browser":
+        transformed = transformed.replace('"link":', '"url":')
+        transformed = transformed.replace('"address":', '"url":')
+        transformed = transformed.replace('"command":', '"action":')
+        transformed = transformed.replace('"operation":', '"action":')
+    
+    # TIER 6: Notebook Operations
+    elif tool_name_lower in ["notebookedit", "notebookread"]:
+        transformed = transformed.replace('"path":', '"notebook_path":')
+        transformed = transformed.replace('"file":', '"notebook_path":')
+        if tool_name_lower == "notebookedit":
+            transformed = transformed.replace('"cell":', '"cell_id":')
+            transformed = transformed.replace('"index":', '"cell_id":')
+    
+    return transformed
 
 def convert_openai_to_claude_response(
-    openai_response: dict, original_request: ClaudeMessagesRequest
+    openai_response: dict, original_request: ClaudeMessagesRequest, provider: str = "gemini"
 ) -> dict:
     """Convert OpenAI response to Claude format with enhanced error handling."""
+
 
     # Validate response structure
     if not isinstance(openai_response, dict):
@@ -58,47 +478,9 @@ def convert_openai_to_claude_response(
             except json.JSONDecodeError:
                 arguments = {"raw_arguments": function_data.get("arguments", "")}
 
-            # PATCH: Alias arguments for CLI compatibility (Bash, Task, Skill)
+            # Normalize arguments using centralized function (provider-aware)
             tool_name = function_data.get("name", "")
-            tool_name_lower = tool_name.lower() if tool_name else ""
-            
-            # Bash/Repl: command <-> prompt
-            if tool_name_lower in ["bash", "repl"]:
-                if "command" in arguments and "prompt" not in arguments:
-                    arguments["prompt"] = arguments["command"]
-                elif "prompt" in arguments and "command" not in arguments:
-                    arguments["command"] = arguments["prompt"]
-            
-            # Task: description <-> prompt, default subagent_type
-            if tool_name_lower == "task":
-                if "description" in arguments and "prompt" not in arguments:
-                    arguments["prompt"] = arguments["description"]
-                elif "prompt" in arguments and "description" not in arguments:
-                    arguments["description"] = arguments["prompt"]
-                if "subagent_type" not in arguments:
-                    arguments["subagent_type"] = "research"
-            
-            # Skill: pass through unchanged - CLI expects 'skill'\n            # (Gemini sends 'skill', CLI expects 'skill' - no transformation needed)
-            
-            # TodoWrite: tasks -> todos + normalize status values
-            if tool_name_lower == "todowrite":
-                if "tasks" in arguments and "todos" not in arguments:
-                    arguments["todos"] = arguments["tasks"]
-                if "tasks" in arguments:
-                    del arguments["tasks"]
-                # Normalize status values
-                if "todos" in arguments and isinstance(arguments["todos"], list):
-                    valid_statuses = {"pending", "in_progress", "completed"}
-                    for todo in arguments["todos"]:
-                        if isinstance(todo, dict) and "status" in todo:
-                            status = todo["status"]
-                            if status not in valid_statuses:
-                                if "complete" in status.lower():
-                                    todo["status"] = "completed"
-                                elif "progress" in status.lower():
-                                    todo["status"] = "in_progress"
-                                else:
-                                    todo["status"] = "pending"
+            arguments = normalize_tool_arguments(tool_name, arguments, provider)
 
             content_blocks.append(
                 {
@@ -151,9 +533,9 @@ def convert_openai_to_claude_response(
 
 
 async def convert_openai_streaming_to_claude(
-    openai_stream, original_request: ClaudeMessagesRequest, logger
+    openai_stream, original_request: ClaudeMessagesRequest, logger, provider: str = "gemini"
 ):
-    """Convert OpenAI streaming response to Claude streaming format."""
+    """Convert OpenAI streaming response to Claude streaming format with provider-aware normalization."""
 
     message_id = f"msg_{uuid.uuid4().hex[:24]}"
 
@@ -265,17 +647,24 @@ async def convert_openai_streaming_to_claude(
                                 current_block_index += 1
                                 tool_call["claude_index"] = current_block_index
                                 tool_call["started"] = True
-                                
+                            
                                 yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': tool_call['claude_index'], 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': tool_call['name']}}, ensure_ascii=False)}\n\n"
                             
-                            # Handle Arguments
+                            # Handle Arguments - Transform parameter names on-the-fly (provider-aware)
                             if "arguments" in function_data and tool_call["started"] and function_data["arguments"] is not None:
                                 partial_args = function_data["arguments"]
                                 tool_call["args_buffer"] += partial_args
                                 
-                                # Send delta immediately (Streaming)
-                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': tool_call['claude_index'], 'delta': {'type': Constants.DELTA_INPUT_JSON, 'partial_json': partial_args}}, ensure_ascii=False)}\n\n"
-                                    
+                                # Use provider-aware streaming transformation
+                                transformed_partial = streaming_transform_partial(
+                                    partial_args, 
+                                    tool_call["name"], 
+                                    provider
+                                )
+                                
+                                # Send transformed delta - skip the inline transformations below
+                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': tool_call['claude_index'], 'delta': {'type': Constants.DELTA_INPUT_JSON, 'partial_json': transformed_partial}}, ensure_ascii=False)}\n\n"
+                                
                     # Handle finish reason
                     if finish_reason:
                         if finish_reason == "length":
@@ -322,8 +711,9 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     openai_client,
     request_id: str,
     config=None,
+    provider: str = "gemini",
 ):
-    """Convert OpenAI streaming response to Claude streaming format with cancellation support."""
+    """Convert OpenAI streaming response to Claude streaming format with cancellation support and provider-aware normalization."""
 
     message_id = f"msg_{uuid.uuid4().hex[:24]}"
 
@@ -350,6 +740,14 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     # Fallback map for streams that don't send IDs in every chunk
     # Map: stream_index -> tool_call_id
     stream_index_to_id = {}
+    
+    # Content-based deduplication: (name, args_prefix) -> first_tool_id
+    # This catches duplicate tool calls with DIFFERENT IDs but SAME content
+    # (Gemini sometimes emits the same tool call multiple times with unique IDs)
+    content_fingerprints = {}
+    
+    # Set of tool_call IDs that were detected as duplicates and should be skipped
+    skipped_tool_ids = set()
 
     final_stop_reason = Constants.STOP_END_TURN
     usage_data = {"input_tokens": 0, "output_tokens": 0}
@@ -435,6 +833,10 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                             tc_index = tc_delta.get("index", 0)
                             tc_id = tc_delta.get("id")
                             
+                            # EARLY SKIP: If this tool call ID was already marked as duplicate, skip all chunks
+                            if tc_id and tc_id in skipped_tool_ids:
+                                continue
+                            
                             # Determine Target Claude Block Index
                             target_claude_index = None
                             is_new_block = False
@@ -457,7 +859,33 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                                         logger.debug(f"Ignoring ghost stream for ID {tc_id} (index {tc_index} vs primary {active_tool_ids[tc_id]['primary_index']})")
                                         continue
                                 else:
-                                    # New unique ID -> New Block
+                                    # New unique ID -> Check fingerprint FIRST before creating block
+                                    # This catches duplicates with different IDs but same operation
+                                    
+                                    # Try to get tool name early (may be in this chunk)
+                                    function_data = tc_delta.get(Constants.TOOL_FUNCTION, {})
+                                    tool_name = function_data.get("name", "")
+                                    first_args = function_data.get("arguments", "")
+                                    
+                                    if tool_name:
+                                        # Create fingerprint from name + first 50 chars of args
+                                        fingerprint = f"{tool_name}:{first_args[:50]}"
+                                        
+                                        if fingerprint in content_fingerprints:
+                                            # DUPLICATE DETECTED - skip this tool call entirely
+                                            original_id = content_fingerprints[fingerprint]
+                                            logger.info(f"DEDUP: Blocking duplicate tool call '{tool_name}' (id={tc_id}) - matches existing (id={original_id})")
+                                            # Mark in a skip set so we ignore all future chunks for this ID
+                                            if "skipped_ids" not in locals():
+                                                skipped_ids = set()
+                                            skipped_tool_ids.add(tc_id)
+                                            continue
+                                        else:
+                                            # First occurrence - register fingerprint
+                                            content_fingerprints[fingerprint] = tc_id
+                                            logger.debug(f"DEDUP: Registered fingerprint '{fingerprint}' for tool '{tool_name}' (id={tc_id})")
+                                    
+                                    # Not a duplicate - create new block
                                     current_block_index += 1
                                     target_claude_index = current_block_index
                                     is_new_block = True
@@ -488,6 +916,66 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                                     if current_tool_calls.get(0, {}).get("claude_index") is not None:
                                         target_claude_index = current_tool_calls[0]["claude_index"]
                                         logger.debug(f"Fallback: mapping index 0 to existing claude_index {target_claude_index}")
+                            
+                            # Skip if no valid target
+                            if target_claude_index is None:
+                                continue
+                            
+                            # Init tool_call state if new block
+                            if is_new_block or tc_index not in current_tool_calls:
+                                if tc_index not in current_tool_calls:
+                                    current_tool_calls[tc_index] = {
+                                        "id": tc_id,
+                                        "name": None,
+                                        "args_buffer": "",
+                                        "claude_index": target_claude_index
+                                    }
+                                tool_call_state = current_tool_calls[tc_index]
+                            else:
+                                tool_call_state = current_tool_calls.get(tc_index)
+                                if not tool_call_state:
+                                    continue
+                            
+                            # Update Name
+                            function_data = tc_delta.get(Constants.TOOL_FUNCTION, {})
+                            if function_data.get("name"):
+                                tool_call_state["name"] = function_data["name"]
+                            
+                            # Send block start if new block (duplicates were already filtered before reaching here)
+                            if is_new_block and tc_id and tool_call_state.get("name"):
+                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': target_claude_index, 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tc_id, 'name': tool_call_state['name']}}, ensure_ascii=False)}\n\n"
+                                
+                            if "arguments" in function_data and function_data["arguments"] is not None:
+                                partial_args = function_data["arguments"]
+                                tool_call_state["args_buffer"] += partial_args
+                                
+                                # Use provider-aware streaming transformation
+                                transformed_partial = streaming_transform_partial(
+                                    partial_args, 
+                                    tool_call_state.get("name", ""), 
+                                    provider
+                                )
+                                
+                                # Send transformed delta
+                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': target_claude_index, 'delta': {'type': Constants.DELTA_INPUT_JSON, 'partial_json': transformed_partial}}, ensure_ascii=False)}\n\n"
+                    
+                    # Handle finish reason
+                    if finish_reason:
+                        if finish_reason == "length":
+                            final_stop_reason = Constants.STOP_MAX_TOKENS
+                        elif finish_reason in ["tool_calls", "function_call"]:
+                            final_stop_reason = Constants.STOP_TOOL_USE
+                        elif finish_reason == "stop":
+                            final_stop_reason = Constants.STOP_END_TURN
+                        else:
+                            final_stop_reason = Constants.STOP_END_TURN
+                        
+                        # Close any open block
+                        if current_block_index >= 0:
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+                            current_block_type = None
+                        
+                        break
                             
     except HTTPException as e:
         # Handle ALL HTTPExceptions (not just 499)

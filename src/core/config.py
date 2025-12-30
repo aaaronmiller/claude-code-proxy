@@ -89,6 +89,16 @@ class Config:
         self.middle_model = os.environ.get("MIDDLE_MODEL", self.big_model)
         self.small_model = os.environ.get("SMALL_MODEL", "gpt-4o-mini")
 
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # MODEL CASCADE (Fallback on provider errors)
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # Enable with MODEL_CASCADE=true
+        # Comma-separated fallback models in format: provider/model
+        self.model_cascade = os.environ.get("MODEL_CASCADE", "false").lower() == "true"
+        self.big_cascade = self._parse_cascade(os.environ.get("BIG_CASCADE", ""))
+        self.middle_cascade = self._parse_cascade(os.environ.get("MIDDLE_CASCADE", ""))
+        self.small_cascade = self._parse_cascade(os.environ.get("SMALL_CASCADE", ""))
+
         # Optional: Per-model routing for hybrid deployments
         # Enable per-model endpoints (set to "true" to enable)
         self.enable_big_endpoint = os.environ.get("ENABLE_BIG_ENDPOINT", "false").lower() == "true"
@@ -105,6 +115,33 @@ class Config:
         self.big_api_key = os.environ.get("BIG_API_KEY", self.openai_api_key)
         self.middle_api_key = os.environ.get("MIDDLE_API_KEY", self.openai_api_key)
         self.small_api_key = os.environ.get("SMALL_API_KEY", self.openai_api_key)
+
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # PROVIDER DETECTION (Auto-detected from URLs, can be overridden)
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # Providers: gemini, openrouter, openai, anthropic, azure, openai_compatible
+        # Auto-detection analyzes the endpoint URLs to determine the provider
+        # Override with explicit values if auto-detection is incorrect
+        
+        from src.services.providers.provider_detector import detect_provider
+        
+        # Detect providers for each endpoint
+        self.default_provider = os.environ.get(
+            "DEFAULT_PROVIDER", 
+            detect_provider(self.openai_base_url)
+        )
+        self.big_provider = os.environ.get(
+            "BIG_PROVIDER",
+            detect_provider(self.big_endpoint) if self.enable_big_endpoint else self.default_provider
+        )
+        self.middle_provider = os.environ.get(
+            "MIDDLE_PROVIDER",
+            detect_provider(self.middle_endpoint) if self.enable_middle_endpoint else self.default_provider
+        )
+        self.small_provider = os.environ.get(
+            "SMALL_PROVIDER",
+            detect_provider(self.small_endpoint) if self.enable_small_endpoint else self.default_provider
+        )
 
         # ═══════════════════════════════════════════════════════════════════════════════
         # CUSTOM SYSTEM PROMPTS
@@ -296,6 +333,21 @@ class Config:
                     custom_headers[header_name] = env_value
         
         return custom_headers
+    
+    def _parse_cascade(self, cascade_str: str) -> list:
+        """Parse comma-separated cascade list into list of model strings."""
+        if not cascade_str:
+            return []
+        return [m.strip() for m in cascade_str.split(",") if m.strip()]
+    
+    def get_cascade_for_tier(self, tier: str) -> list:
+        """Get cascade list for a model tier (big, middle, small)."""
+        cascades = {
+            "big": self.big_cascade,
+            "middle": self.middle_cascade,
+            "small": self.small_cascade
+        }
+        return cascades.get(tier.lower(), [])
 
 try:
     config = Config()

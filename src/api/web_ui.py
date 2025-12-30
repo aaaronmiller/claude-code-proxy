@@ -95,40 +95,73 @@ class ProfileCreate(BaseModel):
 async def get_config():
     """Get current configuration - returns all settings for web UI"""
     return {
-        # Core settings (use new names with fallback to legacy)
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # PROVIDER & AUTH
+        # ═══════════════════════════════════════════════════════════════════════════════
         "provider_api_key": "***" if (os.getenv("PROVIDER_API_KEY") or config.openai_api_key) else "",
         "provider_base_url": os.getenv("PROVIDER_BASE_URL") or config.openai_base_url,
         "proxy_auth_key": "***" if (os.getenv("PROXY_AUTH_KEY") or config.anthropic_api_key) else "",
+        "default_provider": os.getenv("DEFAULT_PROVIDER", "openrouter"),
+        "azure_api_version": os.getenv("AZURE_API_VERSION", ""),
+        "enable_openrouter_selection": os.getenv("ENABLE_OPENROUTER_SELECTION", "true"),
 
         # Legacy names (for backward compatibility)
         "openai_api_key": "***" if config.openai_api_key else "",
         "anthropic_api_key": "***" if config.anthropic_api_key else "",
         "openai_base_url": config.openai_base_url,
 
-        # Server settings
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # SERVER CONFIGURATION
+        # ═══════════════════════════════════════════════════════════════════════════════
         "host": os.getenv("HOST", config.host if hasattr(config, 'host') else "0.0.0.0"),
         "port": os.getenv("PORT", str(config.port) if hasattr(config, 'port') else "8082"),
         "log_level": os.getenv("LOG_LEVEL", config.log_level if hasattr(config, 'log_level') else "INFO"),
 
-        # Model settings
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # MODEL SETTINGS
+        # ═══════════════════════════════════════════════════════════════════════════════
         "big_model": config.big_model,
         "middle_model": config.middle_model,
         "small_model": config.small_model,
 
-        # Reasoning settings
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # REASONING CONFIGURATION
+        # ═══════════════════════════════════════════════════════════════════════════════
         "reasoning_effort": config.reasoning_effort if hasattr(config, 'reasoning_effort') else "",
         "reasoning_max_tokens": str(config.reasoning_max_tokens) if hasattr(config, 'reasoning_max_tokens') and config.reasoning_max_tokens else "",
         "reasoning_exclude": os.getenv("REASONING_EXCLUDE", "false"),
+        "verbosity": os.getenv("VERBOSITY", ""),
+        # Per-tier reasoning overrides
+        "big_model_reasoning": os.getenv("BIG_MODEL_REASONING", ""),
+        "middle_model_reasoning": os.getenv("MIDDLE_MODEL_REASONING", ""),
+        "small_model_reasoning": os.getenv("SMALL_MODEL_REASONING", ""),
 
-        # Token limits
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # CUSTOM SYSTEM PROMPTS
+        # ═══════════════════════════════════════════════════════════════════════════════
+        "enable_custom_big_prompt": os.getenv("ENABLE_CUSTOM_BIG_PROMPT", "false"),
+        "big_system_prompt": os.getenv("BIG_SYSTEM_PROMPT", ""),
+        "big_system_prompt_file": os.getenv("BIG_SYSTEM_PROMPT_FILE", ""),
+        "enable_custom_middle_prompt": os.getenv("ENABLE_CUSTOM_MIDDLE_PROMPT", "false"),
+        "middle_system_prompt": os.getenv("MIDDLE_SYSTEM_PROMPT", ""),
+        "middle_system_prompt_file": os.getenv("MIDDLE_SYSTEM_PROMPT_FILE", ""),
+        "enable_custom_small_prompt": os.getenv("ENABLE_CUSTOM_SMALL_PROMPT", "false"),
+        "small_system_prompt": os.getenv("SMALL_SYSTEM_PROMPT", ""),
+        "small_system_prompt_file": os.getenv("SMALL_SYSTEM_PROMPT_FILE", ""),
+
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # PERFORMANCE SETTINGS
+        # ═══════════════════════════════════════════════════════════════════════════════
         "max_tokens_limit": str(config.max_tokens_limit) if hasattr(config, 'max_tokens_limit') else "65536",
         "min_tokens_limit": str(config.min_tokens_limit) if hasattr(config, 'min_tokens_limit') else "4096",
         "request_timeout": str(config.request_timeout) if hasattr(config, 'request_timeout') else "120",
+        "max_retries": str(config.max_retries) if hasattr(config, 'max_retries') else "2",
 
-        # Terminal display settings
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # TERMINAL DISPLAY
+        # ═══════════════════════════════════════════════════════════════════════════════
         "terminal_display_mode": os.getenv("TERMINAL_DISPLAY_MODE", "detailed"),
         "terminal_color_scheme": os.getenv("TERMINAL_COLOR_SCHEME", "auto"),
-        "log_style": os.getenv("LOG_STYLE", "rich"),
         "terminal_show_workspace": os.getenv("TERMINAL_SHOW_WORKSPACE", "true"),
         "terminal_show_context_pct": os.getenv("TERMINAL_SHOW_CONTEXT_PCT", "true"),
         "terminal_show_task_type": os.getenv("TERMINAL_SHOW_TASK_TYPE", "true"),
@@ -136,15 +169,33 @@ async def get_config():
         "terminal_show_cost": os.getenv("TERMINAL_SHOW_COST", "true"),
         "terminal_show_duration_colors": os.getenv("TERMINAL_SHOW_DURATION_COLORS", "true"),
         "terminal_session_colors": os.getenv("TERMINAL_SESSION_COLORS", "true"),
-        "compact_logger": os.getenv("USE_COMPACT_LOGGER", "false"),
 
-        # Dashboard settings
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # LOGGING SETTINGS
+        # ═══════════════════════════════════════════════════════════════════════════════
+        "log_style": os.getenv("LOG_STYLE", "rich"),
+        "compact_logger": os.getenv("COMPACT_LOGGER", "false"),
+        "show_token_counts": os.getenv("SHOW_TOKEN_COUNTS", "true"),
+        "show_performance": os.getenv("SHOW_PERFORMANCE", "true"),
+        "color_scheme": os.getenv("COLOR_SCHEME", "auto"),
+
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # USAGE & ANALYTICS
+        # ═══════════════════════════════════════════════════════════════════════════════
         "track_usage": os.getenv("TRACK_USAGE", "false"),
+        "usage_db_path": os.getenv("USAGE_DB_PATH", "usage_tracking.db"),
+
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # DASHBOARD SETTINGS
+        # ═══════════════════════════════════════════════════════════════════════════════
         "enable_dashboard": os.getenv("ENABLE_DASHBOARD", "false"),
         "dashboard_layout": os.getenv("DASHBOARD_LAYOUT", "default"),
         "dashboard_refresh": os.getenv("DASHBOARD_REFRESH", "0.5"),
+        "dashboard_waterfall_size": os.getenv("DASHBOARD_WATERFALL_SIZE", "20"),
 
-        # Hybrid mode settings
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # HYBRID MODE (Per-tier routing)
+        # ═══════════════════════════════════════════════════════════════════════════════
         "enable_big_endpoint": os.getenv("ENABLE_BIG_ENDPOINT", "false"),
         "big_endpoint": os.getenv("BIG_ENDPOINT", ""),
         "big_api_key": "***" if os.getenv("BIG_API_KEY") else "",
@@ -154,6 +205,14 @@ async def get_config():
         "enable_small_endpoint": os.getenv("ENABLE_SMALL_ENDPOINT", "false"),
         "small_endpoint": os.getenv("SMALL_ENDPOINT", ""),
         "small_api_key": "***" if os.getenv("SMALL_API_KEY") else "",
+
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # CASCADE (Fallback)
+        # ═══════════════════════════════════════════════════════════════════════════════
+        "model_cascade": os.getenv("MODEL_CASCADE", "false"),
+        "big_cascade": os.getenv("BIG_CASCADE", ""),
+        "middle_cascade": os.getenv("MIDDLE_CASCADE", ""),
+        "small_cascade": os.getenv("SMALL_CASCADE", ""),
 
         # Mode indicator
         "passthrough_mode": config.passthrough_mode if hasattr(config, 'passthrough_mode') else False,
@@ -444,4 +503,246 @@ async def test_provider_connection():
         return {
             "success": False,
             "error": str(e)
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CROSSTALK API ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+CROSSTALK_PRESETS_DIR = Path("configs/crosstalk/presets")
+CROSSTALK_SESSIONS_DIR = Path("configs/crosstalk/sessions")
+
+
+@router.get("/api/crosstalk/presets")
+async def list_crosstalk_presets():
+    """List available Crosstalk presets"""
+    try:
+        presets = []
+        if CROSSTALK_PRESETS_DIR.exists():
+            for preset_file in CROSSTALK_PRESETS_DIR.glob("*.json"):
+                with open(preset_file, 'r') as f:
+                    preset_data = json.load(f)
+                    presets.append({
+                        "filename": preset_file.stem,
+                        "name": preset_data.get("name", preset_file.stem),
+                        "description": preset_data.get("description", ""),
+                        "models": len(preset_data.get("models", [])),
+                        "topology": preset_data.get("topology", {}).get("type", "ring")
+                    })
+        return presets
+    except Exception as e:
+        logger.error(f"Failed to list presets: {e}")
+        return []
+
+
+@router.get("/api/crosstalk/presets/{preset_name}")
+async def get_crosstalk_preset(preset_name: str):
+    """Get a specific Crosstalk preset"""
+    try:
+        preset_file = CROSSTALK_PRESETS_DIR / f"{preset_name}.json"
+        if not preset_file.exists():
+            raise HTTPException(status_code=404, detail="Preset not found")
+        
+        with open(preset_file, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    except Exception as e:
+        logger.error(f"Failed to load preset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class CrosstalkSessionCreate(BaseModel):
+    """Crosstalk session configuration"""
+    name: Optional[str] = None
+    models: List[Dict[str, Any]]
+    topology: Dict[str, Any] = {"type": "ring"}
+    paradigm: str = "relay"
+    rounds: int = 5
+    infinite: bool = False
+    stop_conditions: Dict[str, Any] = {}
+    summarize_every: int = 0
+    initial_prompt: str = ""
+
+
+@router.post("/api/crosstalk/presets")
+async def save_crosstalk_preset(preset: CrosstalkSessionCreate):
+    """Save a Crosstalk preset"""
+    try:
+        CROSSTALK_PRESETS_DIR.mkdir(parents=True, exist_ok=True)
+        
+        name = preset.name or f"custom_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        preset_file = CROSSTALK_PRESETS_DIR / f"{name}.json"
+        
+        preset_data = {
+            "name": name,
+            "models": preset.models,
+            "topology": preset.topology,
+            "paradigm": preset.paradigm,
+            "rounds": preset.rounds,
+            "infinite": preset.infinite,
+            "stop_conditions": preset.stop_conditions,
+            "summarize_every": preset.summarize_every,
+            "initial_prompt": preset.initial_prompt
+        }
+        
+        with open(preset_file, 'w') as f:
+            json.dump(preset_data, f, indent=2)
+        
+        return {"status": "success", "filename": name}
+    except Exception as e:
+        logger.error(f"Failed to save preset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/crosstalk/sessions")
+async def list_crosstalk_sessions():
+    """List recent Crosstalk sessions"""
+    try:
+        sessions = []
+        if CROSSTALK_SESSIONS_DIR.exists():
+            for session_file in sorted(CROSSTALK_SESSIONS_DIR.glob("*.json"), reverse=True)[:20]:
+                with open(session_file, 'r') as f:
+                    session_data = json.load(f)
+                    sessions.append({
+                        "filename": session_file.stem,
+                        "started_at": session_data.get("started_at", ""),
+                        "ended_at": session_data.get("ended_at", ""),
+                        "messages": len(session_data.get("messages", [])),
+                        "paradigm": session_data.get("config", {}).get("paradigm", "relay")
+                    })
+        return sessions
+    except Exception as e:
+        logger.error(f"Failed to list sessions: {e}")
+        return []
+
+
+@router.get("/api/crosstalk/sessions/{session_name}")
+async def get_crosstalk_session(session_name: str):
+    """Get a specific Crosstalk session transcript"""
+    try:
+        session_file = CROSSTALK_SESSIONS_DIR / f"{session_name}.json"
+        if not session_file.exists():
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        with open(session_file, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    except Exception as e:
+        logger.error(f"Failed to load session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/health")
+async def health_check():
+    """Health check endpoint for auto-wizard"""
+    provider_url = os.getenv("PROVIDER_BASE_URL") or config.openai_base_url
+    provider_key = os.getenv("PROVIDER_API_KEY") or config.openai_api_key
+    
+    return {
+        "status": "ok",
+        "provider_configured": bool(provider_key),
+        "provider_url": provider_url,
+        "cascade_enabled": getattr(config, 'model_cascade', False),
+        "big_model": config.big_model,
+        "middle_model": config.middle_model,
+        "small_model": config.small_model
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODEL PLAYGROUND
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class PlaygroundRequest(BaseModel):
+    """Model playground request"""
+    model_tier: str = "big"  # "big", "middle", "small"
+    system_prompt: str = ""
+    user_message: str
+    temperature: float = 0.7
+    max_tokens: int = 1024
+
+
+@router.post("/api/playground/run")
+async def run_playground(request: PlaygroundRequest):
+    """
+    Run a test prompt through the proxy.
+    
+    Returns the model response with token counts and latency.
+    """
+    import time
+    
+    # Get model based on tier
+    model_map = {
+        "big": config.big_model,
+        "middle": config.middle_model,
+        "small": config.small_model
+    }
+    model = model_map.get(request.model_tier, config.big_model)
+    
+    if not model:
+        raise HTTPException(status_code=400, detail=f"No model configured for tier: {request.model_tier}")
+    
+    # Get API key
+    api_key = os.getenv("PROVIDER_API_KEY") or os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="No API key configured")
+    
+    # Build messages
+    messages = []
+    if request.system_prompt:
+        messages.append({"role": "system", "content": request.system_prompt})
+    messages.append({"role": "user", "content": request.user_message})
+    
+    # Call API
+    base_url = config.openai_base_url or "https://openrouter.ai/api/v1"
+    
+    start_time = time.time()
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": request.temperature,
+                    "max_tokens": request.max_tokens
+                }
+            )
+            
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            if response.status_code != 200:
+                return {
+                    "success": False,
+                    "error": f"API error: {response.status_code}",
+                    "latency_ms": latency_ms
+                }
+            
+            data = response.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            usage = data.get("usage", {})
+            
+            return {
+                "success": True,
+                "content": content,
+                "model": model,
+                "input_tokens": usage.get("prompt_tokens", 0),
+                "output_tokens": usage.get("completion_tokens", 0),
+                "latency_ms": latency_ms
+            }
+            
+    except Exception as e:
+        logger.error(f"Playground error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "latency_ms": int((time.time() - start_time) * 1000)
         }

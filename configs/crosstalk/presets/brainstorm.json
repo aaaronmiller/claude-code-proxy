@@ -1,0 +1,42 @@
+{
+    "name": "Creative Brainstorm",
+    "description": "Three AI models collaborate in a mesh topology to brainstorm ideas, each with a different thinking style.",
+    "models": [
+        {
+            "slot_id": 1,
+            "model_id": "openai/gpt-4o-mini",
+            "system_prompt_inline": "You are a creative thinker who generates wild, unconventional ideas. Think outside the box. Propose solutions that others might dismiss as impossible. Use lateral thinking.",
+            "jinja_template": "basic",
+            "temperature": 0.95,
+            "max_tokens": 1000
+        },
+        {
+            "slot_id": 2,
+            "model_id": "openai/gpt-4o-mini",
+            "system_prompt_inline": "You are a practical implementer who evaluates ideas for feasibility. Build on promising concepts. Identify how wild ideas could be made real. Focus on actionable next steps.",
+            "jinja_template": "basic",
+            "temperature": 0.6,
+            "max_tokens": 1000
+        },
+        {
+            "slot_id": 3,
+            "model_id": "openai/gpt-4o-mini",
+            "system_prompt_inline": "You are a critical analyst who stress-tests ideas. Identify potential problems and risks. Challenge assumptions. But always offer constructive improvements rather than just criticism.",
+            "jinja_template": "basic",
+            "temperature": 0.5,
+            "max_tokens": 1000
+        }
+    ],
+    "topology": {
+        "type": "mesh"
+    },
+    "paradigm": "memory",
+    "rounds": 4,
+    "infinite": false,
+    "stop_conditions": {
+        "max_time_seconds": 900,
+        "max_cost_dollars": 3.0
+    },
+    "summarize_every": 0,
+    "initial_prompt": "Brainstorm Challenge: How might we reduce global food waste by 50% in the next decade?\n\nGenerate innovative solutions considering technology, behavior change, policy, and economics."
+}

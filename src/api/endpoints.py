@@ -190,12 +190,16 @@ async def create_message(
         # Determine endpoint
         client = openai_client.get_client_for_model(routed_model, config)
         endpoint = config.openai_base_url
+        provider = config.default_provider  # Default provider
         if client == openai_client.big_client:
             endpoint = config.big_endpoint
+            provider = config.big_provider
         elif client == openai_client.middle_client:
             endpoint = config.middle_endpoint
+            provider = config.middle_provider
         elif client == openai_client.small_client:
             endpoint = config.small_endpoint
+            provider = config.small_provider
 
         # Log API configuration for debugging (helps diagnose 401 errors)
         logger.debug(f"Request {request_id}: Routing to endpoint: {endpoint}")
@@ -344,6 +348,7 @@ async def create_message(
                         openai_client,
                         request_id,
                         config,
+                        provider,
                     ),
                     media_type="text/event-stream",
                     headers={
@@ -472,6 +477,11 @@ async def create_message(
 
             # Track usage if enabled
             if usage_tracker.enabled:
+                # Capture content for full logging if enabled
+                import json as json_module
+                req_content = json_module.dumps(request.model_dump()) if hasattr(request, 'model_dump') else str(request)
+                resp_content = json_module.dumps(openai_response) if openai_response else None
+                
                 usage_tracker.log_request(
                     request_id=request_id,
                     original_model=request.model,
@@ -492,11 +502,13 @@ async def create_message(
                     session_id=request_id[:8],
                     client_ip=client_ip,
                     has_json_content=has_json_content,
-                    json_size_bytes=json_size_bytes
+                    json_size_bytes=json_size_bytes,
+                    request_content=req_content,
+                    response_content=resp_content
                 )
 
             claude_response = convert_openai_to_claude_response(
-                openai_response, request
+                openai_response, request, provider
             )
             logger.debug(f"Claude response created for request_id: {request_id}")
 

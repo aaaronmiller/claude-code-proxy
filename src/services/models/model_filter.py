@@ -45,6 +45,17 @@ class ModelFilter:
         "microsoft/phi-3-medium-128k-instruct",
     ]
     
+    # New models (last 2 months)
+    NEW_MODELS = [
+        "google/gemini-2.0-flash-exp",
+        "google/gemini-2.0-flash-thinking-exp",
+        "anthropic/claude-3.7-sonnet",
+        "meta-llama/llama-3.3-70b-instruct",
+        "qwen/qwen-2.5-72b-instruct",
+        "x-ai/grok-2",
+        "deepseek/deepseek-chat",
+    ]
+    
     def __init__(self, usage_file: str = "data/model_usage.json"):
         """
         Initialize model filter.
@@ -138,67 +149,77 @@ class ModelFilter:
         )
         
         return [model for model, _ in sorted_models[:limit]]
-    
+
     def get_filtered_models(
         self,
         all_models: List[str],
         include_free: bool = True,
         include_top: bool = True,
         include_recent: bool = True,
-        max_total: int = 60
+        max_total: int = 100
     ) -> List[str]:
         """
-        Get filtered list of models.
+        Get filtered list of models with Smart Sorting.
         
-        Args:
-            all_models: Complete list of available models
-            include_free: Include free models
-            include_top: Include top popular models
-            include_recent: Include recently used models
-            max_total: Maximum total models to return
-            
-        Returns:
-            Filtered and deduplicated list of model names
+        Sorting Order:
+        1. New & Free (The "Stealth" free models)
+        2. Recently Used (Your favorites)
+        3. Top Free (The best always-free ones)
+        4. Top Paid (High quality paid)
+        5. Others
         """
-        filtered = set()
+        unique_models = set()
         
-        # Add free models
+        # 1. New Models (Prioritize New & Free)
+        new_models = []
+        for model in self.NEW_MODELS:
+            if model in all_models:
+                new_models.append(model)
+                unique_models.add(model)
+        
+        # 2. Recently Used
+        recent_models = []
+        if include_recent:
+            usage_list = self.get_recently_used_models(limit=10)
+            for model in usage_list:
+                if model in all_models and model not in unique_models:
+                    recent_models.append(model)
+                    unique_models.add(model)
+                    
+        # 3. Top Free (excluding already added)
+        free_models = []
         if include_free:
             for model in self.FREE_MODELS:
-                if model in all_models:
-                    filtered.add(model)
-        
-        # Add top models
+                if model in all_models and model not in unique_models:
+                    free_models.append(model)
+                    unique_models.add(model)
+                    
+        # 4. Top Paid/Popular
+        top_models = []
         if include_top:
             for model in self.TOP_MODELS:
-                if model in all_models:
-                    filtered.add(model)
-        
-        # Add recently used models
-        if include_recent:
-            recent = self.get_recently_used_models(limit=20)
-            for model in recent:
-                if model in all_models:
-                    filtered.add(model)
-        
-        # Convert to list and limit
-        result = list(filtered)
-        
-        # Sort: recently used first, then top models, then free
-        def sort_key(model):
-            recent = self.get_recently_used_models(limit=20)
-            if model in recent:
-                return (0, recent.index(model))
-            elif model in self.TOP_MODELS:
-                return (1, self.TOP_MODELS.index(model))
-            elif model in self.FREE_MODELS:
-                return (2, self.FREE_MODELS.index(model))
-            else:
-                return (3, 0)
-        
-        result.sort(key=sort_key)
-        
-        return result[:max_total]
+                if model in all_models and model not in unique_models:
+                    top_models.append(model)
+                    unique_models.add(model)
+                    
+        # 5. Fill the rest from all_models until max_total
+        # Only if we need more padding
+        rest_models = []
+        if len(unique_models) < max_total:
+            for model in all_models:
+                if model not in unique_models:
+                    rest_models.append(model)
+                    unique_models.add(model)
+                    if len(unique_models) >= max_total:
+                        break
+                        
+        # Combine lists in priority order
+        # Note: We return a flat list, but the UI can use is_new_model() etc to show badges
+        return new_models + recent_models + free_models + top_models + rest_models
+
+    def is_new_model(self, model_name: str) -> bool:
+        """Check if model is considered 'new'."""
+        return model_name in self.NEW_MODELS
     
     def is_free_model(self, model_name: str) -> bool:
         """

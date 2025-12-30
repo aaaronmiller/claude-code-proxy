@@ -42,10 +42,15 @@ class UsageTracker:
         if enabled is None:
             enabled = os.getenv("TRACK_USAGE", "false").lower() == "true"
         self.enabled = enabled
+        
+        # Check if full content logging is enabled (for debugging/testing)
+        self.log_full_content = os.getenv("LOG_FULL_CONTENT", "false").lower() == "true"
 
         if self.enabled:
             self._init_db()
             logger.info(f"Usage tracking enabled. Database: {self.db_path}")
+            if self.log_full_content:
+                logger.info("Full request/response content logging enabled")
         else:
             logger.debug("Usage tracking disabled. Set TRACK_USAGE=true to enable")
 
@@ -97,7 +102,11 @@ class UsageTracker:
 
                 -- JSON detection (for TOON analysis)
                 has_json_content BOOLEAN DEFAULT 0,
-                json_size_bytes INTEGER DEFAULT 0
+                json_size_bytes INTEGER DEFAULT 0,
+
+                -- Full content logging (optional, for debugging/testing)
+                request_content TEXT,
+                response_content TEXT
             )
         """)
 
@@ -132,11 +141,42 @@ class UsageTracker:
             )
         """)
 
+        # Terminal output table for Claude Code session capture
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS terminal_output (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                test_config TEXT,
+                timestamp TEXT NOT NULL,
+
+                -- Terminal capture
+                stdout TEXT,
+                stderr TEXT,
+                exit_code INTEGER,
+
+                -- Execution metadata
+                workspace_path TEXT,
+                prompt TEXT,
+                duration_seconds REAL,
+
+                -- Test results
+                poem_created BOOLEAN DEFAULT 0,
+                poem_content TEXT,
+                folder_listed BOOLEAN DEFAULT 0,
+
+                -- Status
+                success BOOLEAN DEFAULT 0,
+                error_message TEXT
+            )
+        """)
+
         # Indexes for performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON api_requests(timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_model ON api_requests(routed_model)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_session ON api_requests(session_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON api_requests(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_terminal_session ON terminal_output(session_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_terminal_timestamp ON terminal_output(timestamp)")
 
         conn.commit()
         conn.close()
@@ -163,7 +203,9 @@ class UsageTracker:
         session_id: Optional[str] = None,
         client_ip: Optional[str] = None,
         has_json_content: bool = False,
-        json_size_bytes: int = 0
+        json_size_bytes: int = 0,
+        request_content: Optional[str] = None,
+        response_content: Optional[str] = None
     ) -> bool:
         """
         Log an API request.
@@ -182,6 +224,10 @@ class UsageTracker:
             total_tokens = input_tokens + output_tokens + thinking_tokens
             tokens_per_second = output_tokens / (duration_ms / 1000) if duration_ms > 0 and output_tokens > 0 else 0.0
 
+            # Conditionally store content if enabled
+            req_content = request_content if self.log_full_content else None
+            resp_content = response_content if self.log_full_content else None
+
             # Insert request
             cursor.execute("""
                 INSERT INTO api_requests (
@@ -192,8 +238,9 @@ class UsageTracker:
                     stream, message_count, has_system, has_tools, has_images,
                     status, error_message,
                     session_id, client_ip,
-                    has_json_content, json_size_bytes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    has_json_content, json_size_bytes,
+                    request_content, response_content
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 request_id, datetime.utcnow().isoformat(),
                 original_model, routed_model, provider, endpoint,
@@ -202,7 +249,8 @@ class UsageTracker:
                 stream, message_count, has_system, has_tools, has_images,
                 status, error_message,
                 session_id, client_ip,
-                has_json_content, json_size_bytes
+                has_json_content, json_size_bytes,
+                req_content, resp_content
             ))
 
             # Update model summary
@@ -258,6 +306,85 @@ class UsageTracker:
         except Exception as e:
             logger.error(f"Failed to log usage: {e}")
             return False
+
+    def log_terminal_output(
+        self,
+        session_id: str,
+        stdout: str,
+        stderr: str,
+        exit_code: int,
+        test_config: Optional[str] = None,
+        workspace_path: Optional[str] = None,
+        prompt: Optional[str] = None,
+        duration_seconds: float = 0.0,
+        poem_created: bool = False,
+        poem_content: Optional[str] = None,
+        folder_listed: bool = False,
+        success: bool = False,
+        error_message: Optional[str] = None
+    ) -> bool:
+        """
+        Log Claude Code terminal output for correlation with API requests.
+
+        Returns:
+            True if logged successfully, False otherwise
+        """
+        if not self.enabled:
+            return False
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO terminal_output (
+                    session_id, test_config, timestamp,
+                    stdout, stderr, exit_code,
+                    workspace_path, prompt, duration_seconds,
+                    poem_created, poem_content, folder_listed,
+                    success, error_message
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                session_id, test_config, datetime.utcnow().isoformat(),
+                stdout, stderr, exit_code,
+                workspace_path, prompt, duration_seconds,
+                poem_created, poem_content, folder_listed,
+                success, error_message
+            ))
+
+            conn.commit()
+            conn.close()
+            logger.debug(f"Terminal output logged for session {session_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to log terminal output: {e}")
+            return False
+
+    def get_terminal_output(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get terminal output for a session."""
+        if not self.enabled:
+            return None
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT * FROM terminal_output
+                WHERE session_id = ?
+                ORDER BY timestamp DESC
+                LIMIT 1
+            """, (session_id,))
+
+            row = cursor.fetchone()
+            conn.close()
+            return dict(row) if row else None
+
+        except Exception as e:
+            logger.error(f"Failed to get terminal output: {e}")
+            return None
 
     def get_top_models(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get most used models by request count."""

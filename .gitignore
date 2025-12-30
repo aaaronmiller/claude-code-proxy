@@ -179,13 +179,16 @@ pyrightconfig.json
 # Profile storage (user configurations)
 configs/profiles/
 
-# Usage tracking database
-data/usage.db
-usage_tracking.db
-*.sqlite
-*.sqlite3
+# Runtime Data
+data/
 
-# Build artifacts and output
+# Documentation
+docs/
+
+# Logs
+lazybitch.md
+
+# OS generated files
 build/
 dist/
 *.egg-info/
@@ -257,10 +260,7 @@ test-results/
 .augment/
 .clinerules/
 .aider/
-
-# Kiro IDE - ignore personal settings and specs
 .kiro/
-!.kiro/.gitkeep
 
 # OS generated files
 .DS_Store

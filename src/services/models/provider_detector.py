@@ -187,11 +187,21 @@ class ProviderDetector:
 
         # Map common aliases to VibeProxy model IDs
         VIBEPROXY_MODEL_MAP = {
-            # Gemini 3 aliases
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # Gemini models
+            # ═══════════════════════════════════════════════════════════════════════════════
             'gemini-3-pro': 'gemini-3-pro-preview',
             'gemini-3-pro-high': 'gemini-3-pro-preview',
             'gemini-3-pro-low': 'gemini-3-pro-preview',
-            # Claude via Antigravity aliases
+            'gemini-2.5-pro': 'gemini-2.5-pro',
+            'gemini-2.5-flash': 'gemini-2.5-flash',
+            'gemini-2.0-flash-thinking': 'gemini-2.0-flash-thinking-exp',
+            
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # Claude via VibeProxy (gemini-claude-* are internal VibeProxy model IDs)
+            # ═══════════════════════════════════════════════════════════════════════════════
+            'claude-sonnet-4': 'claude-sonnet-4',
+            'claude-opus-4': 'claude-opus-4',
             'claude-sonnet-4.5': 'gemini-claude-sonnet-4-5',
             'claude-sonnet-4-5': 'gemini-claude-sonnet-4-5',
             'claude-sonnet-4.5-thinking': 'gemini-claude-sonnet-4-5-thinking',
@@ -200,7 +210,23 @@ class ProviderDetector:
             'claude-opus-4-5': 'gemini-claude-opus-4-5-thinking',
             'claude-opus-4.5-thinking': 'gemini-claude-opus-4-5-thinking',
             'claude-opus-4-5-thinking': 'gemini-claude-opus-4-5-thinking',
-            # GPT-OSS alias
+            
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # OpenAI via VibeProxy
+            # ═══════════════════════════════════════════════════════════════════════════════
+            'gpt-4o': 'gpt-4o',
+            'gpt-4o-mini': 'gpt-4o-mini',
+            
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # Qwen via VibeProxy
+            # ═══════════════════════════════════════════════════════════════════════════════
+            'qwen-2.5-max': 'qwen-2.5-max',
+            'qwen-2.5-coder': 'qwen-2.5-coder-32b',
+            'qwen-2.5-coder-32b': 'qwen-2.5-coder-32b',
+            
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # Other (GPT-OSS)
+            # ═══════════════════════════════════════════════════════════════════════════════
             'gpt-oss-120b': 'gpt-oss-120b-medium',
         }
 

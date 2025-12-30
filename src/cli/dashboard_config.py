@@ -146,7 +146,7 @@ class DashboardTUI:
         
         # 1. Header
         console.print(Panel(
-            Align.center("[bold cyan]🚀 API Dashboard Configurator[/bold cyan]\n[dim]Arrow keys to move • Enter to select • s to toggle size • q to save[/dim]"),
+            Align.center("[bold cyan]🚀 API Dashboard Configurator[/bold cyan]\n[dim]Arrow keys to move • Enter to select • s to toggle size • q to save & back[/dim]"),
             border_style="cyan",
             box=ROUNDED
         ))

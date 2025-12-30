@@ -52,10 +52,11 @@ def display_startup_config(config):
 
     console.print(Panel(provider_table, title="[bold magenta]Provider[/bold magenta]", border_style="cyan"))
     
-    # Model Configuration with Context Windows
+    # Model Configuration with Context Windows and Provider
     model_table = Table(show_header=True, box=None, padding=(0, 1))
     model_table.add_column("Tier", style="dim", width=8)
-    model_table.add_column("Model", style="bright_cyan", width=40)
+    model_table.add_column("Provider", style="yellow", width=12)
+    model_table.add_column("Model", style="bright_cyan", width=35)
     model_table.add_column("Context", style="green", justify="right", width=10)
     model_table.add_column("Output", style="blue", justify="right", width=10)
     
@@ -63,7 +64,12 @@ def display_startup_config(config):
         context, output = get_model_limits(model)
         ctx_str = _format_tokens(context) if context > 0 else "unknown"
         out_str = _format_tokens(output) if output > 0 else "unknown"
-        model_table.add_row(tier, model, ctx_str, out_str)
+        
+        # Extract provider from model prefix or detect from default endpoint
+        provider = _extract_model_provider(model, config.openai_base_url)
+        model_display = model.split('/', 1)[-1] if '/' in model else model
+        
+        model_table.add_row(tier, provider, model_display, ctx_str, out_str)
     
     console.print(Panel(model_table, title="[bold magenta]Models[/bold magenta]", border_style="cyan"))
     
@@ -177,12 +183,56 @@ def _extract_provider_name(base_url: str) -> str:
     elif "googleapis.com" in base_url:
         return "Google Gemini"
     elif "localhost" in base_url or "127.0.0.1" in base_url:
-        if "11434" in base_url:
+        if "8317" in base_url:
+            return "VibeProxy/Gemini (Local)"
+        elif "11434" in base_url:
             return "Ollama (Local)"
         elif "1234" in base_url:
             return "LMStudio (Local)"
         return "Local"
     return "Custom"
+
+
+def _extract_model_provider(model_name: str, default_base_url: str) -> str:
+    """Extract provider from model name prefix or detect from default endpoint.
+    
+    Args:
+        model_name: Model name, possibly with provider prefix (e.g., "vibeproxy/gemini-2.5-pro")
+        default_base_url: Default API endpoint URL
+        
+    Returns:
+        Provider name (e.g., "VibeProxy", "OpenRouter", "OpenAI")
+    """
+    # If model has a provider prefix, extract it
+    if "/" in model_name:
+        prefix = model_name.split("/", 1)[0].lower()
+        provider_map = {
+            "vibeproxy": "VibeProxy",
+            "antigravity": "VibeProxy",
+            "openrouter": "OpenRouter",
+            "openai": "OpenAI",
+            "anthropic": "Anthropic",
+            "google": "Google",
+            "meta-llama": "Meta",
+            "mistral": "Mistral",
+            "cohere": "Cohere",
+            "qwen": "Qwen",
+        }
+        return provider_map.get(prefix, prefix.title())
+    
+    # No prefix - detect from default endpoint
+    if "openrouter" in default_base_url:
+        return "OpenRouter"
+    elif "8317" in default_base_url:
+        return "VibeProxy"
+    elif "openai.com" in default_base_url:
+        return "OpenAI"
+    elif "googleapis" in default_base_url:
+        return "Google"
+    elif "11434" in default_base_url:
+        return "Ollama"
+    else:
+        return "Default"
 
 
 def _format_tokens(count: int) -> str:

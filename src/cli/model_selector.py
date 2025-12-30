@@ -10,6 +10,17 @@ from src.services.models.modes import ModeManager
 from src.services.models.recommender import ModelRecommender
 from src.services.usage.model_limits import get_model_limits
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# REFERENCE TERMINAL SIZE: 140 columns × 40 rows
+# Source: Ice-ninja's Ghostty config (~/.config/ghostty/config)
+# 
+# All TUI elements should fit within this minimum size:
+# - Max content width: 138 chars (140 - 2 for borders)
+# - Usable rows: ~25 for model list (40 - 15 header/footer chrome)
+# 
+# The TUI auto-adapts to terminal size via get_terminal_size()
+# ═══════════════════════════════════════════════════════════════════════════════
+
 # Try to import readchar for arrow key support
 try:
     import readchar
@@ -31,30 +42,70 @@ def get_terminal_size() -> Tuple[int, int]:
     except (OSError, ValueError, AttributeError):
         return 24, 80
 
-
 DEFAULT_MODELS = [
-    # Antigravity (FREE via local token)
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # VIBEPROXY / ANTIGRAVITY (FREE via local OAuth - port 8317)
+    # These route through VibeProxy's local proxy with OAuth authentication
+    # ═══════════════════════════════════════════════════════════════════════════════
+    "vibeproxy/gemini-2.5-pro",
+    "vibeproxy/gemini-2.5-flash",
+    "vibeproxy/gemini-2.0-flash-thinking",
+    "vibeproxy/claude-sonnet-4",
+    "vibeproxy/claude-opus-4",
+    "vibeproxy/gpt-4o",
+    "vibeproxy/qwen-2.5-max",
+    
+    # Legacy antigravity/ prefix (alias for vibeproxy/)
     "antigravity/gemini-3-pro",
     "antigravity/gemini-3-flash",
     "antigravity/claude-sonnet-4.5",
     "antigravity/claude-sonnet-4.5-thinking",
     "antigravity/claude-opus-4.5",
     "antigravity/gpt-oss-120b",
-    # OpenAI
+    
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # DIRECT API ROUTES (requires API keys configured in .env)
+    # These connect directly to provider APIs without VibeProxy
+    # ═══════════════════════════════════════════════════════════════════════════════
+    
+    # OpenAI Direct (requires OPENAI_API_KEY)
     "openai/gpt-4o",
     "openai/gpt-4o-mini",
-    # Anthropic
+    "openai/gpt-4-turbo",
+    "openai/o1",
+    "openai/o1-mini",
+    
+    # Anthropic Direct (requires ANTHROPIC_API_KEY)
     "anthropic/claude-3.5-sonnet",
     "anthropic/claude-3-5-haiku",
     "anthropic/claude-3-opus",
-    # Google
+    "anthropic/claude-sonnet-4",
+    "anthropic/claude-opus-4",
+    
+    # Google Direct (requires GOOGLE_API_KEY)
+    "google/gemini-2.5-pro",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.0-flash-thinking",
     "google/gemini-pro-1.5",
     "google/gemini-flash-1.5",
-    "google/gemini-exp-1206",
-    # Meta
+    
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # OPENROUTER (aggregated access via OpenRouter API key)
+    # ═══════════════════════════════════════════════════════════════════════════════
+    "openrouter/anthropic/claude-3.5-sonnet",
+    "openrouter/openai/gpt-4o",
+    "openrouter/google/gemini-pro-1.5",
+    "openrouter/meta-llama/llama-3.1-405b-instruct",
+    "openrouter/meta-llama/llama-3.1-70b-instruct",
+    "openrouter/qwen/qwen-2.5-72b-instruct",
+    "openrouter/mistral/mistral-large-2407",
+    "openrouter/cohere/command-r-plus-08-2024",
+    
+    # Meta (via OpenRouter)
     "meta-llama/llama-3.1-405b-instruct",
     "meta-llama/llama-3.1-70b-instruct",
-    # Others
+    
+    # Others (via OpenRouter)
     "mistral/mistral-large-2407",
     "cohere/command-r-plus-08-2024",
     "qwen/qwen-2.5-72b-instruct"
@@ -77,7 +128,7 @@ def load_all_models() -> List[str]:
     return sorted(DEFAULT_MODELS)
 
 
-def format_model_line(idx: int, model_id: str, selected_for: Optional[str] = None) -> str:
+def format_model_line(idx: int, model_id: str, selected_for: Optional[str] = None, max_width: int = 80) -> str:
     """Format a single model line for display."""
     context, output = get_model_limits(model_id)
     
@@ -90,20 +141,33 @@ def format_model_line(idx: int, model_id: str, selected_for: Optional[str] = Non
     
     # Badges
     badges = []
+    if model_filter.is_new_model(model_id):
+        badges.append("✨") # New
     if model_filter.is_free_model(model_id):
-        badges.append("🆓")
-    if model_id in model_filter.get_recently_used_models(20):
-        badges.append("⭐")
+        badges.append("🆓") # Free
+    if model_filter.is_top_model(model_id):
+        badges.append("🏆") # Top/Popular
+    if model_filter.get_recently_used_models(20) and model_id in model_filter.get_recently_used_models(20):
+        badges.append("⭐") # Used
     if selected_for:
         badges.append(f"[{selected_for}]")
     
     badge_str = " ".join(badges) if badges else ""
+    badge_len = len(badge_str) + 1 if badge_str else 0
     
-    # Truncate model name if too long
-    max_name_len = 45
-    display_name = model_id if len(model_id) <= max_name_len else model_id[:42] + "..."
+    # Dynamic name width
+    # Line format: "{idx:3}. {name} {ctx} {out}  {badges}"
+    # Fixed chars: 3(idx) + 2(. ) + 1(space) + 6(ctx) + 1(sp) + 6(out) + 2(sp) + 2(border) = ~23 chars roughly
+    # We reserved 4 chars for border/padding in main loop, so passed-in max_width is real available
+    suffix_len = 16 + badge_len # ctx(6)+sp+out(6)+sp(2)+badges
+    prefix_len = 6 # idx(3)+dot+sp
+    name_width = max(10, max_width - prefix_len - suffix_len)
     
-    return f"{idx:3}. {display_name:<45} {fmt(context):>6} {fmt(output):>6}  {badge_str}"
+    display_name = model_id
+    if len(display_name) > name_width:
+        display_name = display_name[:name_width-3] + "..."
+    
+    return f"{idx:3}. {display_name:<{name_width}} {fmt(context):>6} {fmt(output):>6}  {badge_str}"
 
 
 def draw_ui(
@@ -201,8 +265,9 @@ def draw_menu(cursor: int, big_model: str, middle_model: str, small_model: str):
         ("MIDDLE MODEL", middle_model or "not set"),
         ("SMALL MODEL", small_model or "not set"),
         ("SAVE & QUIT", ""),
+        ("BACK TO SETTINGS", ""),
     ]
-    
+
     for i, (label, value) in enumerate(options):
         if i == cursor:
             if value:
@@ -280,6 +345,9 @@ def run_model_selector():
                     print(f"   MIDDLE_MODEL={middle_model}")
                     print(f"   SMALL_MODEL={small_model}")
                     print("\nUpdate your .env file with these values.")
+                    return
+                elif menu_cursor == 4:  # Back
+                    print("\n🔙 Returning to settings...")
                     return
                 else:
                     # Enter model picker for selected slot
@@ -456,31 +524,19 @@ def draw_model_picker(
     
     for i in range(start_idx, end_idx):
         model_id = models[i]
-        context, output = get_model_limits(model_id)
         
-        def fmt(tokens):
-            if tokens >= 1000000:
-                return f"{tokens/1000000:.1f}M"
-            elif tokens >= 1000:
-                return f"{tokens/1000:.0f}k"
-            return str(tokens)
-        
-        badges = []
-        if model_filter.is_free_model(model_id):
-            badges.append("🆓")
-        if model_id in model_filter.get_recently_used_models(20):
-            badges.append("⭐")
-        badge_str = " ".join(badges)
-        
-        max_name_len = 45
-        display_name = model_id if len(model_id) <= max_name_len else model_id[:42] + "..."
+        # Determine if selected
+        selected_for = None
+        # Only passed if we knew the slot, but here we just show the picker
+        # The picker doesn't know about big/middle/small choices unless we pass them?
+        # Actually pick_model doesn't use selected_map logic from draw_ui.
+        # It's fine.
         
         cursor_marker = "→" if i == cursor else " "
-        line = f"{cursor_marker} {i+1:3}. {display_name:<45} {fmt(context):>6} {fmt(output):>6}  {badge_str}"
+        # Pass max_width = cols - 4 (borders/padding)
+        line_content = format_model_line(i + 1, model_id, None, max_width=cols-6)
         
-        if len(line) > cols - 4:
-            line = line[:cols - 7] + "..."
-        print(f"║ {line:<{cols-4}} ║")
+        print(f"║ {cursor_marker} {line_content} ║")
     
     # Fill remaining space
     displayed = end_idx - start_idx

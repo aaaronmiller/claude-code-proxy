@@ -1,0 +1,113 @@
+
+================================================================================
+  TEST RESULTS TABLE
+================================================================================
+
+| Timestamp | Config | Status | Poem | Duration | In Tokens | Out Tokens | Errors |
+|-----------|--------|--------|------|----------|-----------|------------|--------|
+| 2025-12-29 22:00:03 | vibeproxy_gemini | ❌ FAIL | ❌ | 15.0s | 0 | 0 | 0 |
+| 2025-12-29 22:00:20 | vibeproxy_gemini | ❌ FAIL | ❌ | 15.0s | 0 | 0 | 0 |
+| 2025-12-29 22:00:35 | vibeproxy_claude | ❌ FAIL | ❌ | 15.3s | 0 | 0 | 0 |
+| 2025-12-29 22:00:52 | vibeproxy_claude | ❌ FAIL | ❌ | 15.0s | 0 | 0 | 0 |
+| 2025-12-29 22:01:07 | gemini_flash_only | ❌ FAIL | ❌ | 15.3s | 0 | 0 | 0 |
+| 2025-12-29 22:01:24 | gemini_flash_only | ❌ FAIL | ❌ | 15.0s | 0 | 0 | 0 |
+
+--------------------------------------------------------------------------------
+  DETAILED RESULTS WITH SESSION ANALYSIS
+--------------------------------------------------------------------------------
+
+### vibeproxy_gemini (2025-12-29 22:00:03)
+- Status: FAILED
+- Exit Code: 124
+- Duration: 15.0s
+
+#### Session Token Analysis
+- Total Requests: 0
+- Success/Error: 0/0
+- Input Tokens: 0
+- Output Tokens: 0
+- Thinking Tokens: 0
+- Avg Duration: 0ms
+
+#### Poem: NOT CREATED
+
+### vibeproxy_gemini (2025-12-29 22:00:20)
+- Status: FAILED
+- Exit Code: 124
+- Duration: 15.0s
+
+#### Session Token Analysis
+- Total Requests: 0
+- Success/Error: 0/0
+- Input Tokens: 0
+- Output Tokens: 0
+- Thinking Tokens: 0
+- Avg Duration: 0ms
+
+#### Poem: NOT CREATED
+
+### vibeproxy_claude (2025-12-29 22:00:35)
+- Status: FAILED
+- Exit Code: 124
+- Duration: 15.3s
+
+#### Session Token Analysis
+- Total Requests: 0
+- Success/Error: 0/0
+- Input Tokens: 0
+- Output Tokens: 0
+- Thinking Tokens: 0
+- Avg Duration: 0ms
+
+#### Poem: NOT CREATED
+
+### vibeproxy_claude (2025-12-29 22:00:52)
+- Status: FAILED
+- Exit Code: 124
+- Duration: 15.0s
+
+#### Session Token Analysis
+- Total Requests: 0
+- Success/Error: 0/0
+- Input Tokens: 0
+- Output Tokens: 0
+- Thinking Tokens: 0
+- Avg Duration: 0ms
+
+#### Poem: NOT CREATED
+
+### gemini_flash_only (2025-12-29 22:01:07)
+- Status: FAILED
+- Exit Code: 124
+- Duration: 15.3s
+
+#### Session Token Analysis
+- Total Requests: 0
+- Success/Error: 0/0
+- Input Tokens: 0
+- Output Tokens: 0
+- Thinking Tokens: 0
+- Avg Duration: 0ms
+
+#### Poem: NOT CREATED
+
+### gemini_flash_only (2025-12-29 22:01:24)
+- Status: FAILED
+- Exit Code: 124
+- Duration: 15.0s
+
+#### Session Token Analysis
+- Total Requests: 0
+- Success/Error: 0/0
+- Input Tokens: 0
+- Output Tokens: 0
+- Thinking Tokens: 0
+- Avg Duration: 0ms
+
+#### Poem: NOT CREATED
+
+================================================================================
+  SUMMARY: 0/6 tests passed
+  Total Tokens Used: 0 input, 0 output
+  Session logs saved to: /Users/macuser/git/claude-code-proxy/tests/integration/session_logs
+================================================================================

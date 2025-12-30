@@ -40,7 +40,7 @@ MAIN_MENU = [
     ("models", "🤖 Model Selection", "Choose Big/Middle/Small models"),
     ("terminal", "🖥️  Terminal Output", "Colors, metrics, display mode"),
     ("dashboard", "📊 Dashboard Layout", "Arrange the 10-slot grid"),
-    ("prompts", "💉 Prompt Injection", "Stats injected into Claude's context"),
+    ("prompts", "💉 Prompt Configuration", "Stats injected into Claude's context"),
     ("advanced", "⚙️  Advanced", "Crosstalk, Modes, Reasoning"),
     ("exit", "🚪 Exit", "Return to command line"),
 ]
@@ -55,22 +55,19 @@ class UnifiedSettings:
 
     def draw_header(self):
         """Draw the header."""
-        header = Text()
-        header.append("╔═══════════════════════════════════════════════════════════════╗\n", style="cyan")
-        header.append("║          ", style="cyan")
-        header.append("Claude Code Proxy Settings", style="bold white")
-        header.append("                     ║\n", style="cyan")
-        header.append("║          ", style="cyan")
-        header.append("Configure all aspects of your proxy", style="dim")
-        header.append("            ║\n", style="cyan")
-        header.append("╚═══════════════════════════════════════════════════════════════╝", style="cyan")
-        console.print(header)
+        console.print(Panel(
+            "[bold white]Claude Code Proxy Settings[/]\n\n[dim]Configure all aspects of your proxy[/]",
+            box=box.DOUBLE,
+            style="cyan",
+            padding=(1, 2),
+            expand=False
+        ))
 
     def draw_menu(self):
         """Draw the main menu."""
         table = Table(box=box.ROUNDED, show_header=False, padding=(0, 2))
         table.add_column("", width=3)
-        table.add_column("Option", width=25)
+        table.add_column("Option", width=35)  # Increased width for longer name
         table.add_column("Description", width=35)
 
         for i, (key, label, desc) in enumerate(MAIN_MENU):
@@ -179,31 +176,13 @@ class UnifiedSettings:
     def launch_advanced(self):
         """Show advanced options submenu."""
         console.clear()
-        console.print(Panel(
-            "[bold]Advanced Settings[/bold]\n\n"
-            "[cyan]1[/cyan] Crosstalk Setup (Multi-model orchestration)\n"
-            "[cyan]2[/cyan] Mode Management (Save/Load profiles)\n"
-            "[cyan]3[/cyan] Reasoning Configuration\n"
-            "[cyan]4[/cyan] Server Settings (Host, Port, Log Level)\n"
-            "[cyan]0[/cyan] Back to Main Menu",
-            title="⚙️  Advanced",
-            border_style="yellow"
-        ))
-
+        console.print("[bold cyan]Launching Advanced Configuration...[/bold cyan]\n")
         try:
-            choice = input("\n→ ").strip()
-            if choice == "1":
-                console.print("\n[yellow]Tip:[/yellow] Run [cyan]python start_proxy.py --crosstalk-init[/cyan] for interactive setup.")
-            elif choice == "2":
-                console.print("\n[yellow]Tip:[/yellow] Run [cyan]python start_proxy.py --list-modes[/cyan] to see saved modes.")
-            elif choice == "3":
-                console.print("\n[yellow]Tip:[/yellow] Set [cyan]REASONING_EFFORT=high[/cyan] in .env for extended thinking.")
-            elif choice == "4":
-                console.print("\n[yellow]Tip:[/yellow] Set [cyan]HOST=0.0.0.0[/cyan] and [cyan]PORT=8082[/cyan] in .env.")
-            if choice != "0":
-                input("\nPress Enter to continue...")
-        except (EOFError, KeyboardInterrupt):
-            pass
+            from src.cli.advanced_config import main as advanced_main
+            advanced_main()
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            input("\nPress Enter to continue...")
 
     def run(self):
         """Main loop."""

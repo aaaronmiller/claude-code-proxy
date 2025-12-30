@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aegis Processed | Deep Research Query Documentation</title>
+    <style>
+        /* --- Core Style Replication from 'The Complete Guide to RAG' --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Georgia', 'Times New Roman', serif; background: #1a1a1a; color: #e8e8e8; line-height: 1.8; font-size: 18px; }
+        .article-container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .header { text-align: center; margin-bottom: 60px; border-bottom: 2px solid #333; padding-bottom: 40px; }
+        .header h1 { font-size: 2.8em; margin-bottom: 20px; color: #fff; font-weight: 300; letter-spacing: -1px; }
+        section { margin: 50px 0; }
+        h2 { font-size: 2.2em; color: #fff; margin: 40px 0 25px 0; font-weight: 400; border-left: 4px solid #4a9eff; padding-left: 20px; }
+        p, li { margin: 10px 0; text-align: justify; }
+        ul { padding-left: 40px; list-style-type: disc; }
+        .code-block { background: #252525; padding: 25px; border-radius: 8px; border-top: 3px solid #facc15; font-family: 'Courier New', monospace; color: #f0f0f0; white-space: pre-wrap; font-size: 16px; margin: 20px 0; }
+        .explanation-box { background: #2a2a2a; border-left: 4px solid #ff6b6b; padding: 25px; margin: 30px 0; border-radius: 0 8px 8px 0; }
+    </style>
+</head>
+<body>
+
+    <script id="aegis-metadata" type="application/json">
+    {
+      "version": "1.0.0",
+      "source_filename": "aegis-deep-research-query.md",
+      "source_hash": "placeholder_sha256_hash_o0p9q8r7s6t5",
+      "aegis_id": "6g5h4i3j-2k1l-0m9n-8o7p-6q5r4s3t2u1v",
+      "processed_by_agent": "Markdown-Agent",
+      "ingestion_date_utc": "2025-07-03T17:10:00.000Z",
+      "file_metadata": { "creation_date_utc": null, "modification_date_utc": null, "size_bytes": 0, "mime_type": "text/markdown" },
+      "extracted_elements": [
+        { "type": "system_prompt", "name": "Aegis Deep Research Query" },
+        { "type": "prompt_step", "name": "Architectural Framework Evaluation" },
+        { "type": "prompt_step", "name": "Data Storage and Modeling" },
+        { "type": "prompt_step", "name": "Advanced RAG & Analysis" },
+        { "type": "prompt_step", "name": "Final Synthesis" }
+      ],
+      "tags": ["AegisFramework", "DeepResearch", "RAG", "SystemArchitecture", "SystemPrompt"],
+      "relationships": { "parent_doc_id": "2c1d0e9f-8g7h-6i5j-4k3l-2m1n0o9p8q7r", "child_doc_ids": [] },
+      "custom_fields": { "ingestion_source": "User Upload", "ingestion_version": "2.0", "content_type": "prompt_documentation" }
+    }
+    </script>
+
+    <div id="aegis-markdown-content" hidden>
+# Aegis Framework: Deep Research Query
+
+This document is the specification for a prompt to be used with an advanced research and synthesis AI tool. Its purpose is to validate the novelty of the Aegis Framework and to gather best-in-class components for its implementation.
+
+**The Prompt:**
+
+1.  **Analyze and synthesize** the state-of-the-art in autonomous, multi-agent data processing systems and knowledge base creation. The investigation must cover the intersection of Retrieval-Augmented Generation (RAG), agentic frameworks (e.g., CrewAI, Autogen), and heterogeneous data ingestion pipelines. The goal is to determine the novelty and feasibility of a proposed architecture, "Aegis," and to identify best-in-class tools or methodologies that can be incorporated.
+
+2.  **Architectural Framework Evaluation:**
+    * **Multi-Agent Systems:** Research existing frameworks for orchestrating multiple specialized AI agents. Compare monolithic vs. decoupled (e.g., microservices/MCP) approaches for tasks like parsing, analysis, and data extraction. Identify leading patterns for inter-agent communication and task delegation.
+    * **Data Ingestion & Normalization:** Survey tools and techniques for processing a comprehensive list of data types:
+        * **Documents:** PDF (text-based, scanned/OCR), Word, PowerPoint, Excel.
+        * **Code:** Python, JavaScript, HTML, CSS, PHP, Bash.
+        * **Multimedia:** Audio (transcription), Video (transcription, scene analysis), Images (object/text recognition).
+        * **Web Content:** Static HTML, dynamic JavaScript-driven sites (sliders, SPAs), YouTube videos, RSS feeds, social media (Twitter/X).
+        * **Structured Data:** Google Takeout, chat logs (Discord, IRC), terminal output, file system metadata.
+        * **Niche Formats:** Research papers (arXiv format), handwritten notes, ebooks (all formats).
+    * **Core Requirement:** For each, identify the optimal open-source tool (e.g., `PyMuPDF`, `Tesseract.js`, `Drizzle ORM`, `Hono`) and the best-practice processing protocol.
+
+3.  **Data Storage and Modeling:**
+    * **Hybrid Database Models:** Investigate systems that combine relational (e.g., PostgreSQL) and non-relational (e.g., MongoDB, graph DBs) for knowledge management. Specifically, research the pattern of storing **structured metadata** (tags, file info, relationships) in a relational DB while storing **extracted, semi-structured functional content** (code blocks, schematics, complex patterns) in a NoSQL DB.
+    * **Metadata Standards:** Identify best practices for creating comprehensive metadata schemas for ingested documents. Should the metadata live in the database exclusively, or is a dual-file approach (`.md` + `.meta.json`) a robust pattern for portability and versioning?
+
+4.  **Advanced RAG & Analysis:**
+    * **Chunking Methodologies:** Compare and contrast semantic chunking, recursive chunking, and context-aware chunking strategies. Research the optimal size and overlap for different content types.
+    * **AI Context Degradation:** Find any existing research or frameworks designed to capture and analyze the degradation of an LLM's performance over long conversations. This includes methods for structuring and tagging conversation logs (prompts, responses, turn counts) for later quantitative analysis.
+
+5.  **Final Synthesis:** Based on the above research, provide a final assessment. Is the proposed "Aegis" architecture (decoupled multi-agents, dual-file format, dual-database model) a novel contribution, or does a comparable open-source project already exist? If no single project exists, synthesize the best components and practices from the research into a refined architectural blueprint for the "Aegis" framework.
+    </div>
+
+    <div class="article-container">
+        <div class="header">
+            <h1>Aegis Framework: Deep Research Query</h1>
+        </div>
+        
+        <div class="explanation-box">
+            <p><strong>Note:</strong> This document contains the specification for a prompt to be used with an advanced research and synthesis AI tool. It is archived here as a foundational document for the Aegis Framework. The content below is the prompt itself, isolated for clarity and archival purposes.</p>
+        </div>
+
+        <section>
+            <h2>The Deep Research Prompt</h2>
+            <div class="code-block">
+1.  **Analyze and synthesize** the state-of-the-art in autonomous, multi-agent data processing systems and knowledge base creation. The investigation must cover the intersection of Retrieval-Augmented Generation (RAG), agentic frameworks (e.g., CrewAI, Autogen), and heterogeneous data ingestion pipelines. The goal is to determine the novelty and feasibility of a proposed architecture, "Aegis," and to identify best-in-class tools or methodologies that can be incorporated.
+
+2.  **Architectural Framework Evaluation:**
+    * **Multi-Agent Systems:** Research existing frameworks for orchestrating multiple specialized AI agents. Compare monolithic vs. decoupled (e.g., microservices/MCP) approaches for tasks like parsing, analysis, and data extraction. Identify leading patterns for inter-agent communication and task delegation.
+    * **Data Ingestion & Normalization:** Survey tools and techniques for processing a comprehensive list of data types:
+        * **Documents:** PDF (text-based, scanned/OCR), Word, PowerPoint, Excel.
+        * **Code:** Python, JavaScript, HTML, CSS, PHP, Bash.
+        * **Multimedia:** Audio (transcription), Video (transcription, scene analysis), Images (object/text recognition).
+        * **Web Content:** Static HTML, dynamic JavaScript-driven sites (sliders, SPAs), YouTube videos, RSS feeds, social media (Twitter/X).
+        * **Structured Data:** Google Takeout, chat logs (Discord, IRC), terminal output, file system metadata.
+        * **Niche Formats:** Research papers (arXiv format), handwritten notes, ebooks (all formats).
+    * **Core Requirement:** For each, identify the optimal open-source tool (e.g., `PyMuPDF`, `Tesseract.js`, `Drizzle ORM`, `Hono`) and the best-practice processing protocol.
+
+3.  **Data Storage and Modeling:**
+    * **Hybrid Database Models:** Investigate systems that combine relational (e.g., PostgreSQL) and non-relational (e.g., MongoDB, graph DBs) for knowledge management. Specifically, research the pattern of storing **structured metadata** (tags, file info, relationships) in a relational DB while storing **extracted, semi-structured functional content** (code blocks, schematics, complex patterns) in a NoSQL DB.
+    * **Metadata Standards:** Identify best practices for creating comprehensive metadata schemas for ingested documents. Should the metadata live in the database exclusively, or is a dual-file approach (`.md` + `.meta.json`) a robust pattern for portability and versioning?
+
+4.  **Advanced RAG & Analysis:**
+    * **Chunking Methodologies:** Compare and contrast semantic chunking, recursive chunking, and context-aware chunking strategies. Research the optimal size and overlap for different content types.
+    * **AI Context Degradation:** Find any existing research or frameworks designed to capture and analyze the degradation of an LLM's performance over long conversations. This includes methods for structuring and tagging conversation logs (prompts, responses, turn counts) for later quantitative analysis.
+
+5.  **Final Synthesis:** Based on the above research, provide a final assessment. Is the proposed "Aegis" architecture (decoupled multi-agents, dual-file format, dual-database model) a novel contribution, or does a comparable open-source project already exist? If no single project exists, synthesize the best components and practices from the research into a refined architectural blueprint for the "Aegis" framework.
+            </div>
+        </section>
+
+    </div>
+
+</body>
+</html>
