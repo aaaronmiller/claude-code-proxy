@@ -1,5 +1,6 @@
 import json
-from typing import Dict, Any, List
+import os
+from typing import Dict, Any, List, Tuple
 import logging
 from src.services.models.model_parser import parse_model_id
 from src.services.prompts.templates import apply_template
@@ -14,6 +15,108 @@ from src.services.models.model_filter import model_filter
 from src.core.constants import Constants
 
 logger = logging.getLogger(__name__)
+
+# Tool output truncation settings (inspired by Lynkr)
+# Large tool outputs waste tokens and can confuse models
+TOOL_OUTPUT_MAX_CHARS = int(os.getenv("TOOL_OUTPUT_MAX_CHARS", "50000"))
+TOOL_OUTPUT_TRUNCATION_ENABLED = os.getenv("TOOL_OUTPUT_TRUNCATION", "true").lower() == "true"
+
+
+def truncate_tool_output(content: str, max_chars: int = None) -> Tuple[str, bool]:
+    """
+    Truncate large tool outputs for token efficiency.
+
+    Inspired by Lynkr's truncateToolOutput() function.
+    Large outputs from tools like file reads or command execution
+    can waste tokens and confuse the model.
+
+    Args:
+        content: The tool output content
+        max_chars: Maximum characters allowed (defaults to TOOL_OUTPUT_MAX_CHARS)
+
+    Returns:
+        Tuple of (possibly truncated content, was_truncated boolean)
+    """
+    if max_chars is None:
+        max_chars = TOOL_OUTPUT_MAX_CHARS
+
+    if not TOOL_OUTPUT_TRUNCATION_ENABLED:
+        return content, False
+
+    if not content or len(content) <= max_chars:
+        return content, False
+
+    # Calculate how much was truncated
+    original_len = len(content)
+    truncated_chars = original_len - max_chars
+
+    # Truncate and add indicator
+    truncated = content[:max_chars]
+    truncated += f"\n\n... [OUTPUT TRUNCATED: {truncated_chars:,} chars removed, {original_len:,} total]"
+
+    logger.info(f"Tool output truncated: {original_len:,} -> {max_chars:,} chars (-{truncated_chars:,})")
+
+    return truncated, True
+
+
+def validate_tool_message_sequence(messages: List[Dict[str, Any]], remove_orphans: bool = False) -> List[Dict[str, Any]]:
+    """
+    Validate that tool role messages have matching tool_calls in preceding assistant messages.
+    
+    Inspired by Lynkr's implementation, this prevents errors from orphaned tool messages
+    that can occur when conversation history is truncated or corrupted.
+    
+    Args:
+        messages: List of OpenAI-format messages
+        remove_orphans: If True, remove orphaned tool messages. If False, just log warnings.
+        
+    Returns:
+        Validated (and optionally cleaned) message list
+    """
+    if not messages:
+        return messages
+    
+    validated = []
+    orphan_count = 0
+    
+    for i, msg in enumerate(messages):
+        role = msg.get("role", "")
+        
+        if role == "tool":
+            tool_call_id = msg.get("tool_call_id")
+            
+            # Search backwards for matching assistant message with tool_calls
+            found_match = False
+            for j in range(len(validated) - 1, -1, -1):
+                prev_msg = validated[j]
+                
+                if prev_msg.get("role") == "assistant":
+                    tool_calls = prev_msg.get("tool_calls", [])
+                    if any(tc.get("id") == tool_call_id for tc in tool_calls):
+                        found_match = True
+                        break
+                    
+                # Stop searching if we hit a user message
+                if prev_msg.get("role") == "user":
+                    break
+            
+            if not found_match:
+                orphan_count += 1
+                logger.warning(
+                    f"Orphaned tool message detected at index {i}: "
+                    f"tool_call_id={tool_call_id}, no matching assistant tool_calls found"
+                )
+                
+                if remove_orphans:
+                    logger.info(f"Removing orphaned tool message (tool_call_id={tool_call_id})")
+                    continue  # Skip this message
+        
+        validated.append(msg)
+    
+    if orphan_count > 0:
+        logger.info(f"Tool message validation complete: {orphan_count} orphan(s) found, remove_orphans={remove_orphans}")
+    
+    return validated
 
 
 def _apply_reasoning_config(
@@ -206,6 +309,10 @@ def convert_claude_to_openai(
 
         i += 1
 
+    # Validate tool message sequence - detect orphaned tool messages
+    # Set remove_orphans=True to auto-fix, False (default) to just warn
+    openai_messages = validate_tool_message_sequence(openai_messages, remove_orphans=False)
+
     # Build OpenAI request
     # Check if this is a newer OpenAI model (o1, o3, o4, gpt-5)
     is_newer_model = model_manager.is_newer_openai_model(openai_model)
@@ -222,13 +329,14 @@ def convert_claude_to_openai(
         "stream": claude_request.stream,
     }
     
-    # DEBUG: Log outgoing message history
-    logger.info(f"OUTGOING REQUEST: {len(openai_messages)} messages")
-    for idx, msg in enumerate(openai_messages):
-        role = msg.get("role", "?")
-        content = str(msg.get("content", ""))[:100]
-        tool_calls = "YES" if msg.get("tool_calls") else "NO"
-        logger.info(f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content={content}...")
+    # Log outgoing message summary (debug level to avoid noise)
+    logger.debug(f"OUTGOING REQUEST: {len(openai_messages)} messages")
+    if logger.isEnabledFor(logging.DEBUG):
+        for idx, msg in enumerate(openai_messages):
+            role = msg.get("role", "?")
+            content = str(msg.get("content", ""))[:80]
+            tool_calls = "YES" if msg.get("tool_calls") else "NO"
+            logger.debug(f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content={content}...")
 
     # Newer OpenAI models models (o1, o3, o4, gpt-5) require max_completion_tokens instead of max_tokens
     if is_newer_model:
@@ -238,17 +346,9 @@ def convert_claude_to_openai(
         logger.debug(f"Converted request (newer model): model={openai_model}, messages={len(openai_messages)}, max_completion_tokens={token_limit}, temperature=1")
     else:
         openai_request["max_tokens"] = token_limit
-        
-        # TEMPERATURE OVERRIDE FOR GEMINI FLASH ROUTER
-        # Gemini Flash at temp 1.0 loops. Force 0.0 if acting as Small (Haiku) replacement.
-        model_size = _get_model_size_from_model_id(openai_model)
-        if model_size == "small" and "gemini" in openai_model.lower() and "flash" in openai_model.lower():
-            openai_request["temperature"] = 0
-            logger.debug(f"Forced temperature=0 for Gemini Flash (Small) to prevent router loops")
-        else:
-            openai_request["temperature"] = claude_request.temperature
-            
-        logger.debug(f"Converted request: model={openai_model}, messages={len(openai_messages)}, max_tokens={token_limit}")
+        # Use client-requested temperature - no hardcoded overrides
+        openai_request["temperature"] = claude_request.temperature
+        logger.debug(f"Converted request: model={openai_model}, messages={len(openai_messages)}, max_tokens={token_limit}, temp={claude_request.temperature}")
     # Add optional parameters
     if claude_request.stop_sequences:
         openai_request["stop"] = claude_request.stop_sequences
@@ -563,14 +663,19 @@ def convert_claude_tool_results(msg: ClaudeMessage) -> List[Dict[str, Any]]:
 
 
 def parse_tool_result_content(content):
-    """Parse and normalize tool result content into a string format."""
+    """Parse and normalize tool result content into a string format.
+
+    Applies truncation for large outputs to save tokens.
+    """
     if content is None:
         return "No content provided"
 
-    if isinstance(content, str):
-        return content
+    result = None
 
-    if isinstance(content, list):
+    if isinstance(content, str):
+        result = content
+
+    elif isinstance(content, list):
         result_parts = []
         for item in content:
             if isinstance(item, dict) and item.get("type") == Constants.CONTENT_TEXT:
@@ -585,17 +690,25 @@ def parse_tool_result_content(content):
                         result_parts.append(json.dumps(item, ensure_ascii=False))
                     except (TypeError, ValueError):
                         result_parts.append(str(item))
-        return "\n".join(result_parts).strip()
+        result = "\n".join(result_parts).strip()
 
-    if isinstance(content, dict):
+    elif isinstance(content, dict):
         if content.get("type") == Constants.CONTENT_TEXT:
-            return content.get("text", "")
-        try:
-            return json.dumps(content, ensure_ascii=False)
-        except (TypeError, ValueError):
-            return str(content)
+            result = content.get("text", "")
+        else:
+            try:
+                result = json.dumps(content, ensure_ascii=False)
+            except (TypeError, ValueError):
+                result = str(content)
 
-    try:
-        return str(content)
-    except Exception:
-        return "Unparseable content"
+    else:
+        try:
+            result = str(content)
+        except Exception:
+            result = "Unparseable content"
+
+    # Apply truncation for large tool outputs (token efficiency)
+    if result:
+        result, was_truncated = truncate_tool_output(result)
+
+    return result

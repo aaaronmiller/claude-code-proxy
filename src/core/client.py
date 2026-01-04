@@ -1,10 +1,18 @@
 import asyncio
 import json
+import logging
 from fastapi import HTTPException
-from typing import Optional, AsyncGenerator, Dict, Any
+from typing import Optional, AsyncGenerator, Dict, Any, Tuple
 from openai import AsyncOpenAI, AsyncAzureOpenAI
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai._exceptions import APIError, RateLimitError, AuthenticationError, BadRequestError
+
+logger = logging.getLogger(__name__)
+
+
+class VibeProxyUnavailableError(Exception):
+    """Raised when VibeProxy is not available."""
+    pass
 
 class OpenAIClient:
     """Async OpenAI client with cancellation support and multi-endpoint routing."""
@@ -31,36 +39,54 @@ class OpenAIClient:
         self.middle_client = None
         self.small_client = None
 
+        # VibeProxy availability tracking
+        self._vibeproxy_available = None  # None = not checked yet
+        self._vibeproxy_error = None
+
         self.active_requests: Dict[str, asyncio.Event] = {}
 
-    def _create_client(self, api_key: str, base_url: str, api_version: Optional[str] = None, custom_headers: Optional[Dict[str, str]] = None):
+    def _create_client(self, api_key: str, base_url: str, api_version: Optional[str] = None, custom_headers: Optional[Dict[str, str]] = None, check_health: bool = True):
         """Create an OpenAI or Azure client."""
         import time
         timestamp = time.strftime("%H:%M:%S")
-        
+
         # Special handling for VibeProxy (Antigravity's local proxy on port 8317)
         is_vibeproxy = "127.0.0.1:8317" in base_url or "localhost:8317" in base_url
-        
+
         if is_vibeproxy:
+            # Check VibeProxy availability BEFORE attempting to use it
+            if check_health:
+                from src.services.antigravity import is_vibeproxy_available, check_vibeproxy_health
+
+                available, error_msg = check_vibeproxy_health()
+                if not available:
+                    logger.warning(f"[VibeProxy {timestamp}] VibeProxy is NOT available: {error_msg}")
+                    # Store the error state but don't fail yet - let caller handle fallback
+                    self._vibeproxy_available = False
+                    self._vibeproxy_error = error_msg
+                else:
+                    self._vibeproxy_available = True
+                    self._vibeproxy_error = None
+
             # VibeProxy requires Antigravity's OAuth token, not OpenRouter/OpenAI keys
             from src.services.antigravity import get_antigravity_token
-            
-            print(f"DEBUG [VibeProxy {timestamp}]: CLIENT CREATION for VibeProxy - Fetching Antigravity token...")
+
+            logger.debug(f"[VibeProxy {timestamp}] CLIENT CREATION for VibeProxy - Fetching Antigravity token...")
             antigravity_token = get_antigravity_token()
             if antigravity_token:
-                print(f"DEBUG [VibeProxy {timestamp}]: Token retrieved successfully (first 20 chars): {antigravity_token[:20]}...")
+                logger.debug(f"[VibeProxy {timestamp}] Token retrieved successfully (first 20 chars): {antigravity_token[:20]}...")
                 api_key = antigravity_token
             else:
-                print(f"ERROR [VibeProxy {timestamp}]: No Antigravity token found! Authentication will FAIL.")
-                print(f"ERROR [VibeProxy {timestamp}]: Please ensure you're logged into Antigravity IDE.")
+                logger.error(f"[VibeProxy {timestamp}] No Antigravity token found! Authentication will FAIL.")
+                logger.error(f"[VibeProxy {timestamp}] Please ensure you're logged into Antigravity IDE.")
             
         # Diagnostic logging for VibeProxy authentication
         if is_vibeproxy:
-            print(f"DEBUG [VibeProxy {timestamp}]: Creating NEW OpenAI client instance")
-            print(f"DEBUG [VibeProxy {timestamp}]: Endpoint: {base_url}")
-            print(f"DEBUG [VibeProxy {timestamp}]: Token in use (first 20 chars): {api_key[:20] if api_key else 'None'}...")
+            logger.debug(f"[VibeProxy {timestamp}] Creating NEW OpenAI client instance")
+            logger.debug(f"[VibeProxy {timestamp}] Endpoint: {base_url}")
+            logger.debug(f"[VibeProxy {timestamp}] Token in use (first 20 chars): {api_key[:20] if api_key else 'None'}...")
 
-            print(f"DEBUG [VibeProxy {timestamp}]: Custom headers: {custom_headers}")
+            logger.debug(f"[VibeProxy {timestamp}] Custom headers: {custom_headers}")
             
         if api_version:
             return AsyncAzureOpenAI(
@@ -114,18 +140,45 @@ class OpenAIClient:
         
         # Check for exact model matches first
         if self.big_client and config and model == config.big_model:
-            print(f"DEBUG [Client Selection {timestamp}]: Using BIG client for model '{model}'")
+            logger.debug(f"[Client Selection {timestamp}] Using BIG client for model '{model}'")
             return self.big_client
         if self.middle_client and config and model == config.middle_model:
-            print(f"DEBUG [Client Selection {timestamp}]: Using MIDDLE client for model '{model}'")
+            logger.debug(f"[Client Selection {timestamp}] Using MIDDLE client for model '{model}'")
             return self.middle_client
         if self.small_client and config and model == config.small_model:
-            print(f"DEBUG [Client Selection {timestamp}]: Using SMALL client for model '{model}'")
+            logger.debug(f"[Client Selection {timestamp}] Using SMALL client for model '{model}'")
             return self.small_client
 
+        # Check for OpenRouter-style models (containing '/') routed via configured tiers
+        # Match if the configured tier model is a substring of the incoming model
+        if config:
+            if self.big_client and config.big_model and config.big_model in model:
+                logger.debug(f"[Client Selection {timestamp}] Using BIG client (substring match) for model '{model}'")
+                return self.big_client
+            if self.middle_client and config.middle_model and config.middle_model in model:
+                logger.debug(f"[Client Selection {timestamp}] Using MIDDLE client (substring match) for model '{model}'")
+                return self.middle_client
+            if self.small_client and config.small_model and config.small_model in model:
+                logger.debug(f"[Client Selection {timestamp}] Using SMALL client (substring match) for model '{model}'")
+                return self.small_client
+            
+            # If model looks like OpenRouter format (vendor/model-name), try to match by provider
+            if '/' in model:
+                logger.debug(f"[Client Selection {timestamp}] OpenRouter-style model detected: '{model}'")
+                # Check if ANY configured tier uses OpenRouter (has '/' in model name)
+                if self.big_client and config.big_model and '/' in config.big_model:
+                    logger.debug(f"[Client Selection {timestamp}] Routing OpenRouter model to BIG client")
+                    return self.big_client
+                if self.middle_client and config.middle_model and '/' in config.middle_model:
+                    logger.debug(f"[Client Selection {timestamp}] Routing OpenRouter model to MIDDLE client")
+                    return self.middle_client
+                if self.small_client and config.small_model and '/' in config.small_model:
+                    logger.debug(f"[Client Selection {timestamp}] Routing OpenRouter model to SMALL client")
+                    return self.small_client
+
         # Fallback to default client
-        print(f"DEBUG [Client Selection {timestamp}]: Using DEFAULT (cached) client for model '{model}'")
-        print(f"DEBUG [Client Selection {timestamp}]: ⚠️  This client was created once and is being REUSED")
+        logger.debug(f"[Client Selection {timestamp}] Using DEFAULT (cached) client for model '{model}'")
+        logger.debug(f"[Client Selection {timestamp}] ⚠️  This client was created once and is being REUSED")
         return self.client
     
     async def create_chat_completion(self, request: Dict[str, Any], request_id: Optional[str] = None, config=None, api_key: Optional[str] = None) -> Dict[str, Any]:
@@ -154,28 +207,50 @@ class OpenAIClient:
         else:
             client = self.get_client_for_model(request.get('model', ''), config)
             
+            # Determine if this request is using the SMALL tier endpoint
+            # SMALL tier uses a different endpoint (e.g., OpenRouter) so skip VibeProxy refresh
+            model = request.get('model', '')
+            is_small_tier = self.small_client and config and model == config.small_model
+            
             # FIX: For VibeProxy requests, ensure we have a fresh token for each request
-            base_url = config.openai_base_url if config else self.default_base_url
+            # Check the actual client's base_url, not the default config
+            base_url = str(client.base_url)
             is_vibeproxy = "127.0.0.1:8317" in base_url or "localhost:8317" in base_url
+            
+            # Allow refresh for any tier (including small) if it points to VibeProxy
             if is_vibeproxy:
-                print(f"DEBUG [VibeProxy {timestamp}]: Refreshing client with fresh Antigravity token for request")
-                from src.services.antigravity import get_antigravity_auth
-                
+                # CRITICAL: Check VibeProxy health BEFORE attempting to use it
+                from src.services.antigravity import check_vibeproxy_health, get_antigravity_auth
+
+                available, error_msg = check_vibeproxy_health()
+                if not available:
+                    logger.error(f"[VibeProxy {timestamp}] VibeProxy is NOT available: {error_msg}")
+                    raise VibeProxyUnavailableError(
+                        f"VibeProxy is not available: {error_msg}. "
+                        "Please ensure Antigravity IDE is running and you're logged in. "
+                        "Alternatively, use a different model/provider."
+                    )
+
+                logger.debug(f"[VibeProxy {timestamp}] Refreshing client with fresh Antigravity token for request")
+
                 # Force refresh token from database
                 auth = get_antigravity_auth()
                 fresh_token = auth.get_token(force_refresh=True)
-                
+
                 if fresh_token:
-                    print(f"DEBUG [VibeProxy {timestamp}]: Creating new client with fresh token (first 20 chars): {fresh_token[:20]}...")
+                    logger.debug(f"[VibeProxy {timestamp}] Creating new client with fresh token (first 20 chars): {fresh_token[:20]}...")
                     # Create a fresh client with the new token
                     client = self._create_client(
                         fresh_token,
                         base_url,
                         config.azure_api_version if config else self.default_api_version,
-                        self.custom_headers
+                        self.custom_headers,
+                        check_health=False  # Already checked above
                     )
                 else:
-                    print(f"ERROR [VibeProxy {timestamp}]: Failed to retrieve fresh token! Using cached client (may fail)")
+                    logger.error(f"[VibeProxy {timestamp}] Failed to retrieve fresh token! Using cached client (may fail)")
+            elif is_small_tier:
+                logger.debug(f"[Client Selection {timestamp}] SMALL tier - routing to {config.small_endpoint} (not VibeProxy)")
 
         # Create cancellation token if request_id provided
         if request_id:
@@ -259,11 +334,19 @@ class OpenAIClient:
         else:
             client = self.get_client_for_model(request.get('model', ''), config)
             
+            # Determine if this request is using the SMALL tier endpoint
+            # SMALL tier uses a different endpoint (e.g., OpenRouter) so skip VibeProxy refresh
+            model = request.get('model', '')
+            is_small_tier = self.small_client and config and model == config.small_model
+            
             # FIX: For VibeProxy requests, ensure we have a fresh token for each request
-            base_url = config.openai_base_url if config else self.default_base_url
+            # Check the actual client's base_url, not the default config
+            base_url = str(client.base_url)
             is_vibeproxy = "127.0.0.1:8317" in base_url or "localhost:8317" in base_url
+            
+            # Allow refresh for any tier (including small) if it points to VibeProxy
             if is_vibeproxy:
-                print(f"DEBUG [VibeProxy {timestamp}]: Refreshing client with fresh Antigravity token for streaming request")
+                logger.debug(f"[VibeProxy {timestamp}] Refreshing client with fresh Antigravity token for streaming request")
                 from src.services.antigravity import get_antigravity_auth
                 
                 # Force refresh token from database
@@ -271,7 +354,7 @@ class OpenAIClient:
                 fresh_token = auth.get_token(force_refresh=True)
                 
                 if fresh_token:
-                    print(f"DEBUG [VibeProxy {timestamp}]: Creating new client with fresh token (first 20 chars): {fresh_token[:20]}...")
+                    logger.debug(f"[VibeProxy {timestamp}] Creating new client with fresh token (first 20 chars): {fresh_token[:20]}...")
                     # Create a fresh client with the new token
                     client = self._create_client(
                         fresh_token,
@@ -280,7 +363,9 @@ class OpenAIClient:
                         self.custom_headers
                     )
                 else:
-                    print(f"ERROR [VibeProxy {timestamp}]: Failed to retrieve fresh token! Using cached client (may fail)")
+                    logger.error(f"[VibeProxy {timestamp}] Failed to retrieve fresh token! Using cached client (may fail)")
+            elif is_small_tier:
+                logger.debug(f"[Client Selection {timestamp}] SMALL tier streaming - routing to {config.small_endpoint} (not VibeProxy)")
 
         # Create cancellation token if request_id provided
         if request_id:
@@ -333,7 +418,7 @@ class OpenAIClient:
         error_str = str(error_detail).lower()
 
         # Debug logging for error classification
-        print(f"DEBUG: Classifying error: {error_str}")
+        logger.debug(f"Classifying error: {error_str}")
 
         # VibeProxy/Gemini-specific errors
         if "gemini code assist license" in error_str or "subscription_required" in error_str:

@@ -5,9 +5,99 @@ local Antigravity IDE installation and make API calls using those credentials.
 """
 
 import json
+import logging
+import os
 import sqlite3
+import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
+import httpx
+
+logger = logging.getLogger(__name__)
+
+# VibeProxy configuration
+VIBEPROXY_BASE_URL = os.getenv("VIBEPROXY_URL", "http://127.0.0.1:1337")
+VIBEPROXY_HEALTH_TIMEOUT = float(os.getenv("VIBEPROXY_HEALTH_TIMEOUT", "2.0"))
+
+# Health check cache
+_vibeproxy_health_cache: Dict[str, Any] = {
+    "available": None,
+    "last_check": 0,
+    "cache_ttl": 30.0,  # Cache health status for 30 seconds
+}
+
+
+def check_vibeproxy_health(force_refresh: bool = False) -> Tuple[bool, Optional[str]]:
+    """
+    Check if VibeProxy is available and responding.
+
+    Args:
+        force_refresh: Bypass cache and check immediately
+
+    Returns:
+        Tuple of (is_available, error_message)
+    """
+    global _vibeproxy_health_cache
+
+    now = time.time()
+    cache_age = now - _vibeproxy_health_cache["last_check"]
+
+    # Return cached result if still valid
+    if not force_refresh and cache_age < _vibeproxy_health_cache["cache_ttl"]:
+        if _vibeproxy_health_cache["available"] is not None:
+            return _vibeproxy_health_cache["available"], None
+
+    # Perform health check
+    try:
+        response = httpx.get(
+            f"{VIBEPROXY_BASE_URL}/health",
+            timeout=VIBEPROXY_HEALTH_TIMEOUT
+        )
+        is_available = response.status_code == 200
+
+        _vibeproxy_health_cache["available"] = is_available
+        _vibeproxy_health_cache["last_check"] = now
+
+        if is_available:
+            logger.debug(f"VibeProxy health check passed")
+        else:
+            logger.warning(f"VibeProxy health check failed: status {response.status_code}")
+
+        return is_available, None if is_available else f"Status {response.status_code}"
+
+    except httpx.ConnectError as e:
+        _vibeproxy_health_cache["available"] = False
+        _vibeproxy_health_cache["last_check"] = now
+        error_msg = "VibeProxy not reachable (connection refused)"
+        logger.warning(f"{error_msg}: {e}")
+        return False, error_msg
+
+    except httpx.TimeoutException:
+        _vibeproxy_health_cache["available"] = False
+        _vibeproxy_health_cache["last_check"] = now
+        error_msg = f"VibeProxy health check timed out ({VIBEPROXY_HEALTH_TIMEOUT}s)"
+        logger.warning(error_msg)
+        return False, error_msg
+
+    except Exception as e:
+        _vibeproxy_health_cache["available"] = False
+        _vibeproxy_health_cache["last_check"] = now
+        error_msg = f"VibeProxy health check error: {type(e).__name__}"
+        logger.error(f"{error_msg}: {e}")
+        return False, error_msg
+
+
+def is_vibeproxy_available() -> bool:
+    """Quick check if VibeProxy is available (uses cache)."""
+    available, _ = check_vibeproxy_health()
+    return available
+
+
+def clear_vibeproxy_health_cache():
+    """Clear the health check cache to force fresh check."""
+    global _vibeproxy_health_cache
+    _vibeproxy_health_cache["available"] = None
+    _vibeproxy_health_cache["last_check"] = 0
 
 
 class AntigravityAuth:
@@ -31,14 +121,14 @@ class AntigravityAuth:
             Dictionary with name, email, apiKey, or None if not available
         """
         if self._auth_data and not force_refresh:
-            print(f"DEBUG [AntigravityAuth]: Using CACHED auth data")
+            logger.debug(f"[AntigravityAuth] Using CACHED auth data")
             return self._auth_data
         
         if not self.DB_PATH.exists():
             print(f"ERROR [AntigravityAuth]: Database not found at {self.DB_PATH}")
             return None
         
-        print(f"DEBUG [AntigravityAuth]: Accessing SQLite database at {self.DB_PATH}")
+        logger.debug(f"[AntigravityAuth] Accessing SQLite database at {self.DB_PATH}")
         try:
             conn = sqlite3.connect(str(self.DB_PATH))
             cursor = conn.cursor()
@@ -51,7 +141,7 @@ class AntigravityAuth:
             
             if row:
                 self._auth_data = json.loads(row[0])
-                print(f"DEBUG [AntigravityAuth]: Successfully loaded auth data from database")
+                logger.debug(f"[AntigravityAuth] Successfully loaded auth data from database")
                 return self._auth_data
             else:
                 print(f"ERROR [AntigravityAuth]: No row found for key '{self.AUTH_KEY}'")
@@ -73,10 +163,10 @@ class AntigravityAuth:
         """
         # DEBUG: Track token retrieval pattern
         if self._cached_token and not force_refresh:
-            print(f"DEBUG [AntigravityAuth]: Using CACHED token (first 20 chars): {self._cached_token[:20]}...")
+            logger.debug(f"[AntigravityAuth] Using CACHED token (first 20 chars): {self._cached_token[:20]}...")
             return self._cached_token
         
-        print(f"DEBUG [AntigravityAuth]: Fetching FRESH token from database (force_refresh={force_refresh})")
+        logger.debug(f"[AntigravityAuth] Fetching FRESH token from database (force_refresh={force_refresh})")
         auth_data = self.get_auth_data(force_refresh=force_refresh)
         if auth_data:
             new_token = auth_data.get('apiKey')
@@ -85,7 +175,7 @@ class AntigravityAuth:
                 if self._cached_token and self._cached_token != new_token:
                     print(f"WARNING [AntigravityAuth]: Token CHANGED! Old: {self._cached_token[:20]}... New: {new_token[:20]}...")
                 else:
-                    print(f"DEBUG [AntigravityAuth]: Token retrieved successfully (first 20 chars): {new_token[:20]}...")
+                    logger.debug(f"[AntigravityAuth] Token retrieved successfully (first 20 chars): {new_token[:20]}...")
                 
                 self._cached_token = new_token
                 return self._cached_token

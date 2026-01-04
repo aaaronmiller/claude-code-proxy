@@ -4,11 +4,15 @@ from datetime import datetime
 import uuid
 import time
 import os
-from typing import Optional
+import hashlib
+import json as json_module
+from typing import Optional, Dict, Any
+from collections import OrderedDict
+from threading import Lock
 
 from src.core.config import config
 from src.core.logging import logger
-from src.core.client import OpenAIClient
+from src.core.client import OpenAIClient, VibeProxyUnavailableError
 from src.models.claude import ClaudeMessagesRequest, ClaudeTokenCountRequest
 from src.services.conversion.request_converter import convert_claude_to_openai
 from src.services.conversion.response_converter import (
@@ -49,12 +53,112 @@ if DEBUG_TRAFFIC_LOG:
     log_dir = "logs"
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-        
+
     file_handler = logging.FileHandler(f"{log_dir}/debug_traffic.log")
     file_handler.setFormatter(logging.Formatter(
         '%(asctime)s - %(levelname)s - %(message)s'
     ))
     traffic_logger.addHandler(file_handler)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# REQUEST DEDUPLICATION
+# ═══════════════════════════════════════════════════════════════════════════════
+# Prevents duplicate terminal output caused by client retries
+
+class RequestDeduplicator:
+    """
+    Deduplicates requests based on content hash within a time window.
+
+    When Claude Code retries a request (e.g., after malformed tool call response),
+    this prevents processing the same request multiple times and causing duplicate
+    terminal output.
+    """
+
+    def __init__(self, window_seconds: float = 5.0, max_cache_size: int = 100):
+        self._cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+        self._lock = Lock()
+        self._window_seconds = window_seconds
+        self._max_cache_size = max_cache_size
+
+    def _compute_hash(self, request: "ClaudeMessagesRequest") -> str:
+        """Compute a hash of the request content for deduplication."""
+        # Extract key fields that define request identity
+        hash_data = {
+            "model": request.model,
+            "messages": [
+                {
+                    "role": msg.role,
+                    "content": str(msg.content)[:500]  # Limit for performance
+                }
+                for msg in request.messages[-3:]  # Last 3 messages for identity
+            ],
+        }
+
+        # Create deterministic hash
+        content_str = json_module.dumps(hash_data, sort_keys=True)
+        return hashlib.sha256(content_str.encode()).hexdigest()[:16]
+
+    def check_duplicate(self, request: "ClaudeMessagesRequest") -> tuple[bool, str, Optional[Dict]]:
+        """
+        Check if request is a duplicate within the time window.
+
+        Returns:
+            (is_duplicate, request_hash, cached_response or None)
+        """
+        request_hash = self._compute_hash(request)
+        current_time = time.time()
+
+        with self._lock:
+            # Clean expired entries
+            expired = []
+            for h, data in self._cache.items():
+                if current_time - data["timestamp"] > self._window_seconds:
+                    expired.append(h)
+            for h in expired:
+                del self._cache[h]
+
+            # Check if this request is in cache
+            if request_hash in self._cache:
+                cached = self._cache[request_hash]
+                age = current_time - cached["timestamp"]
+
+                if age < self._window_seconds:
+                    # Duplicate detected
+                    cached["count"] += 1
+                    logger.warning(
+                        f"Duplicate request detected (hash={request_hash[:8]}, "
+                        f"count={cached['count']}, age={age:.2f}s)"
+                    )
+                    return True, request_hash, cached.get("response")
+
+            # Not a duplicate, add to cache
+            self._cache[request_hash] = {
+                "timestamp": current_time,
+                "count": 1,
+                "response": None
+            }
+
+            # Move to end (most recent)
+            self._cache.move_to_end(request_hash)
+
+            # Trim cache if too large
+            while len(self._cache) > self._max_cache_size:
+                self._cache.popitem(last=False)
+
+            return False, request_hash, None
+
+    def cache_response(self, request_hash: str, response: Dict):
+        """Cache a response for potential duplicate requests."""
+        with self._lock:
+            if request_hash in self._cache:
+                self._cache[request_hash]["response"] = response
+
+# Global deduplicator instance
+ENABLE_DEDUP = os.getenv("ENABLE_REQUEST_DEDUP", "true").lower() == "true"
+DEDUP_WINDOW = float(os.getenv("DEDUP_WINDOW_SECONDS", "3.0"))
+request_deduplicator = RequestDeduplicator(window_seconds=DEDUP_WINDOW)
+
 
 async def log_request_body(request: Request):
     """Middleware-like function to log request body if enabled."""
@@ -174,7 +278,29 @@ async def create_message(
 
     request_start_time = time.time()
     request_id = str(uuid.uuid4())
-    
+
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # REQUEST DEDUPLICATION CHECK
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # Detects and handles duplicate requests caused by client retries
+    request_hash = None
+    if ENABLE_DEDUP:
+        is_duplicate, request_hash, cached_response = request_deduplicator.check_duplicate(request)
+        if is_duplicate:
+            if cached_response:
+                # Return cached response for duplicate
+                logger.info(f"Request {request_id}: Returning cached response for duplicate request")
+                return JSONResponse(content=cached_response)
+            else:
+                # Duplicate detected but no cached response yet (still processing)
+                # Return a retry-after response to prevent thundering herd
+                logger.info(f"Request {request_id}: Duplicate request while original still processing")
+                raise HTTPException(
+                    status_code=429,
+                    detail="Request is already being processed. Please wait.",
+                    headers={"Retry-After": "1"}
+                )
+
     try:
         logger.debug(
             f"Processing Claude request: model={request.model}, stream={request.stream}"
@@ -191,15 +317,39 @@ async def create_message(
         client = openai_client.get_client_for_model(routed_model, config)
         endpoint = config.openai_base_url
         provider = config.default_provider  # Default provider
+        original_tier = None  # Track for fallback logging
+
         if client == openai_client.big_client:
             endpoint = config.big_endpoint
             provider = config.big_provider
+            original_tier = "BIG"
         elif client == openai_client.middle_client:
             endpoint = config.middle_endpoint
             provider = config.middle_provider
+            original_tier = "MIDDLE"
         elif client == openai_client.small_client:
             endpoint = config.small_endpoint
             provider = config.small_provider
+            original_tier = "SMALL"
+
+        # FALLBACK ROUTING: If selected endpoint uses VibeProxy and it's down, fallback to SMALL tier
+        # Also check default endpoint for VibeProxy
+        is_vibeproxy_endpoint = endpoint and ("127.0.0.1:8317" in endpoint or "localhost:8317" in endpoint)
+        is_default_vibeproxy = config.openai_base_url and ("127.0.0.1:8317" in config.openai_base_url or "localhost:8317" in config.openai_base_url)
+        if (is_vibeproxy_endpoint or (original_tier is None and is_default_vibeproxy)) and openai_client.small_client:
+            from src.services.antigravity import is_vibeproxy_available
+            if not is_vibeproxy_available():
+                # Fallback to SMALL tier (OpenRouter)
+                tier_name = original_tier or "DEFAULT"
+                logger.warning(
+                    f"Request {request_id}: VibeProxy unavailable, falling back from {tier_name} to SMALL tier (OpenRouter)"
+                )
+                client = openai_client.small_client
+                endpoint = config.small_endpoint
+                provider = config.small_provider
+                routed_model = config.small_model
+                # Update the openai_request with the new model
+                openai_request["model"] = routed_model
 
         # Log API configuration for debugging (helps diagnose 401 errors)
         logger.debug(f"Request {request_id}: Routing to endpoint: {endpoint}")
@@ -370,6 +520,16 @@ async def create_message(
                     "error": {"type": "api_error", "message": error_message},
                 }
                 return JSONResponse(status_code=e.status_code, content=error_response)
+            except VibeProxyUnavailableError as e:
+                logger.error(f"VibeProxy unavailable for request_id {request_id}: {e}")
+                error_response = {
+                    "type": "error",
+                    "error": {
+                        "type": "vibeproxy_unavailable",
+                        "message": str(e),
+                    },
+                }
+                return JSONResponse(status_code=503, content=error_response)
             except Exception as e:
                 logger.error(f"Unexpected streaming error for request_id {request_id}: {e}")
                 import traceback
@@ -398,7 +558,19 @@ async def create_message(
                         openai_request, request_id, config, api_key=openai_api_key
                     )
                     break # Success!
-                    
+
+                except VibeProxyUnavailableError as e:
+                    # VibeProxy is down - fail fast with clear error
+                    logger.error(f"VibeProxy unavailable for request_id {request_id}: {e}")
+                    error_response = {
+                        "type": "error",
+                        "error": {
+                            "type": "vibeproxy_unavailable",
+                            "message": str(e),
+                        },
+                    }
+                    return JSONResponse(status_code=503, content=error_response)
+
                 except HTTPException as e:
                     if e.status_code == 401 and not openai_api_key: # Only retry for server-side keys (proxy mode)
                         if retry_count >= max_retries:
@@ -511,6 +683,20 @@ async def create_message(
                 openai_response, request, provider
             )
             logger.debug(f"Claude response created for request_id: {request_id}")
+
+            # Cache response for deduplication (non-streaming only)
+            if ENABLE_DEDUP and request_hash:
+                try:
+                    # Convert response to dict if it's a model
+                    if hasattr(claude_response, 'model_dump'):
+                        response_dict = claude_response.model_dump()
+                    elif hasattr(claude_response, 'dict'):
+                        response_dict = claude_response.dict()
+                    else:
+                        response_dict = claude_response
+                    request_deduplicator.cache_response(request_hash, response_dict)
+                except Exception as cache_err:
+                    logger.debug(f"Failed to cache response for dedup: {cache_err}")
 
             # Dashboard hook: request complete
             dashboard_hooks.on_request_complete(request_id, 'completed', {
@@ -733,34 +919,7 @@ async def test_connection():
         )
 
 
-@router.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Claude-to-OpenAI API Proxy v1.0.0",
-        "status": "running",
-        "config": {
-            "openai_base_url": config.openai_base_url,
-            "max_tokens_limit": config.max_tokens_limit,
-            "api_key_configured": bool(config.openai_api_key),
-            "client_api_key_validation": bool(config.anthropic_api_key),
-            "big_model": config.big_model,
-            "small_model": config.small_model,
-        },
-        "endpoints": {
-            "messages": "/v1/messages",
-            "count_tokens": "/v1/messages/count_tokens",
-            "health": "/health",
-            "test_connection": "/test-connection",
-            "crosstalk": {
-                "setup": "/v1/crosstalk/setup",
-                "run": "/v1/crosstalk/{session_id}/run",
-                "status": "/v1/crosstalk/{session_id}/status",
-                "list": "/v1/crosstalk/list",
-                "delete": "/v1/crosstalk/{session_id}/delete",
-            },
-        },
-    }
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
