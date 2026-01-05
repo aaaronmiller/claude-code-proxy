@@ -38,10 +38,11 @@ console = Console()
 
 MAIN_MENU = [
     ("models", "🤖 Model Selection", "Choose Big/Middle/Small models"),
+    ("routing", "🔀 Model Routing", "Route tiers to different providers"),
     ("terminal", "🖥️  Terminal Output", "Colors, metrics, display mode"),
     ("dashboard", "📊 Dashboard Layout", "Arrange the 10-slot grid"),
     ("prompts", "💉 Prompt Configuration", "Stats injected into Claude's context"),
-    ("advanced", "⚙️  Advanced", "Crosstalk, Modes, Reasoning"),
+    ("advanced", "⚙️  Advanced", "Reasoning, Server, Crosstalk"),
     ("exit", "🚪 Exit", "Return to command line"),
 ]
 
@@ -184,6 +185,17 @@ class UnifiedSettings:
             console.print(f"[red]Error: {e}[/red]")
             input("\nPress Enter to continue...")
 
+    def launch_routing(self):
+        """Launch model routing configurator (formerly hybrid mode)."""
+        console.clear()
+        console.print("[bold cyan]Launching Model Routing...[/bold cyan]\n")
+        try:
+            from src.cli.advanced_config import configure_hybrid_mode
+            configure_hybrid_mode()
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            input("\nPress Enter to continue...")
+
     def run(self):
         """Main loop."""
         while self.running:
@@ -192,6 +204,8 @@ class UnifiedSettings:
 
             if selection == "models":
                 self.launch_models()
+            elif selection == "routing":
+                self.launch_routing()
             elif selection == "terminal":
                 self.launch_terminal()
             elif selection == "dashboard":

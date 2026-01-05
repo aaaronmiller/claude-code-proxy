@@ -96,7 +96,14 @@ class ModelManager:
         """Map Claude model names to OpenAI model names based on BIG/SMALL pattern"""
         # Map based on model naming patterns
         model_lower = claude_model.lower()
-        
+            
+        # Explicit mapping for Gemini 3 models - pass through as-is
+        if 'gemini-3-pro-preview' in model_lower:
+            return "gemini-3-pro-preview"
+            
+        if 'gemini-3-flash' in model_lower:
+            return "gemini-3-flash"
+            
         # Only map Claude-specific model names
         if 'haiku' in model_lower:
             return self.config.small_model

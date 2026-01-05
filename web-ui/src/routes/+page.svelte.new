@@ -1,0 +1,1442 @@
+<script lang="ts">
+    import {
+        Activity,
+        Settings,
+        Zap,
+        Server,
+        Terminal,
+        FileText,
+        RefreshCw,
+        MessageSquare,
+        Radio,
+        Shield,
+        Play,
+        Plus,
+        Trash2,
+        ChevronDown,
+        Palette,
+        Book,
+        X,
+    } from "lucide-svelte";
+    import CrosstalkVisualizer from "$lib/components/CrosstalkVisualizer.svelte";
+
+    // Theme management
+    let currentTheme = $state("aurora");
+
+    function setTheme(theme: string) {
+        currentTheme = theme;
+        document.documentElement.setAttribute("data-theme", theme);
+        localStorage.setItem("tup-theme", theme);
+    }
+
+    // Load saved theme on mount
+    $effect(() => {
+        const saved = localStorage.getItem("tup-theme");
+        if (saved && ["aurora", "cyberpunk"].includes(saved)) {
+            currentTheme = saved;
+            document.documentElement.setAttribute("data-theme", saved);
+        }
+    });
+
+    // Type-safe event helpers
+    function getChecked(e: Event): boolean {
+        return (e.target as HTMLInputElement)?.checked ?? false;
+    }
+
+    function getValue(e: Event): string {
+        return (e.target as HTMLInputElement)?.value ?? "";
+    }
+
+    let activeTab = $state("dashboard");
+    let config = $state<Record<string, any>>({
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // MODEL SETTINGS
+        // ═══════════════════════════════════════════════════════════════════════════════
+        big_model: "",
+        middle_model: "",
+        small_model: "",
+        model_cascade: false,
+        big_cascade: "",
+        middle_cascade: "",
+        small_cascade: "",
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // PROVIDER & AUTH
+        // ═══════════════════════════════════════════════════════════════════════════════
+        provider_base_url: "",
+        default_provider: "openrouter",
+        azure_api_version: "",
+        enable_openrouter_selection: "true",
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // HYBRID ROUTING
+        // ═══════════════════════════════════════════════════════════════════════════════
+        enable_big_endpoint: false,
+        big_endpoint: "",
+        big_api_key: "",
+        enable_middle_endpoint: false,
+        middle_endpoint: "",
+        middle_api_key: "",
+        enable_small_endpoint: false,
+        small_endpoint: "",
+        small_api_key: "",
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // REASONING CONFIGURATION
+        // ═══════════════════════════════════════════════════════════════════════════════
+        reasoning_effort: "",
+        reasoning_max_tokens: "",
+        reasoning_exclude: "false",
+        verbosity: "",
+        big_model_reasoning: "",
+        middle_model_reasoning: "",
+        small_model_reasoning: "",
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // CUSTOM SYSTEM PROMPTS
+        // ═══════════════════════════════════════════════════════════════════════════════
+        enable_custom_big_prompt: "false",
+        big_system_prompt: "",
+        big_system_prompt_file: "",
+        enable_custom_middle_prompt: "false",
+        middle_system_prompt: "",
+        middle_system_prompt_file: "",
+        enable_custom_small_prompt: "false",
+        small_system_prompt: "",
+        small_system_prompt_file: "",
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // TERMINAL DISPLAY
+        // ═══════════════════════════════════════════════════════════════════════════════
+        terminal_display_mode: "detailed",
+        terminal_color_scheme: "auto",
+        terminal_show_workspace: "true",
+        terminal_show_context_pct: "true",
+        terminal_show_task_type: "true",
+        terminal_show_speed: "true",
+        terminal_show_cost: "true",
+        terminal_show_duration_colors: "true",
+        terminal_session_colors: "true",
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // LOGGING SETTINGS
+        // ═══════════════════════════════════════════════════════════════════════════════
+        log_style: "rich",
+        compact_logger: "false",
+        show_token_counts: "true",
+        show_performance: "true",
+        color_scheme: "auto",
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // USAGE & ANALYTICS
+        // ═══════════════════════════════════════════════════════════════════════════════
+        track_usage: "false",
+        usage_db_path: "usage_tracking.db",
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // DASHBOARD SETTINGS
+        // ═══════════════════════════════════════════════════════════════════════════════
+        enable_dashboard: "false",
+        dashboard_layout: "default",
+        dashboard_refresh: "0.5",
+        dashboard_waterfall_size: "20",
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // PERFORMANCE SETTINGS
+        // ═══════════════════════════════════════════════════════════════════════════════
+        max_tokens_limit: "65536",
+        min_tokens_limit: "4096",
+        request_timeout: "120",
+        max_retries: "2",
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SERVER CONFIGURATION (read-only)
+        // ═══════════════════════════════════════════════════════════════════════════════
+        host: "0.0.0.0",
+        port: "8082",
+        log_level: "INFO",
+    });
+    let status = $state({ connected: false, provider: "", requests: 0 });
+    let loading = $state(false);
+    let error = $state("");
+    let saveMessage = $state("");
+    let showWizard = $state(false);
+    let presets = $state<any[]>([]);
+    let sessions = $state<any[]>([]);
+    let stats = $state({
+        requests_today: 0,
+        total_tokens: 0,
+        est_cost: 0,
+        avg_latency: 0,
+    });
+
+    // Recent requests for dashboard (fallback empty array)
+    let recentRequests = $state<any[]>([]);
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // MODEL SELECTION STATE
+    // ═══════════════════════════════════════════════════════════════════════════════
+    interface ModelInfo {
+        id: string;
+        name: string;
+        provider: string;
+        context_length: number;
+        max_completion_tokens: number;
+        supports_reasoning: boolean;
+        supports_tools: boolean;
+        supports_vision: boolean;
+        pricing: {
+            input_per_million: number;
+            output_per_million: number;
+            is_free: boolean;
+        };
+        description: string;
+    }
+
+    interface ProviderInfo {
+        id: string;
+        name: string;
+        status: "valid" | "invalid" | "unknown";
+        model_count: number;
+    }
+
+    let availableModels = $state<ModelInfo[]>([]);
+    let availableProviders = $state<ProviderInfo[]>([]);
+    let modelsLoading = $state(false);
+    let modelsError = $state("");
+    let modelStats = $state<Record<string, any>>({});
+
+    // Filter state for each tier
+    let modelFilters = $state({
+        big: { search: "", provider: "", showDropdown: false },
+        middle: { search: "", provider: "", showDropdown: false },
+        small: { search: "", provider: "", showDropdown: false },
+    });
+
+    // Filtered models for each dropdown
+    function getFilteredModels(tier: "big" | "middle" | "small"): ModelInfo[] {
+        const filter = modelFilters[tier];
+        let filtered = availableModels;
+
+        if (filter.provider) {
+            filtered = filtered.filter((m) => m.provider === filter.provider);
+        }
+
+        if (filter.search) {
+            const search = filter.search.toLowerCase();
+            filtered = filtered.filter(
+                (m) =>
+                    m.id.toLowerCase().includes(search) ||
+                    m.name.toLowerCase().includes(search),
+            );
+        }
+
+        return filtered.slice(0, 50); // Limit for performance
+    }
+
+    async function loadModels() {
+        modelsLoading = true;
+        modelsError = "";
+        try {
+            const res = await fetch("/api/models?limit=500");
+            if (res.ok) {
+                const data = await res.json();
+                availableModels = data.models || [];
+                modelStats = data.stats || {};
+            } else {
+                modelsError = "Failed to load models";
+            }
+        } catch (e) {
+            modelsError = "Connection error loading models";
+        }
+        modelsLoading = false;
+    }
+
+    async function loadProviders() {
+        try {
+            const res = await fetch("/api/providers");
+            if (res.ok) {
+                const data = await res.json();
+                availableProviders = data.providers || [];
+            }
+        } catch (e) {
+            console.error("Failed to load providers:", e);
+        }
+    }
+
+    async function refreshModels() {
+        modelsLoading = true;
+        modelsError = "";
+        try {
+            const res = await fetch("/api/models/refresh", { method: "POST" });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.models) {
+                    availableModels = data.models;
+                    modelStats = data.stats || {};
+                    saveMessage = `✅ Refreshed ${data.count} models`;
+                } else {
+                    await loadModels();
+                    saveMessage = "✅ Models refreshed";
+                }
+            } else {
+                modelsError = "Refresh failed";
+            }
+        } catch (e) {
+            modelsError = "Connection error";
+        }
+        modelsLoading = false;
+        setTimeout(() => (saveMessage = ""), 3000);
+    }
+
+    function selectModel(tier: "big" | "middle" | "small", modelId: string) {
+        if (tier === "big") config.big_model = modelId;
+        else if (tier === "middle") config.middle_model = modelId;
+        else config.small_model = modelId;
+
+        modelFilters[tier].showDropdown = false;
+        modelFilters[tier].search = "";
+    }
+
+    function formatPrice(price: number): string {
+        if (price === 0) return "Free";
+        if (price < 0.01) return `$${price.toFixed(4)}`;
+        return `$${price.toFixed(2)}`;
+    }
+
+    function formatContext(tokens: number): string {
+        if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`;
+        if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
+        return String(tokens);
+    }
+
+    // WebSocket logs state
+    let ws: WebSocket | null = $state(null);
+    let wsConnected = $state(false);
+    let logs = $state<any[]>([]);
+    let logFilter = $state("all");
+
+    // Documentation state
+    let docContent = $state("");
+    let docLoading = $state(false);
+
+    async function loadDoc(path: string) {
+        docLoading = true;
+        try {
+            const res = await fetch(`/api/docs/${path}`);
+            if (res.ok) {
+                const data = await res.json();
+                docContent = data.content || "";
+            } else {
+                docContent = "# Error\n\nFailed to load document.";
+            }
+        } catch (e) {
+            docContent = "# Error\n\nFailed to fetch document.";
+        }
+        docLoading = false;
+    }
+
+    // Playground state
+    let playground = $state({
+        tier: "big",
+        systemPrompt: "",
+        userMessage: "",
+        temperature: 0.7,
+        maxTokens: 1024,
+        response: "",
+        loading: false,
+        error: "",
+        tokens: { input: 0, output: 0 },
+        latency: 0,
+    });
+
+    // Crosstalk session state - FULL FEATURE PARITY
+    let crosstalkSession = $state({
+        models: [
+            {
+                slot_id: 1,
+                model_id: "",
+                system_prompt: "",
+                jinja_template: "basic", // NEW
+                temperature: 0.7,
+                max_tokens: 2048,
+                append: "", // NEW: Added to messages this model receives
+                prepend: "", // NEW: Added before messages this model sends
+                endpoint: "", // NEW: Custom API endpoint
+                api_key_env: "", // NEW: Environment variable for API key
+            },
+            {
+                slot_id: 2,
+                model_id: "",
+                system_prompt: "",
+                jinja_template: "basic",
+                temperature: 0.7,
+                max_tokens: 2048,
+                append: "",
+                prepend: "",
+                endpoint: "",
+                api_key_env: "",
+            },
+        ],
+        topology: {
+            type: "ring",
+            order: [],
+            center: 1,
+            spokes: [],
+            pattern: [],
+        },
+        paradigm: "relay",
+        rounds: 5,
+        infinite: false,
+        stop_conditions: {
+            max_time_seconds: 0,
+            max_cost_dollars: 0,
+            stop_keywords: [],
+            repetition_threshold: 0.85, // NEW
+        },
+        initial_prompt: "",
+        // NEW: Advanced session options
+        summarize_every: 0, // 0 = disabled, N = summarize every N rounds
+        checkpoint_every: 10, // Checkpoint every N rounds for infinite mode
+        final_round_vote: {
+            enabled: false,
+            question: "What is your final verdict?",
+            options: ["yes", "no", "undecided"],
+            tally_method: "majority",
+        },
+    });
+
+    // Available Jinja templates
+    const jinjaTemplates = [
+        "basic",
+        "debate",
+        "analyst",
+        "creative",
+        "concise",
+    ];
+
+    const tabs = [
+        { id: "dashboard", label: "Dashboard", icon: Activity },
+        { id: "models", label: "Models", icon: Zap },
+        { id: "cascade", label: "Cascade", icon: RefreshCw },
+        { id: "routing", label: "🔀 Routing", icon: Server },
+        { id: "crosstalk", label: "Crosstalk", icon: MessageSquare },
+        { id: "terminal", label: "Terminal", icon: Terminal },
+        { id: "playground", label: "Playground", icon: Play },
+        { id: "logs", label: "Logs", icon: FileText },
+        { id: "docs", label: "Docs", icon: Book },
+    ];
+
+    const topologies = [
+        "ring",
+        "star",
+        "mesh",
+        "chain",
+        "random",
+        "custom",
+        "tournament",
+    ];
+    const paradigms = ["relay", "memory", "report", "debate"];
+
+    async function loadConfig() {
+        loading = true;
+        try {
+            const res = await fetch("/api/config");
+            if (res.ok) {
+                const data = await res.json();
+                config = { ...config, ...data };
+                status.connected = true;
+                status.provider = data.default_provider || "unknown";
+
+                // DISABLED: Wizard was blocking UI - user can manually access settings instead
+                // const healthRes = await fetch("/api/health");
+                // if (healthRes.ok) {
+                //     const health = await healthRes.json();
+                //     if (!health.provider_configured) {
+                //         showWizard = true;
+                //     }
+                // }
+            }
+        } catch (e) {
+            status.connected = false;
+            // DISABLED: Don't block UI with wizard on connection error
+            // showWizard = true;
+        }
+        loading = false;
+    }
+
+    async function loadPresets() {
+        try {
+            const res = await fetch("/api/crosstalk/presets");
+            if (res.ok) presets = await res.json();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function loadSessions() {
+        try {
+            const res = await fetch("/api/crosstalk/sessions");
+            if (res.ok) sessions = await res.json();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function loadStats() {
+        try {
+            const res = await fetch("/api/stats/requests");
+            if (res.ok) {
+                stats = await res.json();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    // Session Viewer State
+    let viewingSession = $state<any>(null);
+    let viewingSessionName = $state("");
+
+    async function viewSession(filename: string) {
+        try {
+            const res = await fetch(
+                `/api/crosstalk/sessions/${filename.replace(".json", "")}`,
+            );
+            if (res.ok) {
+                viewingSession = await res.json();
+                viewingSessionName = filename;
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function closeSessionViewer() {
+        viewingSession = null;
+        viewingSessionName = "";
+    }
+
+    async function saveConfig() {
+        // Validation
+        const routes = [
+            { enable: "enable_big_endpoint", endpoint: "big_endpoint" },
+            { enable: "enable_middle_endpoint", endpoint: "middle_endpoint" },
+            { enable: "enable_small_endpoint", endpoint: "small_endpoint" },
+        ];
+
+        for (const route of routes) {
+            if (config[route.enable]) {
+                const url = config[route.endpoint];
+                if (!url || !url.trim()) {
+                    saveMessage = `❌ ${route.endpoint.replace("_endpoint", "")} endpoint URL required`;
+                    setTimeout(() => (saveMessage = ""), 4000);
+                    return;
+                }
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    saveMessage = `❌ Invalid URL for ${route.endpoint.replace("_endpoint", "")} endpoint`;
+                    setTimeout(() => (saveMessage = ""), 4000);
+                    return;
+                }
+            }
+        }
+
+        try {
+            const res = await fetch("/api/config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(config),
+            });
+            if (res.ok) {
+                saveMessage = "✅ Configuration saved";
+                setTimeout(() => (saveMessage = ""), 3000);
+            } else {
+                saveMessage = "❌ Failed to save";
+                setTimeout(() => (saveMessage = ""), 3000);
+            }
+        } catch (e) {
+            saveMessage = "❌ Connection error";
+            setTimeout(() => (saveMessage = ""), 3000);
+        }
+    }
+
+    async function loadPreset(filename: string) {
+        try {
+            const res = await fetch(`/api/crosstalk/presets/${filename}`);
+            if (res.ok) {
+                const data = await res.json();
+                crosstalkSession = { ...crosstalkSession, ...data };
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    // Crosstalk session state for running
+    let crosstalkRunning = $state(false);
+    let crosstalkOutput = $state<string[]>([]);
+    let crosstalkError = $state("");
+
+    async function startCrosstalkSession() {
+        if (!crosstalkSession.initial_prompt?.trim()) {
+            crosstalkError = "Please enter an initial prompt";
+            return;
+        }
+
+        crosstalkRunning = true;
+        crosstalkError = "";
+        crosstalkOutput = ["Starting Crosstalk session..."];
+
+        try {
+            const res = await fetch("/api/crosstalk/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(crosstalkSession),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                crosstalkOutput = [
+                    ...crosstalkOutput,
+                    `Session ID: ${data.session_id || "N/A"}`,
+                    "Session started successfully!",
+                    ...(data.messages || []).map(
+                        (m: any) =>
+                            `[${m.role}] ${m.content?.slice(0, 100)}...`,
+                    ),
+                ];
+                // Reload sessions list
+                await loadSessions();
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                crosstalkError = errData.detail || `Error: ${res.status}`;
+                crosstalkOutput = [
+                    ...crosstalkOutput,
+                    `Failed: ${crosstalkError}`,
+                ];
+            }
+        } catch (e) {
+            crosstalkError = String(e);
+            crosstalkOutput = [...crosstalkOutput, `Error: ${e}`];
+        } finally {
+            crosstalkRunning = false;
+        }
+    }
+
+    async function saveAsPreset() {
+        const name = prompt("Enter preset name:");
+        if (!name) return;
+
+        try {
+            const res = await fetch("/api/crosstalk/presets", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: name,
+                    ...crosstalkSession,
+                }),
+            });
+
+            if (res.ok) {
+                await loadPresets();
+                saveMessage = `Preset "${name}" saved!`;
+                setTimeout(() => (saveMessage = ""), 3000);
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                error = errData.detail || "Failed to save preset";
+            }
+        } catch (e) {
+            error = String(e);
+        }
+    }
+
+    function connectWebSocket() {
+        if (ws) {
+            ws.close();
+        }
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/api/ws/logs`;
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            wsConnected = true;
+            logs = [
+                ...logs,
+                {
+                    level: "info",
+                    message: "Connected to log stream",
+                    timestamp: new Date().toISOString(),
+                },
+            ];
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const log = JSON.parse(event.data);
+                logs = [...logs.slice(-199), log]; // Keep last 200 logs
+            } catch (e) {
+                console.error("Failed to parse log:", e);
+            }
+        };
+
+        ws.onclose = () => {
+            wsConnected = false;
+            logs = [
+                ...logs,
+                {
+                    level: "warning",
+                    message: "Disconnected from log stream",
+                    timestamp: new Date().toISOString(),
+                },
+            ];
+            // Auto-reconnect after 3 seconds
+            setTimeout(() => {
+                if (activeTab === "logs") connectWebSocket();
+            }, 3000);
+        };
+
+        ws.onerror = () => {
+            wsConnected = false;
+        };
+    }
+
+    function clearLogs() {
+        logs = [];
+    }
+
+    function addModelSlot() {
+        const nextId =
+            Math.max(...crosstalkSession.models.map((m) => m.slot_id)) + 1;
+        crosstalkSession.models = [
+            ...crosstalkSession.models,
+            {
+                slot_id: nextId,
+                model_id: "",
+                system_prompt: "",
+                jinja_template: "basic",
+                temperature: 0.7,
+                max_tokens: 2048,
+                append: "",
+                prepend: "",
+                endpoint: "",
+                api_key_env: "",
+            },
+        ];
+    }
+
+    function removeModelSlot(slotId: number) {
+        if (crosstalkSession.models.length > 2) {
+            crosstalkSession.models = crosstalkSession.models.filter(
+                (m) => m.slot_id !== slotId,
+            );
+        }
+    }
+
+    $effect(() => {
+        loadConfig();
+        loadPresets();
+        loadSessions();
+        loadStats();
+        loadModels();
+        loadProviders();
+    });
+</script>
+
+<!-- NEW SHADCN-SVELTE REDESIGN -->
+<div class="flex h-screen bg-background">
+    <!-- Sidebar -->
+    <aside class="w-56 border-r border-border bg-card flex flex-col">
+        <!-- Logo -->
+        <div class="p-4 border-b border-border">
+            <div class="flex items-center gap-3">
+                <img src="/logo.png" alt="" class="w-8 h-8" />
+                <div>
+                    <h1 class="font-semibold text-sm text-gradient">
+                        The Ultimate Proxy
+                    </h1>
+                    <p class="text-xs text-muted-foreground">v2.1.0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 p-2 space-y-1">
+            {#each tabs as tab}
+                <button
+                    onclick={() => (activeTab = tab.id)}
+                    class={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${activeTab === tab.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+                >
+                    <tab.icon class="w-4 h-4" />
+                    {tab.label}
+                </button>
+            {/each}
+        </nav>
+
+        <!-- Status -->
+        <div class="p-4 border-t border-border">
+            <div class="flex items-center gap-2">
+                <div
+                    class="w-2 h-2 rounded-full {status.connected
+                        ? 'bg-green-500 status-dot online'
+                        : 'bg-red-500'}"
+                ></div>
+                <span class="text-xs text-muted-foreground">
+                    {status.connected
+                        ? status.provider.toUpperCase()
+                        : "OFFLINE"}
+                </span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Header -->
+        <header
+            class="h-14 border-b border-border bg-card/50 backdrop-blur-sm flex items-center justify-between px-6"
+        >
+            <h2 class="font-semibold capitalize">{activeTab}</h2>
+            <div class="flex items-center gap-2">
+                <button
+                    onclick={() => {
+                        loadConfig();
+                        loadStats();
+                    }}
+                    class="p-2 rounded-lg hover:bg-accent transition-colors"
+                    title="Refresh"
+                >
+                    <RefreshCw
+                        class="w-4 h-4 text-muted-foreground {loading
+                            ? 'animate-spin'
+                            : ''}"
+                    />
+                </button>
+                <button
+                    class="p-2 rounded-lg hover:bg-accent transition-colors"
+                    title="Settings"
+                >
+                    <Settings class="w-4 h-4 text-muted-foreground" />
+                </button>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <main class="flex-1 overflow-auto p-6">
+            {#if activeTab === "dashboard"}
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="rounded-xl border border-border bg-card p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg bg-primary/10">
+                                <Activity class="w-4 h-4 text-primary" />
+                            </div>
+                            <div>
+                                <p
+                                    class="text-xs text-muted-foreground uppercase tracking-wide"
+                                >
+                                    Requests
+                                </p>
+                                <p class="text-2xl font-bold text-foreground">
+                                    {stats.requests_today}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="rounded-xl border border-border bg-card p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg bg-violet-500/10">
+                                <Zap class="w-4 h-4 text-violet-400" />
+                            </div>
+                            <div>
+                                <p
+                                    class="text-xs text-muted-foreground uppercase tracking-wide"
+                                >
+                                    Tokens
+                                </p>
+                                <p class="text-2xl font-bold text-foreground">
+                                    {stats.total_tokens.toLocaleString()}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="rounded-xl border border-border bg-card p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg bg-emerald-500/10">
+                                <FileText class="w-4 h-4 text-emerald-400" />
+                            </div>
+                            <div>
+                                <p
+                                    class="text-xs text-muted-foreground uppercase tracking-wide"
+                                >
+                                    Cost
+                                </p>
+                                <p class="text-2xl font-bold text-foreground">
+                                    ${stats.est_cost.toFixed(4)}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="rounded-xl border border-border bg-card p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg bg-amber-500/10">
+                                <Radio class="w-4 h-4 text-amber-400" />
+                            </div>
+                            <div>
+                                <p
+                                    class="text-xs text-muted-foreground uppercase tracking-wide"
+                                >
+                                    Latency
+                                </p>
+                                <p class="text-2xl font-bold text-foreground">
+                                    {stats.avg_latency}ms
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Model Cards -->
+                <h3
+                    class="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide"
+                >
+                    Active Models
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="model-card">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="model-tier big">BIG</span>
+                            <Zap class="w-4 h-4 text-primary" />
+                        </div>
+                        <p class="font-mono text-sm text-foreground truncate">
+                            {config.big_model || "—"}
+                        </p>
+                    </div>
+                    <div class="model-card">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="model-tier middle">MIDDLE</span>
+                            <Zap class="w-4 h-4 text-violet-400" />
+                        </div>
+                        <p class="font-mono text-sm text-foreground truncate">
+                            {config.middle_model || "—"}
+                        </p>
+                    </div>
+                    <div class="model-card">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="model-tier small">SMALL</span>
+                            <Zap class="w-4 h-4 text-emerald-400" />
+                        </div>
+                        <p class="font-mono text-sm text-foreground truncate">
+                            {config.small_model || "—"}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <h3
+                    class="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide"
+                >
+                    Recent Activity
+                </h3>
+                <div
+                    class="rounded-xl border border-border bg-card overflow-hidden"
+                >
+                    {#if recentRequests.length === 0}
+                        <div class="p-8 text-center text-muted-foreground">
+                            <Activity class="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <p class="text-sm">No recent activity</p>
+                        </div>
+                    {:else}
+                        <div class="divide-y divide-border">
+                            {#each recentRequests.slice(0, 5) as req}
+                                <div
+                                    class="px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors"
+                                >
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="w-2 h-2 rounded-full {req.status ===
+                                            'success'
+                                                ? 'bg-emerald-500'
+                                                : 'bg-red-500'}"
+                                        ></div>
+                                        <span class="font-mono text-sm"
+                                            >{req.model}</span
+                                        >
+                                    </div>
+                                    <div
+                                        class="flex items-center gap-4 text-sm text-muted-foreground"
+                                    >
+                                        <span>{req.tokens} tokens</span>
+                                        <span>{req.duration}ms</span>
+                                        <span class="text-emerald-400"
+                                            >${req.cost}</span
+                                        >
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
+            {:else if activeTab === "models"}
+                <!-- Models Configuration with Searchable Dropdowns -->
+                <div class="max-w-3xl space-y-6">
+                    <!-- Header with stats and refresh -->
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <h3 class="font-semibold text-lg">
+                                Model Configuration
+                            </h3>
+                            {#if modelStats.total}
+                                <span
+                                    class="text-xs text-muted-foreground bg-accent px-2 py-1 rounded"
+                                >
+                                    {modelStats.total} models available
+                                </span>
+                            {/if}
+                        </div>
+                        <button
+                            onclick={refreshModels}
+                            disabled={modelsLoading}
+                            class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-50"
+                        >
+                            <RefreshCw
+                                class="w-4 h-4 {modelsLoading
+                                    ? 'animate-spin'
+                                    : ''}"
+                            />
+                            Refresh Models
+                        </button>
+                    </div>
+
+                    {#if modelsError}
+                        <div
+                            class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm"
+                        >
+                            {modelsError}
+                        </div>
+                    {/if}
+
+                    <!-- Model Tier Cards -->
+                    {#each [{ tier: "big" as const, label: "BIG Model", desc: "Opus-tier (complex reasoning)", color: "text-amber-400" }, { tier: "middle" as const, label: "MIDDLE Model", desc: "Sonnet-tier (balanced)", color: "text-blue-400" }, { tier: "small" as const, label: "SMALL Model", desc: "Haiku-tier (fast)", color: "text-emerald-400" }] as item}
+                        <div
+                            class="rounded-xl border border-border bg-card p-5"
+                        >
+                            <div class="flex items-center gap-3 mb-4">
+                                <span class="model-tier {item.tier}"
+                                    >{item.tier.toUpperCase()}</span
+                                >
+                                <div>
+                                    <h4 class="font-medium {item.color}">
+                                        {item.label}
+                                    </h4>
+                                    <p class="text-xs text-muted-foreground">
+                                        {item.desc}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Provider filter -->
+                            <div class="flex gap-3 mb-3">
+                                <select
+                                    class="flex-shrink-0 w-40 px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    value={modelFilters[item.tier].provider}
+                                    onchange={(e) =>
+                                        (modelFilters[item.tier].provider =
+                                            getValue(e))}
+                                >
+                                    <option value="">All Providers</option>
+                                    {#each availableProviders as provider}
+                                        <option value={provider.id}>
+                                            {provider.name} ({provider.model_count})
+                                        </option>
+                                    {/each}
+                                </select>
+
+                                <!-- Search input with dropdown -->
+                                <div class="relative flex-1">
+                                    <input
+                                        type="text"
+                                        placeholder="Search models..."
+                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                        value={modelFilters[item.tier].search}
+                                        oninput={(e) => {
+                                            modelFilters[item.tier].search =
+                                                getValue(e);
+                                            modelFilters[
+                                                item.tier
+                                            ].showDropdown = true;
+                                        }}
+                                        onfocus={() =>
+                                            (modelFilters[
+                                                item.tier
+                                            ].showDropdown = true)}
+                                    />
+
+                                    <!-- Dropdown results -->
+                                    {#if modelFilters[item.tier].showDropdown && (modelFilters[item.tier].search || modelFilters[item.tier].provider)}
+                                        <div
+                                            class="absolute z-50 top-full left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+                                        >
+                                            {#if modelsLoading}
+                                                <div
+                                                    class="p-4 text-center text-muted-foreground text-sm"
+                                                >
+                                                    Loading models...
+                                                </div>
+                                            {:else}
+                                                {#each getFilteredModels(item.tier) as model}
+                                                    <button
+                                                        type="button"
+                                                        class="w-full px-3 py-2 text-left hover:bg-accent transition-colors border-b border-border last:border-b-0"
+                                                        onclick={() =>
+                                                            selectModel(
+                                                                item.tier,
+                                                                model.id,
+                                                            )}
+                                                    >
+                                                        <div
+                                                            class="flex items-center justify-between"
+                                                        >
+                                                            <div
+                                                                class="flex-1 min-w-0"
+                                                            >
+                                                                <div
+                                                                    class="font-mono text-sm truncate"
+                                                                >
+                                                                    {model.id}
+                                                                </div>
+                                                                <div
+                                                                    class="text-xs text-muted-foreground truncate"
+                                                                >
+                                                                    {model.name}
+                                                                </div>
+                                                            </div>
+                                                            <div
+                                                                class="flex items-center gap-2 ml-2 text-xs text-muted-foreground flex-shrink-0"
+                                                            >
+                                                                <span
+                                                                    title="Context window"
+                                                                    >{formatContext(
+                                                                        model.context_length,
+                                                                    )}</span
+                                                                >
+                                                                <span
+                                                                    class="text-emerald-400"
+                                                                    title="Input price/M tokens"
+                                                                >
+                                                                    {formatPrice(
+                                                                        model
+                                                                            .pricing
+                                                                            .input_per_million,
+                                                                    )}
+                                                                </span>
+                                                                {#if model.supports_reasoning}
+                                                                    <span
+                                                                        title="Reasoning"
+                                                                        >🧠</span
+                                                                    >
+                                                                {/if}
+                                                                {#if model.supports_vision}
+                                                                    <span
+                                                                        title="Vision"
+                                                                        >👁</span
+                                                                    >
+                                                                {/if}
+                                                                {#if model.supports_tools}
+                                                                    <span
+                                                                        title="Tools"
+                                                                        >🔧</span
+                                                                    >
+                                                                {/if}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                {:else}
+                                                    <div
+                                                        class="p-4 text-center text-muted-foreground text-sm"
+                                                    >
+                                                        No models found
+                                                    </div>
+                                                {/each}
+                                            {/if}
+                                        </div>
+                                    {/if}
+                                </div>
+
+                                <!-- Close dropdown button -->
+                                {#if modelFilters[item.tier].showDropdown}
+                                    <button
+                                        type="button"
+                                        class="p-2 rounded-lg hover:bg-accent transition-colors"
+                                        onclick={() =>
+                                            (modelFilters[
+                                                item.tier
+                                            ].showDropdown = false)}
+                                    >
+                                        <X class="w-4 h-4" />
+                                    </button>
+                                {/if}
+                            </div>
+
+                            <!-- Current selection -->
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-muted-foreground"
+                                    >Selected:</span
+                                >
+                                <input
+                                    type="text"
+                                    class="flex-1 px-3 py-2 rounded-lg border border-input bg-background/50 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                                    value={item.tier === "big"
+                                        ? config.big_model
+                                        : item.tier === "middle"
+                                          ? config.middle_model
+                                          : config.small_model}
+                                    oninput={(e) => {
+                                        if (item.tier === "big")
+                                            config.big_model = getValue(e);
+                                        else if (item.tier === "middle")
+                                            config.middle_model = getValue(e);
+                                        else config.small_model = getValue(e);
+                                    }}
+                                    placeholder="Enter model ID manually..."
+                                />
+                            </div>
+                        </div>
+                    {/each}
+
+                    <!-- Save button -->
+                    <div class="flex items-center gap-4">
+                        <button
+                            onclick={saveConfig}
+                            class="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity"
+                        >
+                            Save Configuration
+                        </button>
+                        {#if saveMessage}
+                            <span class="text-sm text-muted-foreground"
+                                >{saveMessage}</span
+                            >
+                        {/if}
+                    </div>
+
+                    <!-- Model stats summary -->
+                    {#if modelStats.total}
+                        <div
+                            class="rounded-xl border border-border bg-card/50 p-4"
+                        >
+                            <h4 class="text-sm font-medium mb-3">
+                                Available Models
+                            </h4>
+                            <div
+                                class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center"
+                            >
+                                <div>
+                                    <div class="text-2xl font-bold">
+                                        {modelStats.total}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        Total
+                                    </div>
+                                </div>
+                                <div>
+                                    <div
+                                        class="text-2xl font-bold text-emerald-400"
+                                    >
+                                        {modelStats.free || 0}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        Free
+                                    </div>
+                                </div>
+                                <div>
+                                    <div
+                                        class="text-2xl font-bold text-purple-400"
+                                    >
+                                        {modelStats.reasoning || 0}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        Reasoning
+                                    </div>
+                                </div>
+                                <div>
+                                    <div
+                                        class="text-2xl font-bold text-blue-400"
+                                    >
+                                        {modelStats.vision || 0}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        Vision
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {:else if activeTab === "routing"}
+                <!-- Routing Configuration -->
+                <div class="max-w-2xl space-y-6">
+                    <div class="rounded-xl border border-border bg-card p-6">
+                        <h3 class="font-semibold mb-4">Hybrid Routing</h3>
+                        <p class="text-sm text-muted-foreground mb-4">
+                            Route different model tiers to alternative
+                            endpoints.
+                        </p>
+
+                        <!-- BIG Endpoint -->
+                        <div class="p-4 rounded-lg border border-border mb-4">
+                            <div class="flex items-center gap-3 mb-3">
+                                <input
+                                    type="checkbox"
+                                    checked={config.enable_big_endpoint}
+                                    onchange={(e) =>
+                                        (config.enable_big_endpoint =
+                                            getChecked(e))}
+                                    class="w-4 h-4 rounded border-input"
+                                />
+                                <span class="model-tier big">BIG</span>
+                                <span class="text-sm text-muted-foreground"
+                                    >Custom Endpoint</span
+                                >
+                            </div>
+                            {#if config.enable_big_endpoint}
+                                <div class="space-y-2 mt-3">
+                                    <input
+                                        type="text"
+                                        value={config.big_endpoint}
+                                        oninput={(e) =>
+                                            (config.big_endpoint = getValue(e))}
+                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono"
+                                        placeholder="https://api.example.com/v1"
+                                    />
+                                </div>
+                            {/if}
+                        </div>
+
+                        <!-- MIDDLE Endpoint -->
+                        <div class="p-4 rounded-lg border border-border mb-4">
+                            <div class="flex items-center gap-3 mb-3">
+                                <input
+                                    type="checkbox"
+                                    checked={config.enable_middle_endpoint}
+                                    onchange={(e) =>
+                                        (config.enable_middle_endpoint =
+                                            getChecked(e))}
+                                    class="w-4 h-4 rounded border-input"
+                                />
+                                <span class="model-tier middle">MIDDLE</span>
+                                <span class="text-sm text-muted-foreground"
+                                    >Custom Endpoint</span
+                                >
+                            </div>
+                            {#if config.enable_middle_endpoint}
+                                <div class="space-y-2 mt-3">
+                                    <input
+                                        type="text"
+                                        value={config.middle_endpoint}
+                                        oninput={(e) =>
+                                            (config.middle_endpoint =
+                                                getValue(e))}
+                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono"
+                                        placeholder="https://api.example.com/v1"
+                                    />
+                                </div>
+                            {/if}
+                        </div>
+
+                        <!-- SMALL Endpoint -->
+                        <div class="p-4 rounded-lg border border-border">
+                            <div class="flex items-center gap-3 mb-3">
+                                <input
+                                    type="checkbox"
+                                    checked={config.enable_small_endpoint}
+                                    onchange={(e) =>
+                                        (config.enable_small_endpoint =
+                                            getChecked(e))}
+                                    class="w-4 h-4 rounded border-input"
+                                />
+                                <span class="model-tier small">SMALL</span>
+                                <span class="text-sm text-muted-foreground"
+                                    >Custom Endpoint</span
+                                >
+                            </div>
+                            {#if config.enable_small_endpoint}
+                                <div class="space-y-2 mt-3">
+                                    <input
+                                        type="text"
+                                        value={config.small_endpoint}
+                                        oninput={(e) =>
+                                            (config.small_endpoint =
+                                                getValue(e))}
+                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono"
+                                        placeholder="https://api.example.com/v1"
+                                    />
+                                </div>
+                            {/if}
+                        </div>
+
+                        <button
+                            onclick={saveConfig}
+                            class="mt-6 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity"
+                        >
+                            Save Configuration
+                        </button>
+                    </div>
+                </div>
+            {:else if activeTab === "logs"}
+                <!-- Logs -->
+                <div class="h-full flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <div
+                                class="w-2 h-2 rounded-full {wsConnected
+                                    ? 'bg-green-500 status-dot online'
+                                    : 'bg-red-500'}"
+                            ></div>
+                            <span class="text-sm text-muted-foreground">
+                                {wsConnected ? "Live" : "Disconnected"}
+                            </span>
+                        </div>
+                        <button
+                            onclick={clearLogs}
+                            class="px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-accent transition-colors"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                    <div
+                        class="flex-1 rounded-xl border border-border bg-zinc-950 p-4 font-mono text-xs overflow-auto"
+                    >
+                        {#each logs as log}
+                            <div
+                                class="py-1 {log.level === 'error'
+                                    ? 'text-red-400'
+                                    : log.level === 'warning'
+                                      ? 'text-amber-400'
+                                      : 'text-zinc-400'}"
+                            >
+                                <span class="text-zinc-600"
+                                    >{log.timestamp?.slice(11, 19) || ""}</span
+                                >
+                                <span class="ml-2">{log.message}</span>
+                            </div>
+                        {/each}
+                    </div>
+                </div>
+            {:else}
+                <!-- Placeholder for other tabs -->
+                <div class="flex items-center justify-center h-64">
+                    <div class="text-center">
+                        <Server
+                            class="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50"
+                        />
+                        <h3 class="font-semibold text-lg mb-2 capitalize">
+                            {activeTab}
+                        </h3>
+                        <p class="text-sm text-muted-foreground">
+                            This section is under development
+                        </p>
+                    </div>
+                </div>
+            {/if}
+        </main>
+    </div>
+</div>

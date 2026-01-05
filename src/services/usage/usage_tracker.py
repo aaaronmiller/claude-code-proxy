@@ -54,6 +54,10 @@ class UsageTracker:
         else:
             logger.debug("Usage tracking disabled. Set TRACK_USAGE=true to enable")
 
+    def get_connection(self):
+        """Get a database connection."""
+        return sqlite3.connect(self.db_path)
+
     def _init_db(self):
         """Initialize SQLite database with schema."""
         conn = sqlite3.connect(self.db_path)
@@ -170,6 +174,68 @@ class UsageTracker:
             )
         """)
 
+        # Extended analytics tables for visualization
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS daily_model_stats (
+                date TEXT NOT NULL,
+                model TEXT NOT NULL,
+                provider TEXT,
+                request_count INTEGER DEFAULT 0,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                thinking_tokens INTEGER DEFAULT 0,
+                total_tokens INTEGER DEFAULT 0,
+                total_cost REAL DEFAULT 0.0,
+                avg_duration_ms REAL DEFAULT 0.0,
+                has_tools_count INTEGER DEFAULT 0,
+                has_images_count INTEGER DEFAULT 0,
+                success_count INTEGER DEFAULT 0,
+                error_count INTEGER DEFAULT 0,
+                PRIMARY KEY (date, model)
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_comparison_stats (
+                date TEXT NOT NULL,
+                model_tier TEXT NOT NULL,  -- 'big', 'middle', 'small', 'free'
+                model TEXT NOT NULL,
+                cost_per_1k_tokens REAL DEFAULT 0.0,
+                tokens_per_request REAL DEFAULT 0.0,
+                avg_latency_ms REAL DEFAULT 0.0,
+                PRIMARY KEY (date, model_tier, model)
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS savings_tracking (
+                date TEXT NOT NULL,
+                original_model TEXT NOT NULL,
+                routed_model TEXT NOT NULL,
+                original_cost REAL DEFAULT 0.0,
+                actual_cost REAL DEFAULT 0.0,
+                savings REAL DEFAULT 0.0,
+                savings_percent REAL DEFAULT 0.0,
+                request_count INTEGER DEFAULT 1,
+                PRIMARY KEY (date, original_model, routed_model)
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS token_breakdown (
+                request_id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
+                reasoning_tokens INTEGER DEFAULT 0,
+                cached_tokens INTEGER DEFAULT 0,
+                tool_use_tokens INTEGER DEFAULT 0,
+                audio_tokens INTEGER DEFAULT 0,
+                total_tokens INTEGER DEFAULT 0
+            )
+        """)
+
         # Indexes for performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON api_requests(timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_model ON api_requests(routed_model)")
@@ -177,6 +243,12 @@ class UsageTracker:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON api_requests(status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_terminal_session ON terminal_output(session_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_terminal_timestamp ON terminal_output(timestamp)")
+
+        # New indexes for analytics
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON daily_model_stats(date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_stats_model ON daily_model_stats(model)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_savings_date ON savings_tracking(date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_token_breakdown_model ON token_breakdown(model)")
 
         conn.commit()
         conn.close()
@@ -205,7 +277,17 @@ class UsageTracker:
         has_json_content: bool = False,
         json_size_bytes: int = 0,
         request_content: Optional[str] = None,
-        response_content: Optional[str] = None
+        response_content: Optional[str] = None,
+        # Enhanced token breakdown for detailed analytics
+        prompt_tokens: Optional[int] = None,
+        completion_tokens: Optional[int] = None,
+        reasoning_tokens: Optional[int] = None,
+        cached_tokens: Optional[int] = None,
+        tool_use_tokens: Optional[int] = None,
+        audio_tokens: Optional[int] = None,
+        # Savings calculation
+        original_cost: Optional[float] = None,
+        model_tier: Optional[str] = None
     ) -> bool:
         """
         Log an API request.
@@ -297,6 +379,105 @@ class UsageTracker:
                     estimated_cost,
                     1 if has_json_content else 0,
                     json_size_bytes
+                ))
+
+            # ===== EXTENDED ANALYTICS LOGGING =====
+
+            # Get today's date for daily stats
+            today = datetime.utcnow().strftime('%Y-%m-%d')
+
+            # Update daily model stats
+            cursor.execute("""
+                INSERT INTO daily_model_stats (
+                    date, model, provider,
+                    request_count, input_tokens, output_tokens, thinking_tokens,
+                    total_tokens, total_cost, avg_duration_ms,
+                    has_tools_count, has_images_count, success_count, error_count
+                ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(date, model) DO UPDATE SET
+                    request_count = request_count + 1,
+                    input_tokens = input_tokens + excluded.input_tokens,
+                    output_tokens = output_tokens + excluded.output_tokens,
+                    thinking_tokens = thinking_tokens + excluded.thinking_tokens,
+                    total_tokens = total_tokens + excluded.total_tokens,
+                    total_cost = total_cost + excluded.total_cost,
+                    avg_duration_ms = (avg_duration_ms * request_count + excluded.avg_duration_ms) / (request_count + 1),
+                    has_tools_count = has_tools_count + excluded.has_tools_count,
+                    has_images_count = has_images_count + excluded.has_images_count,
+                    success_count = success_count + excluded.success_count,
+                    error_count = error_count + excluded.error_count
+            """, (
+                today, routed_model, provider,
+                input_tokens, output_tokens, thinking_tokens,
+                total_tokens, estimated_cost, duration_ms,
+                1 if has_tools else 0,
+                1 if has_images else 0,
+                1 if status == "success" else 0,
+                1 if status != "success" else 0
+            ))
+
+            # Update model comparison stats (if model tier is provided)
+            if model_tier:
+                # Calculate cost per 1K tokens
+                cost_per_1k = (estimated_cost / total_tokens * 1000) if total_tokens > 0 else 0.0
+                tokens_per_req = total_tokens
+                cursor.execute("""
+                    INSERT INTO model_comparison_stats (
+                        date, model_tier, model, cost_per_1k_tokens, tokens_per_request, avg_latency_ms
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(date, model_tier, model) DO UPDATE SET
+                        cost_per_1k_tokens = (cost_per_1k_tokens * request_count + excluded.cost_per_1k_tokens) / (request_count + 1),
+                        tokens_per_request = (tokens_per_request * request_count + excluded.tokens_per_request) / (request_count + 1),
+                        avg_latency_ms = (avg_latency_ms * request_count + excluded.avg_latency_ms) / (request_count + 1)
+                """, (today, model_tier, routed_model, cost_per_1k, tokens_per_req, duration_ms))
+
+            # Update savings tracking (if original cost is provided)
+            if original_cost is not None and original_cost > 0:
+                savings = original_cost - estimated_cost
+                savings_percent = (savings / original_cost * 100) if original_cost > 0 else 0.0
+                cursor.execute("""
+                    INSERT INTO savings_tracking (
+                        date, original_model, routed_model,
+                        original_cost, actual_cost, savings, savings_percent, request_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                    ON CONFLICT(date, original_model, routed_model) DO UPDATE SET
+                        original_cost = original_cost + excluded.original_cost,
+                        actual_cost = actual_cost + excluded.actual_cost,
+                        savings = savings + excluded.savings,
+                        savings_percent = (savings_percent * request_count + excluded.savings_percent) / (request_count + 1),
+                        request_count = request_count + 1
+                """, (today, original_model, routed_model, original_cost, estimated_cost, savings, savings_percent))
+
+            # Store detailed token breakdown (if provided)
+            if prompt_tokens is not None or completion_tokens is not None:
+                # Use the breakdown values or fall back to input/output tokens
+                p_tokens = prompt_tokens if prompt_tokens is not None else input_tokens
+                c_tokens = completion_tokens if completion_tokens is not None else output_tokens
+                r_tokens = reasoning_tokens if reasoning_tokens is not None else thinking_tokens
+
+                # Total tokens from breakdown (or use calculated total)
+                bd_total = (p_tokens or 0) + (c_tokens or 0) + (r_tokens or 0)
+                if bd_total == 0:
+                    bd_total = total_tokens
+
+                cursor.execute("""
+                    INSERT INTO token_breakdown (
+                        request_id, timestamp, model,
+                        prompt_tokens, completion_tokens, reasoning_tokens,
+                        cached_tokens, tool_use_tokens, audio_tokens, total_tokens
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(request_id) DO UPDATE SET
+                        prompt_tokens = excluded.prompt_tokens,
+                        completion_tokens = excluded.completion_tokens,
+                        reasoning_tokens = excluded.reasoning_tokens,
+                        cached_tokens = excluded.cached_tokens,
+                        tool_use_tokens = excluded.tool_use_tokens,
+                        audio_tokens = excluded.audio_tokens,
+                        total_tokens = excluded.total_tokens
+                """, (
+                    request_id, datetime.utcnow().isoformat(), routed_model,
+                    p_tokens or 0, c_tokens or 0, r_tokens or 0,
+                    cached_tokens or 0, tool_use_tokens or 0, audio_tokens or 0, bd_total
                 ))
 
             conn.commit()
@@ -578,6 +759,379 @@ class UsageTracker:
         except Exception as e:
             logger.error(f"Failed to export to JSON: {e}")
             return False
+
+    # ===== NEW ANALYTICS METHODS FOR VISUALIZATION =====
+
+    def get_time_series_data(self, days: int = 14) -> Dict[str, Any]:
+        """
+        Get time-series data for line charts and graphs.
+
+        Returns data points by date for:
+        - Total tokens per day
+        - Cost per day
+        - Request count per day
+        - Token breakdown per day
+        """
+        if not self.enabled:
+            return {"dates": [], "tokens": [], "cost": [], "requests": []}
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            # Get date range
+            since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+
+            # Get daily aggregates from the new daily_model_stats table
+            cursor.execute("""
+                SELECT
+                    date,
+                    SUM(total_tokens) as total_tokens,
+                    SUM(total_cost) as total_cost,
+                    SUM(request_count) as total_requests,
+                    SUM(input_tokens) as input_tokens,
+                    SUM(output_tokens) as output_tokens,
+                    SUM(thinking_tokens) as thinking_tokens,
+                    SUM(success_count) as success_count,
+                    SUM(error_count) as error_count
+                FROM daily_model_stats
+                WHERE date >= ?
+                GROUP BY date
+                ORDER BY date
+            """, (since,))
+
+            rows = cursor.fetchall()
+            conn.close()
+
+            result = {
+                "dates": [],
+                "tokens": [],
+                "cost": [],
+                "requests": [],
+                "token_breakdown": {
+                    "input": [],
+                    "output": [],
+                    "thinking": []
+                },
+                "success_rate": []
+            }
+
+            for row in rows:
+                result["dates"].append(row['date'])
+                result["tokens"].append(row['total_tokens'] or 0)
+                result["cost"].append(round(row['total_cost'] or 0, 4))
+                result["requests"].append(row['total_requests'] or 0)
+                result["token_breakdown"]["input"].append(row['input_tokens'] or 0)
+                result["token_breakdown"]["output"].append(row['output_tokens'] or 0)
+                result["token_breakdown"]["thinking"].append(row['thinking_tokens'] or 0)
+
+                total = (row['success_count'] or 0) + (row['error_count'] or 0)
+                success_rate = (row['success_count'] / total * 100) if total > 0 else 100
+                result["success_rate"].append(round(success_rate, 1))
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to get time series data: {e}")
+            return {"dates": [], "tokens": [], "cost": [], "requests": []}
+
+    def get_model_comparison(self, days: int = 14) -> List[Dict[str, Any]]:
+        """
+        Get comparative data for different models over time.
+
+        Returns stats by model including:
+        - Request count
+        - Average tokens per request
+        - Cost per 1K tokens
+        - Average latency
+        - Provider
+        """
+        if not self.enabled:
+            return []
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+
+            # Aggregate model performance data
+            cursor.execute("""
+                SELECT
+                    model,
+                    provider,
+                    SUM(request_count) as total_requests,
+                    AVG(total_tokens / NULLIF(request_count, 0)) as avg_tokens_per_request,
+                    AVG(total_cost / NULLIF(total_tokens, 0) * 1000) as avg_cost_per_1k_tokens,
+                    AVG(avg_duration_ms) as avg_duration_ms,
+                    SUM(has_tools_count) as tool_requests,
+                    SUM(has_images_count) as image_requests
+                FROM daily_model_stats
+                WHERE date >= ?
+                GROUP BY model, provider
+                HAVING total_requests > 0
+                ORDER BY total_requests DESC
+            """, (since,))
+
+            rows = cursor.fetchall()
+            conn.close()
+
+            result = []
+            for row in rows:
+                result.append({
+                    "model": row['model'],
+                    "provider": row['provider'],
+                    "total_requests": row['total_requests'],
+                    "avg_tokens_per_request": round(row['avg_tokens_per_request'] or 0, 0),
+                    "avg_cost_per_1k_tokens": round(row['avg_cost_per_1k_tokens'] or 0, 4),
+                    "avg_duration_ms": round(row['avg_duration_ms'] or 0, 1),
+                    "tool_requests": row['tool_requests'],
+                    "image_requests": row['image_requests']
+                })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to get model comparison: {e}")
+            return []
+
+    def get_savings_data(self, days: int = 14) -> List[Dict[str, Any]]:
+        """
+        Get savings achieved through smart routing.
+
+        Returns:
+            Total savings, savings by model pair, cost comparison
+        """
+        if not self.enabled:
+            return []
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+
+            cursor.execute("""
+                SELECT
+                    original_model,
+                    routed_model,
+                    SUM(request_count) as total_requests,
+                    SUM(original_cost) as total_original_cost,
+                    SUM(actual_cost) as total_actual_cost,
+                    SUM(savings) as total_savings,
+                    AVG(savings_percent) as avg_savings_percent
+                FROM savings_tracking
+                WHERE date >= ?
+                GROUP BY original_model, routed_model
+                ORDER BY total_savings DESC
+            """, (since,))
+
+            rows = cursor.fetchall()
+            conn.close()
+
+            result = []
+            for row in rows:
+                result.append({
+                    "original_model": row['original_model'],
+                    "routed_model": row['routed_model'],
+                    "request_count": row['total_requests'],
+                    "original_cost": round(row['total_original_cost'] or 0, 4),
+                    "actual_cost": round(row['total_actual_cost'] or 0, 4),
+                    "total_savings": round(row['total_savings'] or 0, 4),
+                    "avg_savings_percent": round(row['avg_savings_percent'] or 0, 1)
+                })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to get savings data: {e}")
+            return []
+
+    def get_token_breakdown_stats(self, days: int = 14) -> Dict[str, Any]:
+        """
+        Get detailed token breakdown statistics.
+
+        Returns percentages of:
+        - Prompt tokens
+        - Completion tokens
+        - Reasoning tokens
+        - Cached tokens
+        - Tool use tokens
+        - Audio tokens
+        """
+        if not self.enabled:
+            return {}
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+
+            cursor.execute("""
+                SELECT
+                    SUM(prompt_tokens) as total_prompt,
+                    SUM(completion_tokens) as total_completion,
+                    SUM(reasoning_tokens) as total_reasoning,
+                    SUM(cached_tokens) as total_cached,
+                    SUM(tool_use_tokens) as total_tool_use,
+                    SUM(audio_tokens) as total_audio,
+                    SUM(total_tokens) as total_tokens,
+                    COUNT(*) as request_count
+                FROM token_breakdown
+                WHERE timestamp >= ?
+            """, (since,))
+
+            row = cursor.fetchone()
+            conn.close()
+
+            if not row or not row[7]:  # No requests
+                return {}
+
+            total = row[6] or 0
+            if total == 0:
+                return {}
+
+            return {
+                "total_tokens": total,
+                "request_count": row[7],
+                "prompt": {
+                    "absolute": row[0] or 0,
+                    "percentage": round((row[0] or 0) / total * 100, 1)
+                },
+                "completion": {
+                    "absolute": row[1] or 0,
+                    "percentage": round((row[1] or 0) / total * 100, 1)
+                },
+                "reasoning": {
+                    "absolute": row[2] or 0,
+                    "percentage": round((row[2] or 0) / total * 100, 1)
+                },
+                "cached": {
+                    "absolute": row[3] or 0,
+                    "percentage": round((row[3] or 0) / total * 100, 1)
+                },
+                "tool_use": {
+                    "absolute": row[4] or 0,
+                    "percentage": round((row[4] or 0) / total * 100, 1)
+                },
+                "audio": {
+                    "absolute": row[5] or 0,
+                    "percentage": round((row[5] or 0) / total * 100, 1)
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get token breakdown: {e}")
+            return {}
+
+    def get_provider_stats(self, days: int = 14) -> List[Dict[str, Any]]:
+        """
+        Get provider-level statistics.
+
+        Shows which providers are being used and their cost efficiency.
+        """
+        if not self.enabled:
+            return []
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+
+            cursor.execute("""
+                SELECT
+                    provider,
+                    SUM(request_count) as total_requests,
+                    SUM(total_tokens) as total_tokens,
+                    SUM(total_cost) as total_cost,
+                    AVG(avg_duration_ms) as avg_duration_ms,
+                    SUM(has_tools_count) as tool_requests
+                FROM daily_model_stats
+                WHERE date >= ? AND provider IS NOT NULL
+                GROUP BY provider
+                ORDER BY total_cost DESC
+            """, (since,))
+
+            rows = cursor.fetchall()
+            conn.close()
+
+            result = []
+            for row in rows:
+                tokens = row['total_tokens'] or 0
+                result.append({
+                    "provider": row['provider'],
+                    "total_requests": row['total_requests'],
+                    "total_tokens": tokens,
+                    "total_cost": round(row['total_cost'] or 0, 4),
+                    "avg_cost_per_1k_tokens": round((row['total_cost'] or 0) / tokens * 1000 if tokens > 0 else 0, 4),
+                    "avg_duration_ms": round(row['avg_duration_ms'] or 0, 1),
+                    "tool_requests": row['tool_requests']
+                })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to get provider stats: {e}")
+            return []
+
+    def get_dashboard_summary(self, days: int = 7) -> Dict[str, Any]:
+        """
+        Get comprehensive dashboard summary with all visualization data.
+
+        Combines all analytics into one call for efficient dashboard rendering.
+        """
+        if not self.enabled:
+            return {}
+
+        try:
+            # Get time series data
+            time_series = self.get_time_series_data(days)
+
+            # Get model comparison
+            models = self.get_model_comparison(days)
+
+            # Get savings data
+            savings = self.get_savings_data(days)
+
+            # Get token breakdown
+            token_stats = self.get_token_breakdown_stats(days)
+
+            # Get provider stats
+            providers = self.get_provider_stats(days)
+
+            # Get overall stats
+            overall = self.get_cost_summary(days)
+
+            # Calculate additional metrics
+            total_savings = sum(s['total_savings'] for s in savings)
+            avg_savings_percent = sum(s['avg_savings_percent'] for s in savings) / len(savings) if savings else 0
+
+            return {
+                "summary": {
+                    "total_requests": overall.get('total_requests', 0),
+                    "total_tokens": overall.get('total_tokens', 0),
+                    "total_cost": overall.get('total_cost', 0),
+                    "avg_latency_ms": overall.get('avg_duration_ms', 0),
+                    "total_savings": round(total_savings, 4),
+                    "avg_savings_percent": round(avg_savings_percent, 1),
+                    "days": days
+                },
+                "time_series": time_series,
+                "models": models,
+                "savings": savings,
+                "token_breakdown": token_stats,
+                "providers": providers
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get dashboard summary: {e}")
+            return {}
 
 
 # Global instance

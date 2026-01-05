@@ -1,0 +1,46 @@
+# Crosstalk Jinja Template Assets
+# Manifest of available message formatting templates
+
+templates:
+  - name: basic
+    file: basic.j2
+    description: "Pass-through (no modification)"
+    variables: ["message"]
+    
+  - name: cli-explorer
+    file: cli-explorer.j2
+    description: "Backrooms-style CLI terminal framing"
+    variables: ["message", "round", "model"]
+    
+  - name: philosopher
+    file: philosopher.j2
+    description: "Socratic dialogue framing"
+    variables: ["message", "round", "previous_model"]
+    
+  - name: dreamer
+    file: dreamer.j2
+    description: "Liminal consciousness framing"
+    variables: ["message", "round", "previous_model"]
+    
+  - name: scientist
+    file: scientist.j2
+    description: "Hypothesis exchange protocol"
+    variables: ["message", "round", "previous_model"]
+    
+  - name: storyteller
+    file: storyteller.j2
+    description: "Narrative continuation framing"
+    variables: ["message", "round"]
+    
+  - name: debate
+    file: debate.j2
+    description: "Structured argumentation framing"
+    variables: ["message", "round", "previous_model"]
+
+# Available variables that can be used in templates:
+# - message: The incoming message content
+# - round: Current round number
+# - model: Current model ID
+# - previous_model: Model that sent the message
+# - slot_id: Current slot number
+# - total_rounds: Total rounds configured

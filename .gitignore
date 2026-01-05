@@ -183,7 +183,6 @@ configs/profiles/
 data/
 
 # Documentation
-docs/
 
 # Logs
 lazybitch.md
@@ -309,4 +308,5 @@ TROUBLESHOOTING.md
 .cursor/rules/byterover-rules.mdc
 .kiro/steering/byterover-rules.md
 .qoder/rules/byterover-rules.md
-.augment/rules/byterover-rules.md
+.augment/rules/byterover-rules.md.build-artifacts/
+!web-ui/src/lib/

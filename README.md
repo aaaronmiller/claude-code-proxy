@@ -1,191 +1,207 @@
 <div align="center">
 
-# 🔄 Claude Code Proxy
+<img src="web-ui/static/logo.png" alt="The Ultimate Proxy" width="120">
 
-**Use Claude Code CLI with any OpenAI-compatible provider**
+# ⚡ The Ultimate Proxy
+
+**The only proxy you need for Claude Code CLI**
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![2025 Ready](https://img.shields.io/badge/2025-Ready-06ffd4.svg)](#)
 
-[Quick Start](#-quick-start) • [Features](#-features) • [Configuration](docs/getting-started/configuration.md) • [Examples](docs/guides/examples.md)
+[Quick Start](#-quick-start) • [Features](#-features) • [Web Dashboard](#-web-dashboard) • [Crosstalk](docs/crosstalk.md)
+
+<br>
+
+<img src="web-ui/static/hero-banner.png" alt="The Ultimate Proxy Dashboard" width="800">
+
+**Route Claude Code to any provider. Save 90% on API costs. Run locally for free.**
 
 </div>
 
 ---
 
-## 📖 What It Does
+## 🌟 What Is It?
 
-Claude Code Proxy sits between Claude Code CLI and your chosen API provider. It tricks Claude Code into thinking it's talking to Anthropic, but routes requests to **OpenRouter, Gemini, OpenAI, Azure, Ollama, or LM Studio**.
+The Ultimate Proxy sits between Claude Code CLI and your chosen API provider. It translates Anthropic's API format to OpenAI-compatible format, letting you use **any model** with Claude Code:
 
-**Why?** Save money, run locally, or use models like GPT-5/o1/Gemini 3/Claude via Antigravity.
-
----
-
-## 🌌 VibeProxy + Antigravity (Recommended)
-
-The easiest way to use Claude Code with premium models for **free** (no API keys needed):
-
-1. **Install VibeProxy**: [Download from releases](https://github.com/automazeio/vibeproxy/releases)
-2. **Authenticate**: Launch VibeProxy and sign in with Google (Antigravity OAuth)
-3. **Setup Proxy**:
-   ```bash
-   python start_proxy.py --setup  # Select "VibeProxy/Antigravity"
-   ```
-
-**What you get:**
-- Claude Opus 4.5 with 128k thinking tokens
-- Gemini 3 Pro/Flash
-- BIG/MIDDLE/SMALL model routing
-- Usage tracking and analytics
-- No API keys or billing required
-
-[Learn more about Antigravity models →](config/env.example#L339)
+```
+Claude Code CLI  →  The Ultimate Proxy  →  Any Provider
+                                           ├─ OpenRouter
+                                           ├─ Gemini / VibeProxy
+                                           ├─ OpenAI
+                                           ├─ Azure
+                                           ├─ Ollama (local)
+                                           └─ LM Studio (local)
+```
 
 ---
 
 ## 🚀 Quick Start
 
-1. **Clone and Install**
-   ```bash
-   git clone https://github.com/aaaronmiller/claude-code-proxy.git
-   cd claude-code-proxy
-   uv sync
-   ```
+```bash
+# Clone & install
+git clone https://github.com/aaaronmiller/the-ultimate-proxy.git
+cd the-ultimate-proxy
+uv sync
 
-2. **Setup**
-   Run the interactive setup wizard to configure your provider and models:
-   ```bash
-   python start_proxy.py --setup
-   ```
+# Interactive setup wizard
+python start_proxy.py --setup
 
-3. **Start Proxy**
-   ```bash
-   python start_proxy.py
-   ```
-
-4. **Connect Claude Code**
-   In a separate terminal:
-   ```bash
-   export ANTHROPIC_BASE_URL=http://localhost:8082
-   claude
-   ```
-
-## 📂 Project Structure
-
-The repository is organized for clarity and ease of use:
-
-- **`start_proxy.py`**: The single entry point for the server and all CLI tools.
-- **`config/`**: Configuration templates and presets.
-- **`data/`**: Runtime data (databases, logs, usage stats).
-- **`deploy/`**: Deployment configurations (Docker, etc.).
-- **`docs/`**: Comprehensive documentation.
-- **`dev/scripts/`**: Developer and maintenance scripts.
-- **`src/`**: Source code.
-
-## 🛠️ CLI Tools
-
-All tools are accessible via `start_proxy.py`:
-
-- **Setup Wizard**: `python start_proxy.py --setup`
-- **Configure Prompts**: `python start_proxy.py --configure-prompts`
-- **Configure Terminal**: `python start_proxy.py --configure-terminal`
-- **Configure Dashboard**: `python start_proxy.py --configure-dashboard`
-- **View Analytics**: `python start_proxy.py --analytics`
-- **Select Models**: `python start_proxy.py --select-models`
-
----
-
-## 🌐 Web Configuration UI
-
-Access the web dashboard at `http://localhost:8082` when the proxy is running.
-
-**Features:**
-- **Provider Presets**: One-click setup for VibeProxy, OpenRouter, Gemini, OpenAI, Ollama, LM Studio
-- **Model Configuration**: Set BIG/MIDDLE/SMALL model routing with reasoning settings
-- **Hybrid Mode**: Route different model tiers to different providers
-- **Terminal Settings**: Configure display mode, colors, metrics visibility
-- **Profile Management**: Save and load configuration profiles
-- **Live Monitoring**: Real-time request stats and WebSocket log streaming
-
-The UI features a cyberpunk terminal theme with neon accents and supports all configuration options.
-
----
-
-## 🧩 How It Works
-
-```mermaid
-graph LR
-    A[Claude Code CLI] -->|Claude API Format| B(Proxy)
-    B -->|OpenAI API Format| C{Provider}
-    C -->|OpenAI Response| B
-    B -->|Claude Response| A
-
-    subgraph Providers
-    C --> D[OpenRouter]
-    C --> E[Gemini]
-    C --> F[Local / Ollama]
-    C --> G[VibeProxy / Antigravity]
-    end
+# Start the proxy
+python start_proxy.py
 ```
+
+Then in another terminal:
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:8082
+claude
+```
+
+---
+
+## 🌌 VibeProxy + Antigravity (Free Premium Models)
+
+The easiest way to use Claude Code with premium models for **free**:
+
+1. **Install VibeProxy**: [Download](https://github.com/automazeio/vibeproxy/releases)
+2. **Authenticate**: Sign in with Google (Antigravity OAuth)
+3. **Setup**: `python start_proxy.py --setup` → Select "VibeProxy/Antigravity"
+
+**What you get:**
+- 🧠 Claude Opus 4.5 with 128k thinking tokens
+- ⚡ Gemini 3 Pro/Flash
+- 📊 BIG/MIDDLE/SMALL model routing
+- 📈 Usage tracking & analytics
+- 💸 No API keys or billing required
 
 ---
 
 ## ✨ Features
 
-- **🌌 Antigravity Support**: Access Claude Opus/Sonnet via Google's Antigravity service (free with OAuth).
-- **💰 Cost Savings**: Use free models (Gemini Flash, OpenRouter free tier) or cheaper alternatives.
-- **🏠 Local Privacy**: Run 100% offline with Ollama or LM Studio.
-- **🧠 Extended Thinking**: Enable up to 128k thinking tokens for reasoning models (Claude, o1, Gemini).
-- **🌐 Web Dashboard**: Browser-based configuration UI with cyberpunk terminal theme.
-- **📊 Terminal Dashboard**: Live request monitoring and metrics.
-- **🔀 Hybrid Routing**: Route simple tasks to cheap models and complex tasks to smart models.
-- **✏️ Custom Prompts**: Inject custom system prompts for different model tiers.
+| Feature | Description |
+|---------|-------------|
+| **Multi-Provider** | OpenRouter, Gemini, OpenAI, Azure, Ollama, LM Studio |
+| **Model Routing** | BIG/MIDDLE/SMALL tiers with intelligent routing |
+| **Web Dashboard** | Real-time monitoring with 2025 glassmorphism UI |
+| **Crosstalk** | Model-to-model conversations (up to 8 models) |
+| **Usage Tracking** | Cost analytics and token metrics |
+| **Extended Thinking** | Up to 128k thinking tokens for reasoning models |
+| **Prompt Injection** | Add custom prompts showing routing info |
+| **Model Cascade** | Automatic fallback on provider errors |
 
 ---
 
-## 📚 Documentation
+## 🎨 Web Dashboard
 
-- **[Configuration Guide](docs/getting-started/configuration.md)** - Full list of environment variables.
-- **[Examples](docs/guides/examples.md)** - Recipes for different setups (Free, Local, Power User).
-- **[Troubleshooting](docs/troubleshooting/common-issues.md)** - Solutions for common problems.
-- **[API Reference](docs/api/reference.md)** - For developers.
+Access at `http://localhost:8082` when running.
+
+- **2025 Glassmorphism UI** with aurora gradients
+- Real-time request monitoring
+- Provider configuration
+- Model selection with hybrid routing
+- WebSocket live log streaming
+- Profile management
 
 ---
 
-## 🐛 Common Issues
+## 🗣️ Crosstalk
 
-**401 User Not Found (OpenRouter)**
-You likely have a negative balance or $0.00 credit. OpenRouter requires a positive balance even for free models.
-[Read more](docs/troubleshooting/401-errors.md)
+Multi-model conversations where AI models talk to each other:
 
-**Connection Refused**
-Make sure `python start_proxy.py` is running in a separate terminal window.
+```bash
+# Launch visual TUI
+python start_proxy.py --crosstalk-studio
+
+# Quick setup
+python start_proxy.py --crosstalk "claude-opus,gemini-pro" --topic "Explore consciousness"
+```
+
+**Features:**
+- Up to 8 models in a conversation
+- Multiple paradigms: relay, debate, memory, report
+- Jinja templates for message formatting
+- Backrooms-compatible import/export
+- MCP integration for programmatic access
+
+[Read the Crosstalk Guide →](CROSSTALK.md)
+
+---
+
+## 🛠️ CLI Commands
+
+```bash
+# Configuration
+python start_proxy.py --setup           # First-time wizard
+python start_proxy.py --settings        # Unified settings TUI
+python start_proxy.py --doctor          # Health check + auto-fix
+
+# Model management
+python start_proxy.py --select-models   # Interactive model selector
+python start_proxy.py --set-big MODEL   # Quick set BIG model
+python start_proxy.py --show-models     # List available models
+
+# Diagnostics
+python start_proxy.py --config          # Show configuration
+python start_proxy.py --dry-run         # Validate without starting
+python start_proxy.py --analytics       # View usage stats
+```
+
+---
+
+## 📁 Project Structure
+
+```
+the-ultimate-proxy/
+├── start_proxy.py          # Main entry point
+├── .env                    # Configuration
+├── CROSSTALK.md           # Multi-model chat docs
+│
+├── src/
+│   ├── core/              # Proxy core logic
+│   ├── api/               # FastAPI routes + WebSocket
+│   ├── services/          # Providers, models, prompts
+│   └── cli/               # CLI tools and TUIs
+│
+├── configs/crosstalk/     # Crosstalk presets & templates
+├── web-ui/                # Svelte + bits-ui dashboard
+└── docs/                  # Extended documentation
+```
+
+---
+
+## 🐛 Troubleshooting
+
+**401 Unauthorized**
+```bash
+python start_proxy.py --doctor  # Auto-fix API keys
+```
 
 **Model Not Found**
-Check your `BIG_MODEL`, `MIDDLE_MODEL`, and `SMALL_MODEL` settings in `.env`.
+```bash
+python start_proxy.py --show-models  # List available models
+```
+
+**Connection Refused**
+- Ensure proxy is running: `python start_proxy.py`
+- Check port 8082 is not in use
 
 ---
 
-## 🔮 Potential Future Additions
+## 🔮 Roadmap
 
-1. **Desktop GUI Client (Electron/Tauri)**
-   - System tray integration, global hotkeys, and a native chat experience.
-   - *Tech*: Tauri (Rust + React) for lightweight performance.
-
-2. **Advanced Analytics Platform**
-   - Aggregate usage data from multiple proxy instances for teams.
-   - *Tech*: Postgres, Grafana/Metabase, separate FastAPI service.
-
-3. **Multi-Agent Orchestrator ("Swarm Mode")**
-   - Extend Crosstalk to support complex, multi-step workflows where specialist models collaborate autonomously.
-   - *Tech*: LangGraph or custom orchestration layer.
-
-4. **MCP Server Integration**
-   - Expose the proxy as an MCP Server, allowing Claude Desktop to use it as a tool for routing requests to alternative providers.
-   - *Tech*: Model Context Protocol SDK.
+- [ ] Desktop GUI (Tauri)
+- [ ] Multi-instance analytics
+- [ ] MCP Server integration
+- [ ] Multi-agent orchestration ("Swarm Mode")
 
 ---
 
 <div align="center">
-Made with ❤️ for the Claude Code community
+
+**The Ultimate Proxy** • Made with ❤️ for the Claude Code community
+
+[Report Bug](https://github.com/aaaronmiller/the-ultimate-proxy/issues) • [Request Feature](https://github.com/aaaronmiller/the-ultimate-proxy/issues)
+
 </div>

@@ -80,6 +80,34 @@ PROVIDER_CONFIGS = {
         },
         "skip_reason": "Requires OpenRouter privacy settings (https://openrouter.ai/settings/privacy)",
     },
+    # OpenRouter mimo-v2-flash - Xiaomi's fast free model with tool support
+    "openrouter-mimo": {
+        "big": "xiaomi/mimo-v2-flash:free",          # Mimo V2 Flash free
+        "small": "xiaomi/mimo-v2-flash:free",        # Same for tool calls
+        "timeout": 45,                               # Allow more time for free tier
+        "base_url": PROXY_URL,                       # Via proxy to handle conversion
+        "api_key": "pass",
+    },
+    # OpenRouter mimo-v2-flash via direct OpenRouter API
+    "openrouter-mimo-direct": {
+        "big": "xiaomi/mimo-v2-flash:free",
+        "small": "xiaomi/mimo-v2-flash:free",
+        "timeout": 45,
+        "base_url": OPENROUTER_URL,
+        "api_key": os.environ.get("OPENROUTER_API_KEY", ""),
+        "headers_extra": {
+            "HTTP-Referer": "https://github.com/anthropics/claude-code",
+            "X-Title": "claude-code-proxy-test",
+        },
+    },
+    # OpenRouter Kimi-K2 - Moonshot's large free model
+    "openrouter-kimi": {
+        "big": "moonshotai/kimi-k2:free",            # Kimi K2 free (very capable)
+        "small": "moonshotai/kimi-k2:free",          # Same for tools
+        "timeout": 60,                               # Large model needs more time
+        "base_url": PROXY_URL,
+        "api_key": "pass",
+    },
     # Hybrid: VibeProxy big model + Gemini Flash for tools
     "hybrid-sonnet-flash": {
         "big": "gemini-claude-sonnet-4-5-thinking",  # VibeProxy Sonnet thinking for main

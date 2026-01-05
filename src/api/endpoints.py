@@ -653,16 +653,66 @@ async def create_message(
                 import json as json_module
                 req_content = json_module.dumps(request.model_dump()) if hasattr(request, 'model_dump') else str(request)
                 resp_content = json_module.dumps(openai_response) if openai_response else None
-                
+
+                # Extract detailed token breakdown if available
+                completion_details = usage.get("completion_tokens_details", {})
+                prompt_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+                completion_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0))
+                reasoning_tokens = usage.get("reasoning_tokens", 0) or completion_details.get("reasoning_tokens", 0)
+                cached_tokens = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if isinstance(usage.get("prompt_tokens_details"), dict) else 0
+                audio_tokens = usage.get("completion_tokens_details", {}).get("audio_tokens", 0) if isinstance(usage.get("completion_tokens_details"), dict) else 0
+
+                # Detect if this was a tool call request
+                tool_use_tokens = 0
+                # Try to detect from response or request
+                if openai_response and isinstance(openai_response, dict):
+                    choices = openai_response.get("choices", [])
+                    if choices and isinstance(choices[0], dict):
+                        message = choices[0].get("message", {})
+                        if message.get("tool_calls"):
+                            tool_use_tokens = completion_tokens * 0.3  # Estimate
+
+                # Calculate original cost (what it would have been without smart routing)
+                # This requires knowing what model we "should have" used
+                original_cost = None
+                original_model = request.model
+
+                # For savings calculation, we need to compare against what would have been used
+                # If this was a routing decision, the original_model tells us what was requested
+                if routed_model != original_model:
+                    try:
+                        from src.services.usage.cost_calculator import calculate_cost, get_model_pricing
+                        original_pricing = get_model_pricing(original_model)
+                        if original_pricing:
+                            original_cost = calculate_cost(usage, original_model)
+                    except:
+                        pass
+
+                # Determine model tier for comparison stats
+                # Simple tier detection based on model names and pricing
+                model_tier = None
+                if "free" in routed_model or "mini" in routed_model.lower() or "flash" in routed_model.lower():
+                    model_tier = "small"
+                elif "sonnet" in routed_model.lower() or "medium" in routed_model.lower() or "turbo" in routed_model.lower():
+                    model_tier = "middle"
+                elif "opus" in routed_model.lower() or "large" in routed_model.lower() or "4.5" in routed_model.lower():
+                    model_tier = "big"
+                elif "gpt-4o" in routed_model.lower() and "mini" not in routed_model.lower():
+                    model_tier = "middle"
+
+                # Check if it's a free model
+                if get_model_pricing(routed_model) == (0.0, 0.0):
+                    model_tier = "free"
+
                 usage_tracker.log_request(
                     request_id=request_id,
                     original_model=request.model,
                     routed_model=routed_model,
                     provider=provider,
                     endpoint=endpoint,
-                    input_tokens=usage.get("input_tokens", usage.get("prompt_tokens", 0)),
-                    output_tokens=usage.get("output_tokens", usage.get("completion_tokens", 0)),
-                    thinking_tokens=usage.get("thinking_tokens", 0),
+                    input_tokens=prompt_tokens,
+                    output_tokens=completion_tokens,
+                    thinking_tokens=reasoning_tokens,
                     duration_ms=duration_ms,
                     estimated_cost=estimated_cost,
                     stream=request.stream,
@@ -676,7 +726,16 @@ async def create_message(
                     has_json_content=has_json_content,
                     json_size_bytes=json_size_bytes,
                     request_content=req_content,
-                    response_content=resp_content
+                    response_content=resp_content,
+                    # Extended parameters for detailed analytics
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    reasoning_tokens=reasoning_tokens,
+                    cached_tokens=cached_tokens,
+                    tool_use_tokens=tool_use_tokens,
+                    audio_tokens=audio_tokens,
+                    original_cost=original_cost,
+                    model_tier=model_tier
                 )
 
             claude_response = convert_openai_to_claude_response(

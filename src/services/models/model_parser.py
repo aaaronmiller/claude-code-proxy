@@ -154,12 +154,14 @@ def parse_model_name(model_name: str) -> ParsedModel:
     reasoning_type = _detect_reasoning_type(base_model, suffix)
     
     if not reasoning_type:
-        logger.warning(
+        # If no reasoning type detected, the suffix may be part of the model ID
+        # (e.g., OpenRouter's `:free` suffix). Preserve the full original model name.
+        logger.debug(
             f"Model {base_model} does not support reasoning parameters. "
-            f"Suffix '{suffix}' will be ignored."
+            f"Suffix '{suffix}' preserved as part of model ID."
         )
         return ParsedModel(
-            base_model=base_model,
+            base_model=model_name,  # Use FULL model name (with suffix)
             reasoning_type=None,
             reasoning_value=None,
             original_model=model_name

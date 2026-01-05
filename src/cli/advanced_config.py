@@ -13,72 +13,18 @@ from rich.prompt import Prompt, Confirm
 from rich.table import Table
 from rich import box
 
+# Import shared env utility
+from src.cli.env_utils import update_env_values
+
 console = Console()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ENV FILE MANAGEMENT
+# ENV FILE MANAGEMENT (using shared utility)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def update_env_file(updates: Dict[str, Optional[str]]):
-    """
-    Update .env file with new values.
-    If value is None, the key is commented out/removed (disabled).
-    """
-    env_path = ".env"
-    if not os.path.exists(env_path):
-        # Create new if doesn't exist
-        with open(env_path, "w") as f:
-            f.write("# Claude Code Proxy Configuration\n")
-            
-    with open(env_path, "r") as f:
-        lines = f.readlines()
-        
-    new_lines = []
-    processed_keys = set()
-    
-    # Process existing lines
-    for line in lines:
-        line_stripped = line.strip()
-        # Skip comments or empty lines
-        if not line_stripped or line_stripped.startswith("#"):
-            new_lines.append(line)
-            continue
-            
-        # Parse KEY=VALUE
-        if "=" in line_stripped:
-            key = line_stripped.split("=", 1)[0].strip()
-            # Handle export prefix if present
-            clean_key = key.replace("export ", "")
-            
-            if clean_key in updates:
-                new_val = updates[clean_key]
-                processed_keys.add(clean_key)
-                if new_val is None:
-                    # Disable/Remove: Comment it out
-                    new_lines.append(f"# {line_stripped} # Disabled by Advanced Config\n")
-                else:
-                    # Update
-                    prefix = "export " if key.startswith("export") else ""
-                    new_lines.append(f"{prefix}{clean_key}={new_val}\n")
-            else:
-                # Keep unchanged
-                new_lines.append(line)
-        else:
-            new_lines.append(line)
-            
-    # Append new keys
-    added_any = False
-    for key, val in updates.items():
-        if key not in processed_keys and val is not None:
-            if not added_any and new_lines and new_lines[-1].strip():
-                new_lines.append("\n")
-            new_lines.append(f"export {key}={val}\n")
-            added_any = True
-            
-    with open(env_path, "w") as f:
-        f.writelines(new_lines)
-    
-    console.print(f"\n[green]✓[/] Updated [cyan]{env_path}[/]")
+    """Wrapper for shared utility for backward compatibility."""
+    return update_env_values(updates, verbose=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MENUS

@@ -34,10 +34,100 @@ console = Console()
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 PRESETS_DIR = PROJECT_ROOT / "configs" / "crosstalk" / "presets"
 SESSIONS_DIR = PROJECT_ROOT / "configs" / "crosstalk" / "sessions"
+PROMPTS_DIR = PROJECT_ROOT / "configs" / "crosstalk" / "prompts"
+TEMPLATES_DIR = PROJECT_ROOT / "configs" / "crosstalk" / "templates"
 
 # Ensure directories exist
-for d in [PRESETS_DIR, SESSIONS_DIR]:
+for d in [PRESETS_DIR, SESSIONS_DIR, PROMPTS_DIR, TEMPLATES_DIR]:
     d.mkdir(parents=True, exist_ok=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROMPT & TEMPLATE LOADING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def load_prompt_manifest() -> Dict[str, Any]:
+    """Load the prompts manifest.yaml file."""
+    manifest_path = PROMPTS_DIR / "manifest.yaml"
+    if manifest_path.exists():
+        import yaml
+        with open(manifest_path) as f:
+            return yaml.safe_load(f) or {}
+    return {"prompts": []}
+
+
+def load_template_manifest() -> Dict[str, Any]:
+    """Load the templates manifest.yaml file."""
+    manifest_path = TEMPLATES_DIR / "manifest.yaml"
+    if manifest_path.exists():
+        import yaml
+        with open(manifest_path) as f:
+            return yaml.safe_load(f) or {}
+    return {"templates": []}
+
+
+def get_prompt_content(prompt_name: str) -> Optional[str]:
+    """
+    Load a system prompt by name from the prompts directory.
+    
+    Args:
+        prompt_name: Name of the prompt (without .md extension)
+        
+    Returns:
+        Prompt content as string, or None if not found
+    """
+    # Try direct file path first
+    prompt_file = PROMPTS_DIR / f"{prompt_name}.md"
+    if prompt_file.exists():
+        return prompt_file.read_text()
+    
+    # Check manifest for custom file mapping
+    manifest = load_prompt_manifest()
+    for p in manifest.get("prompts", []):
+        if p.get("name") == prompt_name:
+            file_path = PROMPTS_DIR / p.get("file", f"{prompt_name}.md")
+            if file_path.exists():
+                return file_path.read_text()
+    
+    return None
+
+
+def get_template_content(template_name: str) -> Optional[str]:
+    """
+    Load a Jinja template by name from the templates directory.
+    
+    Args:
+        template_name: Name of the template (without .j2 extension)
+        
+    Returns:
+        Template content as string, or None if not found
+    """
+    # Try direct file path first
+    template_file = TEMPLATES_DIR / f"{template_name}.j2"
+    if template_file.exists():
+        return template_file.read_text()
+    
+    # Check manifest for custom file mapping
+    manifest = load_template_manifest()
+    for t in manifest.get("templates", []):
+        if t.get("name") == template_name:
+            file_path = TEMPLATES_DIR / t.get("file", f"{template_name}.j2")
+            if file_path.exists():
+                return file_path.read_text()
+    
+    return None
+
+
+def list_available_prompts() -> List[Dict[str, str]]:
+    """List all available prompts from the manifest."""
+    manifest = load_prompt_manifest()
+    return manifest.get("prompts", [])
+
+
+def list_available_templates() -> List[Dict[str, str]]:
+    """List all available templates from the manifest."""
+    manifest = load_template_manifest()
+    return manifest.get("templates", [])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

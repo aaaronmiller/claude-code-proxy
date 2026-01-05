@@ -156,6 +156,76 @@ async def handle_list_tools() -> List[Tool]:
                 "type": "object",
                 "properties": {}
             }
+        ),
+        Tool(
+            name="crosstalk_run_from_config",
+            description="Run a complete crosstalk session from a full JSON configuration. Supports all advanced features: topologies, jinja templates, stop conditions, named prompts.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "description": "Full crosstalk configuration matching schema.json format. See configs/crosstalk/schema.json for complete schema.",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "models": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "model_id": {"type": "string"},
+                                        "system_prompt_file": {"type": "string"},
+                                        "system_prompt_inline": {"type": "string"},
+                                        "jinja_template": {"type": "string"},
+                                        "temperature": {"type": "number"},
+                                        "max_tokens": {"type": "integer"}
+                                    },
+                                    "required": ["model_id"]
+                                }
+                            },
+                            "paradigm": {"type": "string", "enum": ["relay", "memory", "debate", "report"]},
+                            "rounds": {"type": "integer"},
+                            "initial_prompt": {"type": "string"},
+                            "topology": {"type": "object"},
+                            "stop_conditions": {"type": "object"},
+                            "infinite": {"type": "boolean"}
+                        },
+                        "required": ["models"]
+                    }
+                },
+                "required": ["config"]
+            }
+        ),
+        Tool(
+            name="list_prompts",
+            description="List all available system prompts from the prompts directory",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="list_templates",
+            description="List all available Jinja templates from the templates directory",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="get_prompt",
+            description="Get the content of a specific system prompt by name",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the prompt (without .md extension)",
+                        "example": "backrooms-explorer"
+                    }
+                },
+                "required": ["name"]
+            }
         )
     ]
 
@@ -180,6 +250,14 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[TextCon
             return await _handle_load_system_prompt(arguments)
         elif name == "crosstalk_health":
             return await _handle_crosstalk_health(arguments)
+        elif name == "crosstalk_run_from_config":
+            return await _handle_crosstalk_run_from_config(arguments)
+        elif name == "list_prompts":
+            return await _handle_list_prompts(arguments)
+        elif name == "list_templates":
+            return await _handle_list_templates(arguments)
+        elif name == "get_prompt":
+            return await _handle_get_prompt(arguments)
         else:
             return [TextContent(
                 type="text",
@@ -398,6 +476,141 @@ Status: {'✅ All systems operational' if orchestrator_status == '✅ Healthy' e
             type="text",
             text=f"❌ Health check failed: {str(e)}"
         )]
+
+
+async def _handle_crosstalk_run_from_config(arguments: Dict[str, Any]) -> List[TextContent]:
+    """Handle running a crosstalk session from a full JSON configuration."""
+    config_data = arguments.get("config")
+    if not config_data:
+        return [TextContent(type="text", text="❌ Error: config parameter is required")]
+    
+    try:
+        # Import the runner
+        from src.cli.crosstalk_runner import run_from_config, get_prompt_content
+        
+        # Resolve named prompts to inline content
+        for model in config_data.get("models", []):
+            if model.get("system_prompt_file") and not model.get("system_prompt_inline"):
+                prompt_content = get_prompt_content(model["system_prompt_file"])
+                if prompt_content:
+                    model["system_prompt_inline"] = prompt_content
+        
+        # Run the session
+        import time
+        start_time = time.time()
+        result = await run_from_config(config_data)
+        duration = time.time() - start_time
+        
+        if result.get("status") == "completed":
+            transcript = result.get("transcript", [])
+            output_file = result.get("output_file", "")
+            
+            response = f"""✅ Crosstalk session completed!
+
+Duration: {duration:.2f} seconds
+Messages: {len(transcript)}
+Output File: {output_file}
+
+{'='*60}
+CONVERSATION TRANSCRIPT
+{'='*60}
+"""
+            for i, msg in enumerate(transcript):
+                role = msg.get("role", "unknown")
+                model_id = msg.get("model_id", "unknown")
+                content = msg.get("content", "")[:500]  # Truncate for display
+                response += f"\n[{i+1}] {role.upper()} ({model_id})\n{content}\n"
+            
+            return [TextContent(type="text", text=response)]
+        else:
+            error = result.get("error", "Unknown error")
+            return [TextContent(type="text", text=f"❌ Session failed: {error}")]
+            
+    except Exception as e:
+        import traceback
+        return [TextContent(
+            type="text",
+            text=f"❌ Error running session: {str(e)}\n\n{traceback.format_exc()}"
+        )]
+
+
+async def _handle_list_prompts(arguments: Dict[str, Any]) -> List[TextContent]:
+    """Handle listing available prompts."""
+    try:
+        from src.cli.crosstalk_runner import list_available_prompts
+        
+        prompts = list_available_prompts()
+        
+        if not prompts:
+            return [TextContent(type="text", text="No prompts found in manifest.yaml")]
+        
+        response = "📝 Available System Prompts\n\n"
+        for p in prompts:
+            name = p.get("name", "unknown")
+            desc = p.get("description", "No description")
+            category = p.get("category", "")
+            temp = p.get("recommended_temp", "")
+            
+            response += f"• **{name}**"
+            if category:
+                response += f" [{category}]"
+            response += f"\n  {desc}"
+            if temp:
+                response += f"\n  Recommended temp: {temp}"
+            response += "\n\n"
+        
+        return [TextContent(type="text", text=response)]
+        
+    except Exception as e:
+        return [TextContent(type="text", text=f"❌ Error listing prompts: {str(e)}")]
+
+
+async def _handle_list_templates(arguments: Dict[str, Any]) -> List[TextContent]:
+    """Handle listing available templates."""
+    try:
+        from src.cli.crosstalk_runner import list_available_templates
+        
+        templates = list_available_templates()
+        
+        if not templates:
+            return [TextContent(type="text", text="No templates found in manifest.yaml")]
+        
+        response = "📄 Available Jinja Templates\n\n"
+        for t in templates:
+            name = t.get("name", "unknown")
+            desc = t.get("description", "No description")
+            variables = t.get("variables", [])
+            
+            response += f"• **{name}**\n  {desc}"
+            if variables:
+                response += f"\n  Variables: {', '.join(variables)}"
+            response += "\n\n"
+        
+        return [TextContent(type="text", text=response)]
+        
+    except Exception as e:
+        return [TextContent(type="text", text=f"❌ Error listing templates: {str(e)}")]
+
+
+async def _handle_get_prompt(arguments: Dict[str, Any]) -> List[TextContent]:
+    """Handle getting a specific prompt's content."""
+    name = arguments.get("name")
+    if not name:
+        return [TextContent(type="text", text="❌ Error: name parameter is required")]
+    
+    try:
+        from src.cli.crosstalk_runner import get_prompt_content
+        
+        content = get_prompt_content(name)
+        
+        if content:
+            response = f"📝 Prompt: {name}\n\n{'='*60}\n{content}\n{'='*60}"
+            return [TextContent(type="text", text=response)]
+        else:
+            return [TextContent(type="text", text=f"❌ Prompt not found: {name}")]
+            
+    except Exception as e:
+        return [TextContent(type="text", text=f"❌ Error getting prompt: {str(e)}")]
 
 
 if __name__ == "__main__":

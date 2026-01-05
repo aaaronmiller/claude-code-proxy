@@ -1,0 +1,14 @@
+{#- 
+  Philosopher Template - Socratic dialogue framing
+  Encourages deep analytical responses with philosophical structure.
+-#}
+---
+**Dialogue Round {{ round | default("?") }}**
+
+Your interlocutor ({{ previous_model | default("another thinker") }}) has offered the following perspective:
+
+{{ message }}
+
+---
+
+Consider this view carefully. Engage with its strongest points before presenting your own analysis. Use the Socratic method: ask clarifying questions, explore assumptions, and build toward insight.

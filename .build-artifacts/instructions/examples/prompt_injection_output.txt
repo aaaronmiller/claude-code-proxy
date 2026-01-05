@@ -1,0 +1,265 @@
+================================================================================
+PROMPT INJECTION DEMO - SAMPLE OUTPUTS
+================================================================================
+
+This file shows example outputs from the prompt injection system.
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        FORMAT 1: EXPANDED (Multi-line Detailed)              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+════════════════════════════════════════════════════════════
+PROXY STATUS INFORMATION
+(This information is from the Claude Code Proxy layer)
+════════════════════════════════════════════════════════════
+
+╔═══════════════════════════════════════════════════════════╗
+║ PROXY STATUS & ROUTING                                    ║
+╠═══════════════════════════════════════════════════════════╣
+║ Mode: Proxy (server key)                                  ║
+║ Provider: OpenRouter                                       ║
+║ Base URL: https://openrouter.ai/api/v1                    ║
+║ Routing:                                                  ║
+║   • BIG (Opus)      → openai/gpt-4o                       ║
+║   • MIDDLE (Sonnet) → openai/gpt-4o                       ║
+║   • SMALL (Haiku)   → gpt-4o-mini                         ║
+║ Reasoning: high, 8000 max tokens                          ║
+║ Features: Usage tracking ✓ | Compact logger ✗            ║
+╚═══════════════════════════════════════════════════════════╝
+
+╔═══════════════════════════════════════════════════════════╗
+║ PERFORMANCE METRICS (Last 10 Requests)                    ║
+╠═══════════════════════════════════════════════════════════╣
+║ Requests: 847 total (94 today)                            ║
+║ Latency:  3,421ms avg | 1,234ms min | 8,765ms max        ║
+║ Speed:    78 tok/s avg | 234 tok/s max                    ║
+║ Tokens:                                                   ║
+║   • Input:    2,145,678 (avg: 2,534/req)                 ║
+║   • Output:     456,789 (avg: 539/req)                   ║
+║   • Thinking:    12,345 (avg: 15/req)                    ║
+║ Context: 43.7k/200k avg (22% utilization)                ║
+║ Cost: $12.34 total | $2.47 today | $0.015 avg/req        ║
+╚═══════════════════════════════════════════════════════════╝
+
+╔═══════════════════════════════════════════════════════════╗
+║ ERROR TRACKING (Last 24 Hours)                            ║
+╠═══════════════════════════════════════════════════════════╣
+║ Success Rate: 98.7% (847/859 requests)                    ║
+║ Errors: 12 total                                          ║
+║   • Rate Limit:     7 (58%)                               ║
+║   • Invalid Key:    3 (25%)                               ║
+║   • Model Not Found: 2 (17%)                              ║
+║                                                           ║
+║ Recent Errors:                                            ║
+║   [14:23] Rate limit exceeded (openai/gpt-4o)             ║
+║   [14:18] Invalid API key (anthropic/claude-3.5-sonnet)   ║
+║   [14:05] Model not found (fake/model-123)                ║
+╚═══════════════════════════════════════════════════════════╝
+
+╔═══════════════════════════════════════════════════════════╗
+║ MODEL USAGE PATTERNS (Last 7 Days)                        ║
+╠═══════════════════════════════════════════════════════════╣
+║ Top Models by Request Count:                              ║
+║   #1  openai/gpt-4o           245 req  125.3k tok  $1.45  ║
+║   #2  anthropic/claude-3.5... 89 req   52.1k tok   $0.89  ║
+║   #3  ollama/qwen2.5:72b       34 req   18.9k tok   FREE  ║
+║                                                           ║
+║ Usage by Type:                                            ║
+║   • Text-only:  312 req (82%)                             ║
+║   • With tools:  45 req (12%)                             ║
+║   • With images: 23 req (6%)                              ║
+║                                                           ║
+║ Recommendations:                                          ║
+║   💡 34 requests to FREE model (saved $0.45)              ║
+║   💡 Consider: qwen/qwen-2.5-thinking for reasoning tasks ║
+╚═══════════════════════════════════════════════════════════╝
+
+════════════════════════════════════════════════════════════
+
+Token cost: ~400-500 tokens
+Use case: Complex tasks, debugging sessions, when Claude needs full context
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        FORMAT 2: SINGLE (One-line Compact)                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+════════════════════════════════════════════════════════════
+PROXY STATUS INFORMATION
+(This information is from the Claude Code Proxy layer)
+════════════════════════════════════════════════════════════
+
+[Proxy] OpenRouter: O→gpt-4o M→gpt-4o S→gpt-4o-mini | R:high/8k | Track✓ Log✗
+
+Perf: 847req 3.4s⌀ 78t/s | Tok: 2.1M→456k💭12k | Ctx:44k/200k(22%) | Cost:$12.34
+
+Errors: 12/859 (98.7% OK) | RateLimit:7 InvalidKey:3 NotFound:2 | Last:[14:23]RateLimit
+
+Models: gpt-4o:245 claude:89 qwen:34 | Text:82% Tools:12% Img:6% | 34→FREE saved $0.45
+
+════════════════════════════════════════════════════════════
+
+Token cost: ~150-200 tokens
+Use case: Standard tasks, balanced info/noise ratio
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                  FORMAT 3: MINI (Ultra-compact Partial Line)                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+════════════════════════════════════════════════════════════
+PROXY STATUS INFORMATION
+(This information is from the Claude Code Proxy layer)
+════════════════════════════════════════════════════════════
+
+P|OR|gpt4o|h
+
+847r|3.4s|78t/s|$12
+
+12err|98.7%OK
+
+gpt4o:245|34free
+
+════════════════════════════════════════════════════════════
+
+Token cost: ~50-80 tokens
+Use case: Moderate visibility, compact format
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                   FORMAT 4: COMPACT HEADER (Always-on Mode)                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+[P|OR|gpt4o|h] 847r|3.4s|78t/s|$12 | 12err|98.7%OK | gpt4o:245|34free
+
+Token cost: ~20-30 tokens
+Use case: Every request, minimal overhead, can be prepended to any message
+
+
+================================================================================
+LEGEND FOR COMPACT FORMATS
+================================================================================
+
+Status Module Mini Format: P|OR|gpt4o|h
+  P/S       = Passthrough/Server (proxy mode)
+  OR        = Provider abbreviation (OR=OpenRouter, OAI=OpenAI, AZ=Azure)
+  gpt4o     = Primary model (truncated)
+  h         = Reasoning effort (h=high, m=medium, l=low, N=none)
+
+Performance Module Mini Format: 847r|3.4s|78t/s|$12
+  847r      = Total requests
+  3.4s      = Average latency in seconds
+  78t/s     = Average tokens per second
+  $12       = Total cost
+
+Errors Module Mini Format: 12err|98.7%OK
+  12err     = Error count
+  98.7%OK   = Success rate
+
+Models Module Mini Format: gpt4o:245|34free
+  gpt4o:245 = Top model and request count
+  34free    = Requests using FREE models
+
+
+================================================================================
+INJECTION STRATEGIES
+================================================================================
+
+Strategy 1: Auto-Inject (Recommended)
+  - Inject based on request characteristics
+  - Enabled for: streaming, tools, complex tasks
+  - Format: single or expanded
+  - Example: if request.stream or request.tools: inject()
+
+Strategy 2: Compact Header Always
+  - Add compact header to every request
+  - Minimal token cost (~20-30 tokens)
+  - Prepend to first user message
+  - Example: messages[0] = f"[{header}]\n\n{original}"
+
+Strategy 3: System Prompt Injection
+  - Inject into system prompt only
+  - Persistent across conversation
+  - Clean separation from user messages
+  - Example: system_prompt = inject_into_system_prompt(original)
+
+Strategy 4: Selective Modules
+  - Choose which modules to inject
+  - status: routing awareness
+  - performance: optimization insights
+  - errors: debugging information
+  - models: usage patterns and recommendations
+
+
+================================================================================
+BENEFITS FOR CLAUDE CODE
+================================================================================
+
+When Claude Code receives this information, it can:
+
+1. Routing Awareness
+   - Know which actual model is processing the request
+   - Understand provider and endpoint configuration
+   - Adapt responses based on model capabilities
+
+2. Cost Optimization
+   - Track spending in real-time
+   - Suggest cheaper alternatives when appropriate
+   - Recommend FREE models for simple tasks
+
+3. Error Context
+   - See recent errors and patterns
+   - Understand rate limits and failures
+   - Provide better error messages to users
+
+4. Performance Optimization
+   - Know context window usage and limits
+   - Understand latency and speed patterns
+   - Suggest optimizations based on metrics
+
+5. Smart Recommendations
+   - Suggest models based on actual usage patterns
+   - Recommend reasoning models for complex tasks
+   - Identify cost-saving opportunities
+
+
+================================================================================
+CONFIGURATION EXAMPLES
+================================================================================
+
+.env Configuration:
+  PROMPT_INJECTION_ENABLED="true"
+  PROMPT_INJECTION_FORMAT="single"          # expanded, single, mini
+  PROMPT_INJECTION_MODULES="status,performance,errors,models"
+  PROMPT_INJECTION_MODE="auto"              # auto, always, never, compact_only
+
+Programmatic Configuration:
+  from src.utils.prompt_injection_middleware import prompt_injection_middleware
+
+  prompt_injection_middleware.configure(
+      enabled=True,
+      format='single',
+      modules=['status', 'performance'],
+      inject_mode='auto'
+  )
+
+Update Proxy Status:
+  from src.utils.prompt_injection_middleware import update_proxy_status
+
+  update_proxy_status({
+      'status': {...},
+      'performance': {...},
+      'errors': {...},
+      'models': {...}
+  })
+
+Inject into Request:
+  modified_request = prompt_injection_middleware.inject_into_request(request)
+
+Get Compact Header:
+  header = prompt_injection_middleware.get_compact_header()
+
+
+================================================================================
+END OF DEMO
+================================================================================

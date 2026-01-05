@@ -190,7 +190,7 @@ async def call_model(
         )
     
     if not api_key:
-        yield "[ERROR: No API key configured]"
+        yield "[ERROR: No API key configured. Set OPENROUTER_API_KEY or OPENAI_API_KEY]"
         return
     
     # Build messages array
@@ -199,8 +199,18 @@ async def call_model(
         api_messages.append({"role": "system", "content": system_prompt})
     api_messages.extend(messages)
     
-    # Use custom endpoint if provided, otherwise default to OpenRouter
-    api_endpoint = endpoint or "https://openrouter.ai/api/v1/chat/completions"
+    # Determine API endpoint:
+    # 1. Custom endpoint if provided
+    # 2. Local proxy if USE_LOCAL_PROXY is set
+    # 3. Default to OpenRouter
+    if endpoint:
+        api_endpoint = endpoint
+    elif os.environ.get("USE_LOCAL_PROXY", "").lower() in ("true", "1", "yes"):
+        proxy_port = os.environ.get("PORT", "8082")
+        api_endpoint = f"http://localhost:{proxy_port}/v1/chat/completions"
+        print(f"[Crosstalk] Routing through local proxy: {api_endpoint}")
+    else:
+        api_endpoint = "https://openrouter.ai/api/v1/chat/completions"
     
     async with httpx.AsyncClient(timeout=120.0) as client:
         try:

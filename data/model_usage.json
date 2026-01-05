@@ -71,18 +71,18 @@
       "first_used": "2025-12-20T20:24:27.485645"
     },
     "gemini-3-flash": {
-      "count": 1035,
-      "last_used": "2025-12-29T23:02:23.797714",
+      "count": 1574,
+      "last_used": "2026-01-04T03:09:43.120630",
       "first_used": "2025-12-20T23:06:35.745032"
     },
     "gemini-3-pro-preview": {
-      "count": 400,
-      "last_used": "2025-12-29T22:58:57.310837",
+      "count": 586,
+      "last_used": "2026-01-04T15:50:38.101253",
       "first_used": "2025-12-20T23:06:35.747146"
     },
     "gemini-claude-opus-4-5-thinking": {
-      "count": 274,
-      "last_used": "2025-12-25T16:11:41.708959",
+      "count": 722,
+      "last_used": "2026-01-04T16:34:56.528242",
       "first_used": "2025-12-21T05:01:06.515376"
     },
     "gemini-claude-sonnet-4-5-thinking": {
@@ -109,7 +109,37 @@
       "count": 17,
       "last_used": "2025-12-29T22:45:35.384008",
       "first_used": "2025-12-29T22:41:15.011050"
+    },
+    "xiaomi/mimo-v2-flash:free": {
+      "count": 729,
+      "last_used": "2026-01-04T16:34:56.473482",
+      "first_used": "2025-12-31T11:12:19.142227"
+    },
+    "xiaomi/mimo-v2-flash": {
+      "count": 10,
+      "last_used": "2026-01-03T07:17:39.852276",
+      "first_used": "2026-01-02T22:25:04.149431"
+    },
+    "moonshotai/kimi-k2": {
+      "count": 4,
+      "last_used": "2026-01-02T22:26:28.250878",
+      "first_used": "2026-01-02T22:26:28.214776"
+    },
+    "google/gemini-3-flash-preview": {
+      "count": 2,
+      "last_used": "2026-01-03T03:02:32.566316",
+      "first_used": "2026-01-03T03:02:29.494102"
+    },
+    "meta-llama/llama-3.1-8b-instruct:free": {
+      "count": 2,
+      "last_used": "2026-01-03T07:52:03.793870",
+      "first_used": "2026-01-03T07:52:00.572722"
+    },
+    "moonshotai/kimi-k2:free": {
+      "count": 2,
+      "last_used": "2026-01-03T07:52:08.251348",
+      "first_used": "2026-01-03T07:52:05.006641"
     }
   },
-  "last_updated": "2025-12-29T23:02:23.797717"
+  "last_updated": "2026-01-04T16:34:56.528247"
 }

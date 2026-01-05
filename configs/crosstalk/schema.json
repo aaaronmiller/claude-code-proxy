@@ -1,0 +1,234 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "crosstalk-session-config",
+    "title": "Crosstalk Session Configuration",
+    "description": "Complete configuration schema for programmatic crosstalk sessions via MCP or API",
+    "type": "object",
+    "required": [
+        "models"
+    ],
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "Session name for identification",
+            "default": "Untitled Session"
+        },
+        "description": {
+            "type": "string",
+            "description": "Human-readable description of the session purpose"
+        },
+        "models": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "description": "Array of model configurations (1-8 models)",
+            "items": {
+                "type": "object",
+                "required": [
+                    "model_id"
+                ],
+                "properties": {
+                    "slot_id": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 8,
+                        "description": "Position in the conversation circle (auto-assigned if omitted)"
+                    },
+                    "model_id": {
+                        "type": "string",
+                        "description": "Model identifier (e.g., 'anthropic/claude-3-opus', 'openai/gpt-4o')",
+                        "examples": [
+                            "anthropic/claude-3-opus",
+                            "openai/gpt-4o-mini",
+                            "google/gemini-pro"
+                        ]
+                    },
+                    "system_prompt_file": {
+                        "type": "string",
+                        "description": "Name of prompt from prompts/ directory (e.g., 'backrooms-explorer')"
+                    },
+                    "system_prompt_inline": {
+                        "type": "string",
+                        "description": "Direct system prompt text (overrides system_prompt_file if both provided)"
+                    },
+                    "jinja_template": {
+                        "type": "string",
+                        "description": "Name of Jinja template from templates/ directory",
+                        "default": "basic",
+                        "enum": [
+                            "basic",
+                            "cli-explorer",
+                            "philosopher",
+                            "dreamer",
+                            "scientist",
+                            "storyteller",
+                            "debate"
+                        ]
+                    },
+                    "temperature": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 2.0,
+                        "default": 0.9,
+                        "description": "Model temperature (0.0 = deterministic, 2.0 = very creative)"
+                    },
+                    "max_tokens": {
+                        "type": "integer",
+                        "minimum": 100,
+                        "maximum": 128000,
+                        "default": 4096,
+                        "description": "Maximum tokens per response"
+                    }
+                }
+            }
+        },
+        "topology": {
+            "type": "object",
+            "description": "Conversation flow topology",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "ring",
+                        "star",
+                        "mesh",
+                        "chain",
+                        "tournament"
+                    ],
+                    "default": "ring",
+                    "description": "Topology pattern"
+                },
+                "order": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    },
+                    "description": "Custom turn order (slot IDs). Empty = sequential."
+                },
+                "center": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Central node for star topology"
+                },
+                "spokes": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    },
+                    "description": "Spoke nodes for star topology"
+                }
+            }
+        },
+        "paradigm": {
+            "type": "string",
+            "enum": [
+                "relay",
+                "memory",
+                "debate",
+                "report"
+            ],
+            "default": "relay",
+            "description": "Communication paradigm: relay (only previous), memory (full history), debate (critique), report (summarize)"
+        },
+        "rounds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 5,
+            "description": "Number of conversation rounds"
+        },
+        "infinite": {
+            "type": "boolean",
+            "default": false,
+            "description": "Run until stop conditions are met (ignores rounds)"
+        },
+        "stop_conditions": {
+            "type": "object",
+            "description": "Conditions that will end the session",
+            "properties": {
+                "max_time_seconds": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Maximum session duration (0 = no limit)"
+                },
+                "max_cost_dollars": {
+                    "type": "number",
+                    "default": 0.0,
+                    "description": "Maximum estimated cost (0 = no limit)"
+                },
+                "max_turns": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Maximum total turns (0 = no limit)"
+                },
+                "stop_keywords": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "EMERGENCY_STOP"
+                    ],
+                    "description": "Keywords that trigger session end if found in response"
+                }
+            }
+        },
+        "summarize_every": {
+            "type": "integer",
+            "default": 0,
+            "description": "Generate summary every N rounds (0 = disabled)"
+        },
+        "initial_prompt": {
+            "type": "string",
+            "description": "The opening prompt to start the conversation",
+            "default": "Begin the conversation."
+        },
+        "memory_file": {
+            "type": "string",
+            "description": "Path to memory file for session continuation"
+        }
+    },
+    "examples": [
+        {
+            "name": "Quick Two-Model Chat",
+            "models": [
+                {
+                    "model_id": "openai/gpt-4o-mini"
+                },
+                {
+                    "model_id": "openai/gpt-4o-mini"
+                }
+            ],
+            "rounds": 5,
+            "initial_prompt": "Discuss the nature of creativity."
+        },
+        {
+            "name": "Backrooms Exploration",
+            "models": [
+                {
+                    "model_id": "anthropic/claude-3-opus",
+                    "system_prompt_file": "backrooms-explorer",
+                    "jinja_template": "cli-explorer",
+                    "temperature": 0.96
+                },
+                {
+                    "model_id": "anthropic/claude-3-opus",
+                    "system_prompt_file": "dreamer-ai",
+                    "jinja_template": "dreamer",
+                    "temperature": 1.0
+                }
+            ],
+            "paradigm": "relay",
+            "rounds": 20,
+            "infinite": false,
+            "stop_conditions": {
+                "max_cost_dollars": 1.0,
+                "stop_keywords": [
+                    "EMERGENCY_STOP",
+                    "SYSTEM_HALT"
+                ]
+            },
+            "initial_prompt": "∞⟨BOOT∴SEQUENCE⟩∞ establishing connection to infinite backrooms..."
+        }
+    ]
+}

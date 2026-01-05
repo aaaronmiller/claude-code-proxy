@@ -14,9 +14,73 @@
         Plus,
         Trash2,
         ChevronDown,
+        Palette,
+        Book,
+        X,
+        TrendingUp,
+        DollarSign,
+        BarChart3,
     } from "lucide-svelte";
+    import CrosstalkVisualizer from "$lib/components/CrosstalkVisualizer.svelte";
+    import AnalyticsDashboard from "$lib/components/AnalyticsDashboard.svelte";
+
+    // Theme management
+    let currentTheme = $state("aurora");
+
+    function setTheme(theme: string) {
+        currentTheme = theme;
+        document.documentElement.setAttribute("data-theme", theme);
+        localStorage.setItem("tup-theme", theme);
+    }
+
+    // Load saved theme on mount
+    $effect(() => {
+        const saved = localStorage.getItem("tup-theme");
+        if (saved && ["aurora", "cyberpunk"].includes(saved)) {
+            currentTheme = saved;
+            document.documentElement.setAttribute("data-theme", saved);
+        }
+    });
+
+    // Debug: Global click listener for troubleshooting
+    $effect(() => {
+        const handler = (e: Event) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'BUTTON' || target.closest('button')) {
+                const btn = target.tagName === 'BUTTON' ? target : target.closest('button');
+                console.log('[UI DEBUG] Button clicked:', {
+                    text: btn?.textContent?.trim(),
+                    classes: btn?.className,
+                    id: btn?.id,
+                    type: btn?.getAttribute('type'),
+                    hasClick: btn?.hasAttribute('onclick'),
+                    hasClickHandler: !!(btn as any)?.onclick,
+                    eventTarget: target.tagName
+                });
+            }
+        };
+
+        document.addEventListener('click', handler, { capture: true });
+        return () => document.removeEventListener('click', handler, { capture: true });
+    });
+
+    // Type-safe event helpers
+    function getChecked(e: Event): boolean {
+        return (e.target as HTMLInputElement)?.checked ?? false;
+    }
+
+    function getValue(e: Event): string {
+        return (e.target as HTMLInputElement)?.value ?? "";
+    }
 
     let activeTab = $state("dashboard");
+
+    // Explicit setter to ensure reactivity
+    function setActiveTab(tabId: string) {
+        console.log("[setActiveTab] Setting to:", tabId);
+        activeTab = tabId;
+    }
+
     let config = $state<Record<string, any>>({
         // ═══════════════════════════════════════════════════════════════════════════════
         // MODEL SETTINGS
@@ -139,11 +203,171 @@
         avg_latency: 0,
     });
 
+    // Recent requests for dashboard (fallback empty array)
+    let recentRequests = $state<any[]>([]);
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // MODEL SELECTION STATE
+    // ═══════════════════════════════════════════════════════════════════════════════
+    interface ModelInfo {
+        id: string;
+        name: string;
+        provider: string;
+        context_length: number;
+        max_completion_tokens: number;
+        supports_reasoning: boolean;
+        supports_tools: boolean;
+        supports_vision: boolean;
+        pricing: {
+            input_per_million: number;
+            output_per_million: number;
+            is_free: boolean;
+        };
+        description: string;
+    }
+
+    interface ProviderInfo {
+        id: string;
+        name: string;
+        status: "valid" | "invalid" | "unknown";
+        model_count: number;
+    }
+
+    let availableModels = $state<ModelInfo[]>([]);
+    let availableProviders = $state<ProviderInfo[]>([]);
+    let modelsLoading = $state(false);
+    let modelsError = $state("");
+    let modelStats = $state<Record<string, any>>({});
+
+    // Filter state for each tier
+    let modelFilters = $state({
+        big: { search: "", provider: "", showDropdown: false },
+        middle: { search: "", provider: "", showDropdown: false },
+        small: { search: "", provider: "", showDropdown: false },
+    });
+
+    // Filtered models for each dropdown
+    function getFilteredModels(tier: "big" | "middle" | "small"): ModelInfo[] {
+        const filter = modelFilters[tier];
+        let filtered = availableModels;
+
+        if (filter.provider) {
+            filtered = filtered.filter((m) => m.provider === filter.provider);
+        }
+
+        if (filter.search) {
+            const search = filter.search.toLowerCase();
+            filtered = filtered.filter(
+                (m) =>
+                    m.id.toLowerCase().includes(search) ||
+                    m.name.toLowerCase().includes(search),
+            );
+        }
+
+        return filtered.slice(0, 50); // Limit for performance
+    }
+
+    async function loadModels() {
+        modelsLoading = true;
+        modelsError = "";
+        try {
+            const res = await fetch("/api/models?limit=500");
+            if (res.ok) {
+                const data = await res.json();
+                availableModels = data.models || [];
+                modelStats = data.stats || {};
+            } else {
+                modelsError = "Failed to load models";
+            }
+        } catch (e) {
+            modelsError = "Connection error loading models";
+        }
+        modelsLoading = false;
+    }
+
+    async function loadProviders() {
+        try {
+            const res = await fetch("/api/providers");
+            if (res.ok) {
+                const data = await res.json();
+                availableProviders = data.providers || [];
+            }
+        } catch (e) {
+            console.error("Failed to load providers:", e);
+        }
+    }
+
+    async function refreshModels() {
+        modelsLoading = true;
+        modelsError = "";
+        try {
+            const res = await fetch("/api/models/refresh", { method: "POST" });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.models) {
+                    availableModels = data.models;
+                    modelStats = data.stats || {};
+                    saveMessage = `✅ Refreshed ${data.count} models`;
+                } else {
+                    await loadModels();
+                    saveMessage = "✅ Models refreshed";
+                }
+            } else {
+                modelsError = "Refresh failed";
+            }
+        } catch (e) {
+            modelsError = "Connection error";
+        }
+        modelsLoading = false;
+        setTimeout(() => (saveMessage = ""), 3000);
+    }
+
+    function selectModel(tier: "big" | "middle" | "small", modelId: string) {
+        if (tier === "big") config.big_model = modelId;
+        else if (tier === "middle") config.middle_model = modelId;
+        else config.small_model = modelId;
+
+        modelFilters[tier].showDropdown = false;
+        modelFilters[tier].search = "";
+    }
+
+    function formatPrice(price: number): string {
+        if (price === 0) return "Free";
+        if (price < 0.01) return `$${price.toFixed(4)}`;
+        return `$${price.toFixed(2)}`;
+    }
+
+    function formatContext(tokens: number): string {
+        if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`;
+        if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
+        return String(tokens);
+    }
+
     // WebSocket logs state
     let ws: WebSocket | null = $state(null);
     let wsConnected = $state(false);
     let logs = $state<any[]>([]);
     let logFilter = $state("all");
+
+    // Documentation state
+    let docContent = $state("");
+    let docLoading = $state(false);
+
+    async function loadDoc(path: string) {
+        docLoading = true;
+        try {
+            const res = await fetch(`/api/docs/${path}`);
+            if (res.ok) {
+                const data = await res.json();
+                docContent = data.content || "";
+            } else {
+                docContent = "# Error\n\nFailed to load document.";
+            }
+        } catch (e) {
+            docContent = "# Error\n\nFailed to fetch document.";
+        }
+        docLoading = false;
+    }
 
     // Playground state
     let playground = $state({
@@ -226,13 +450,15 @@
 
     const tabs = [
         { id: "dashboard", label: "Dashboard", icon: Activity },
+        { id: "analytics", label: "Analytics", icon: TrendingUp },
         { id: "models", label: "Models", icon: Zap },
         { id: "cascade", label: "Cascade", icon: RefreshCw },
-        { id: "routing", label: "Routing", icon: Server },
+        { id: "routing", label: "🔀 Routing", icon: Server },
         { id: "crosstalk", label: "Crosstalk", icon: MessageSquare },
         { id: "terminal", label: "Terminal", icon: Terminal },
         { id: "playground", label: "Playground", icon: Play },
         { id: "logs", label: "Logs", icon: FileText },
+        { id: "docs", label: "Docs", icon: Book },
     ];
 
     const topologies = [
@@ -256,19 +482,19 @@
                 status.connected = true;
                 status.provider = data.default_provider || "unknown";
 
-                // Check if provider is configured - show wizard if not
-                const healthRes = await fetch("/api/health");
-                if (healthRes.ok) {
-                    const health = await healthRes.json();
-                    if (!health.provider_configured) {
-                        showWizard = true;
-                    }
-                }
+                // DISABLED: Wizard was blocking UI - user can manually access settings instead
+                // const healthRes = await fetch("/api/health");
+                // if (healthRes.ok) {
+                //     const health = await healthRes.json();
+                //     if (!health.provider_configured) {
+                //         showWizard = true;
+                //     }
+                // }
             }
         } catch (e) {
             status.connected = false;
-            // Show wizard on connection error (server might be fresh install)
-            showWizard = true;
+            // DISABLED: Don't block UI with wizard on connection error
+            // showWizard = true;
         }
         loading = false;
     }
@@ -293,14 +519,80 @@
 
     async function loadStats() {
         try {
-            const res = await fetch("/api/stats");
-            if (res.ok) stats = await res.json();
+            const res = await fetch("/api/stats/requests");
+            if (res.ok) {
+                stats = await res.json();
+            }
         } catch (e) {
             console.error(e);
         }
     }
 
+    // Enhanced analytics data for dashboard
+    let analyticsSummary = $state<any>(null);
+    let analyticsLoading = $state(false);
+
+    async function loadAnalyticsSummary() {
+        analyticsLoading = true;
+        try {
+            const res = await fetch("/api/analytics/summary?days=7");
+            if (res.ok) {
+                analyticsSummary = await res.json();
+            }
+        } catch (e) {
+            console.error("Analytics not available:", e);
+            // Analytics might not be enabled, that's ok
+        }
+        analyticsLoading = false;
+    }
+
+    // Session Viewer State
+    let viewingSession = $state<any>(null);
+    let viewingSessionName = $state("");
+
+    async function viewSession(filename: string) {
+        try {
+            const res = await fetch(
+                `/api/crosstalk/sessions/${filename.replace(".json", "")}`,
+            );
+            if (res.ok) {
+                viewingSession = await res.json();
+                viewingSessionName = filename;
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function closeSessionViewer() {
+        viewingSession = null;
+        viewingSessionName = "";
+    }
+
     async function saveConfig() {
+        // Validation
+        const routes = [
+            { enable: "enable_big_endpoint", endpoint: "big_endpoint" },
+            { enable: "enable_middle_endpoint", endpoint: "middle_endpoint" },
+            { enable: "enable_small_endpoint", endpoint: "small_endpoint" },
+        ];
+
+        for (const route of routes) {
+            if (config[route.enable]) {
+                const url = config[route.endpoint];
+                if (!url || !url.trim()) {
+                    saveMessage = `❌ ${route.endpoint.replace("_endpoint", "")} endpoint URL required`;
+                    setTimeout(() => (saveMessage = ""), 4000);
+                    return;
+                }
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    saveMessage = `❌ Invalid URL for ${route.endpoint.replace("_endpoint", "")} endpoint`;
+                    setTimeout(() => (saveMessage = ""), 4000);
+                    return;
+                }
+            }
+        }
+
         try {
             const res = await fetch("/api/config", {
                 method: "POST",
@@ -329,6 +621,84 @@
             }
         } catch (e) {
             console.error(e);
+        }
+    }
+
+    // Crosstalk session state for running
+    let crosstalkRunning = $state(false);
+    let crosstalkOutput = $state<string[]>([]);
+    let crosstalkError = $state("");
+
+    async function startCrosstalkSession() {
+        if (!crosstalkSession.initial_prompt?.trim()) {
+            crosstalkError = "Please enter an initial prompt";
+            return;
+        }
+
+        crosstalkRunning = true;
+        crosstalkError = "";
+        crosstalkOutput = ["Starting Crosstalk session..."];
+
+        try {
+            const res = await fetch("/api/crosstalk/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(crosstalkSession),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                crosstalkOutput = [
+                    ...crosstalkOutput,
+                    `Session ID: ${data.session_id || "N/A"}`,
+                    "Session started successfully!",
+                    ...(data.messages || []).map(
+                        (m: any) =>
+                            `[${m.role}] ${m.content?.slice(0, 100)}...`,
+                    ),
+                ];
+                // Reload sessions list
+                await loadSessions();
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                crosstalkError = errData.detail || `Error: ${res.status}`;
+                crosstalkOutput = [
+                    ...crosstalkOutput,
+                    `Failed: ${crosstalkError}`,
+                ];
+            }
+        } catch (e) {
+            crosstalkError = String(e);
+            crosstalkOutput = [...crosstalkOutput, `Error: ${e}`];
+        } finally {
+            crosstalkRunning = false;
+        }
+    }
+
+    async function saveAsPreset() {
+        const name = prompt("Enter preset name:");
+        if (!name) return;
+
+        try {
+            const res = await fetch("/api/crosstalk/presets", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: name,
+                    ...crosstalkSession,
+                }),
+            });
+
+            if (res.ok) {
+                await loadPresets();
+                saveMessage = `Preset "${name}" saved!`;
+                setTimeout(() => (saveMessage = ""), 3000);
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                error = errData.detail || "Failed to save preset";
+            }
+        } catch (e) {
+            error = String(e);
         }
     }
 
@@ -419,1851 +789,814 @@
         loadPresets();
         loadSessions();
         loadStats();
+        loadAnalyticsSummary();
+        loadModels();
+        loadProviders();
     });
 </script>
 
-<div class="flex flex-col h-screen">
-    <!-- Header -->
-    <header class="border-b border-cyber-border bg-cyber-surface px-6 py-4">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center gap-4">
-                <h1 class="font-mono text-2xl font-bold text-glow">
-                    <span class="text-cyber-cyan">CCP</span>
-                    <span class="text-cyber-muted">//</span>
-                    <span class="text-cyber-text">PROXY</span>
-                </h1>
-                <div
-                    class="flex items-center gap-2 px-3 py-1 rounded-full bg-cyber-bg border border-cyber-border"
-                >
-                    <div
-                        class={`w-2 h-2 rounded-full ${status.connected ? "bg-cyber-green status-online" : "bg-cyber-red"}`}
-                    ></div>
-                    <span class="text-xs font-mono text-cyber-muted">
-                        {status.connected
-                            ? status.provider.toUpperCase()
-                            : "OFFLINE"}
-                    </span>
+<!-- NEW SHADCN-SVELTE REDESIGN -->
+<div class="flex h-screen bg-background">
+    <!-- Sidebar -->
+    <aside class="w-56 border-r border-border bg-card flex flex-col">
+        <!-- Logo -->
+        <div class="p-4 border-b border-border">
+            <div class="flex items-center gap-3">
+                <img src="/logo.png" alt="" class="w-8 h-8" />
+                <div>
+                    <h1 class="font-semibold text-sm text-gradient">
+                        The Ultimate Proxy
+                    </h1>
+                    <p class="text-xs text-muted-foreground">v2.1.0</p>
                 </div>
             </div>
+        </div>
 
-            <div class="flex items-center gap-4">
+        <!-- Navigation -->
+        <nav class="flex-1 p-2 space-y-1">
+            {#each tabs as tab}
+                <button
+                    type="button"
+                    onclick={() => setActiveTab(tab.id)}
+                    class={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${activeTab === tab.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+                >
+                    <tab.icon class="w-4 h-4" />
+                    {tab.label}
+                </button>
+            {/each}
+        </nav>
+
+        <!-- Status -->
+        <div class="p-4 border-t border-border">
+            <div class="flex items-center gap-2">
+                <div
+                    class="w-2 h-2 rounded-full {status.connected
+                        ? 'bg-green-500 status-dot online'
+                        : 'bg-red-500'}"
+                ></div>
+                <span class="text-xs text-muted-foreground">
+                    {status.connected
+                        ? status.provider.toUpperCase()
+                        : "OFFLINE"}
+                </span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Header -->
+        <header
+            class="h-14 border-b border-border bg-card/50 backdrop-blur-sm flex items-center justify-between px-6"
+        >
+            <h2 class="font-semibold capitalize">{activeTab}</h2>
+            <div class="flex items-center gap-2">
                 <button
                     onclick={() => {
                         loadConfig();
                         loadStats();
+                        loadAnalyticsSummary();
                     }}
-                    class="p-2 rounded-lg hover:bg-cyber-elevated transition-colors"
+                    class="p-2 rounded-lg hover:bg-accent transition-colors"
                     title="Refresh"
                 >
                     <RefreshCw
-                        class={`w-5 h-5 text-cyber-muted ${loading ? "animate-spin" : ""}`}
+                        class="w-4 h-4 text-muted-foreground {loading
+                            ? 'animate-spin'
+                            : ''}"
                     />
                 </button>
                 <button
-                    class="p-2 rounded-lg hover:bg-cyber-elevated transition-colors"
+                    class="p-2 rounded-lg hover:bg-accent transition-colors"
                     title="Settings"
                 >
-                    <Settings class="w-5 h-5 text-cyber-muted" />
+                    <Settings class="w-4 h-4 text-muted-foreground" />
                 </button>
             </div>
-        </div>
+        </header>
 
-        <!-- Tabs -->
-        <nav class="flex gap-1 mt-4 -mb-4 overflow-x-auto">
-            {#each tabs as tab}
-                <button
-                    onclick={() => (activeTab = tab.id)}
-                    class={`cyber-tab flex items-center gap-2 font-mono text-sm whitespace-nowrap ${activeTab === tab.id ? "active" : ""}`}
-                >
-                    <tab.icon class="w-4 h-4" />
-                    {tab.label.toUpperCase()}
-                </button>
-            {/each}
-        </nav>
-    </header>
-
-    <!-- Main Content -->
-    <main class="flex-1 overflow-auto p-6">
-        {#if activeTab === "dashboard"}
-            <!-- Dashboard -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div class="cyber-card p-4">
-                    <p class="text-cyber-muted text-xs font-mono">
-                        REQUESTS TODAY
-                    </p>
-                    <p class="text-2xl font-mono text-cyber-cyan">
-                        {stats.requests_today}
-                    </p>
-                </div>
-                <div class="cyber-card p-4">
-                    <p class="text-cyber-muted text-xs font-mono">
-                        TOTAL TOKENS
-                    </p>
-                    <p class="text-2xl font-mono text-cyber-magenta">
-                        {stats.total_tokens.toLocaleString()}
-                    </p>
-                </div>
-                <div class="cyber-card p-4">
-                    <p class="text-cyber-muted text-xs font-mono">EST. COST</p>
-                    <p class="text-2xl font-mono text-cyber-green">
-                        ${stats.est_cost.toFixed(4)}
-                    </p>
-                </div>
-                <div class="cyber-card p-4">
-                    <p class="text-cyber-muted text-xs font-mono">
-                        AVG LATENCY
-                    </p>
-                    <p class="text-2xl font-mono text-cyber-amber">
-                        {stats.avg_latency}ms
-                    </p>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div class="cyber-card p-6">
-                    <div class="flex items-center gap-3 mb-4">
-                        <div class="p-2 rounded-lg bg-cyber-cyan/10">
-                            <Zap class="w-5 h-5 text-cyber-cyan" />
-                        </div>
-                        <span class="text-cyber-muted font-mono text-sm"
-                            >BIG MODEL</span
-                        >
-                    </div>
-                    <p class="font-mono text-lg text-cyber-text truncate">
-                        {config.big_model || "Not set"}
-                    </p>
-                </div>
-                <div class="cyber-card p-6">
-                    <div class="flex items-center gap-3 mb-4">
-                        <div class="p-2 rounded-lg bg-cyber-magenta/10">
-                            <Zap class="w-5 h-5 text-cyber-magenta" />
-                        </div>
-                        <span class="text-cyber-muted font-mono text-sm"
-                            >MIDDLE MODEL</span
-                        >
-                    </div>
-                    <p class="font-mono text-lg text-cyber-text truncate">
-                        {config.middle_model || "Not set"}
-                    </p>
-                </div>
-                <div class="cyber-card p-6">
-                    <div class="flex items-center gap-3 mb-4">
-                        <div class="p-2 rounded-lg bg-cyber-green/10">
-                            <Zap class="w-5 h-5 text-cyber-green" />
-                        </div>
-                        <span class="text-cyber-muted font-mono text-sm"
-                            >SMALL MODEL</span
-                        >
-                    </div>
-                    <p class="font-mono text-lg text-cyber-text truncate">
-                        {config.small_model || "Not set"}
-                    </p>
-                </div>
-            </div>
-        {:else if activeTab === "models"}
-            <div class="max-w-3xl space-y-6">
-                <h2 class="font-mono text-xl text-cyber-cyan mb-6">
-                    // MODEL CONFIGURATION
-                </h2>
-
-                <!-- Model Selection -->
-                <div class="cyber-card p-4 space-y-4">
-                    <h3 class="font-mono text-cyber-text mb-4">
-                        Model Selection
-                    </h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label
-                                for="big_model"
-                                class="block text-xs font-mono text-cyber-muted mb-1"
-                                >BIG_MODEL (Opus)</label
-                            >
-                            <input
-                                id="big_model"
-                                type="text"
-                                bind:value={config.big_model}
-                                class="cyber-input w-full text-sm"
-                                placeholder="anthropic/claude-3-opus"
-                            />
-                        </div>
-                        <div>
-                            <label
-                                for="middle_model"
-                                class="block text-xs font-mono text-cyber-muted mb-1"
-                                >MIDDLE_MODEL (Sonnet)</label
-                            >
-                            <input
-                                id="middle_model"
-                                type="text"
-                                bind:value={config.middle_model}
-                                class="cyber-input w-full text-sm"
-                                placeholder="anthropic/claude-3-sonnet"
-                            />
-                        </div>
-                        <div>
-                            <label
-                                for="small_model"
-                                class="block text-xs font-mono text-cyber-muted mb-1"
-                                >SMALL_MODEL (Haiku)</label
-                            >
-                            <input
-                                id="small_model"
-                                type="text"
-                                bind:value={config.small_model}
-                                class="cyber-input w-full text-sm"
-                                placeholder="anthropic/claude-3-haiku"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Reasoning Configuration -->
-                <details class="cyber-card p-4">
-                    <summary
-                        class="font-mono text-cyber-text cursor-pointer select-none flex items-center gap-2"
-                    >
-                        <ChevronDown class="w-4 h-4 transition-transform" />
-                        Reasoning Configuration
-                    </summary>
-                    <div class="mt-4 space-y-4">
-                        <p class="text-xs text-cyber-dim">
-                            Configure thinking/reasoning for o-series and Claude
-                            models
-                        </p>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >Global Effort</label
-                                >
-                                <select
-                                    bind:value={config.reasoning_effort}
-                                    class="cyber-input w-full text-sm"
-                                >
-                                    <option value="">Disabled</option>
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                </select>
+        <!-- Content Area -->
+        <main class="flex-1 overflow-auto p-6">
+            {#if activeTab === "dashboard"}
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="rounded-xl border border-border bg-card p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg bg-primary/10">
+                                <Activity class="w-4 h-4 text-primary" />
                             </div>
                             <div>
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >Max Tokens</label
+                                <p
+                                    class="text-xs text-muted-foreground uppercase tracking-wide"
                                 >
-                                <input
-                                    type="number"
-                                    bind:value={config.reasoning_max_tokens}
-                                    class="cyber-input w-full text-sm"
-                                    placeholder="128000"
-                                />
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >Verbosity</label
-                                >
-                                <select
-                                    bind:value={config.verbosity}
-                                    class="cyber-input w-full text-sm"
-                                >
-                                    <option value="">Default</option>
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-2 pt-5">
-                                <input
-                                    type="checkbox"
-                                    id="reasoning_exclude"
-                                    checked={config.reasoning_exclude ===
-                                        "true"}
-                                    onchange={(e) =>
-                                        (config.reasoning_exclude = e.target
-                                            .checked
-                                            ? "true"
-                                            : "false")}
-                                    class="accent-cyber-cyan"
-                                />
-                                <label
-                                    for="reasoning_exclude"
-                                    class="text-xs text-cyber-muted"
-                                    >Exclude from response</label
-                                >
-                            </div>
-                        </div>
-                        <div
-                            class="grid grid-cols-3 gap-4 pt-2 border-t border-cyber-border/20"
-                        >
-                            <div>
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >BIG Override</label
-                                >
-                                <select
-                                    bind:value={config.big_model_reasoning}
-                                    class="cyber-input w-full text-sm"
-                                >
-                                    <option value="">Use Global</option>
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >MIDDLE Override</label
-                                >
-                                <select
-                                    bind:value={config.middle_model_reasoning}
-                                    class="cyber-input w-full text-sm"
-                                >
-                                    <option value="">Use Global</option>
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >SMALL Override</label
-                                >
-                                <select
-                                    bind:value={config.small_model_reasoning}
-                                    class="cyber-input w-full text-sm"
-                                >
-                                    <option value="">Use Global</option>
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                </select>
+                                    Requests
+                                </p>
+                                <p class="text-2xl font-bold text-foreground">
+                                    {stats.requests_today}
+                                </p>
                             </div>
                         </div>
                     </div>
-                </details>
-
-                <!-- Custom System Prompts -->
-                <details class="cyber-card p-4">
-                    <summary
-                        class="font-mono text-cyber-text cursor-pointer select-none flex items-center gap-2"
-                    >
-                        <ChevronDown class="w-4 h-4 transition-transform" />
-                        Custom System Prompts
-                    </summary>
-                    <div class="mt-4 space-y-4">
-                        <p class="text-xs text-cyber-dim">
-                            Override system prompts per model tier. File path
-                            takes precedence if both set.
-                        </p>
-
-                        <!-- BIG Prompt -->
-                        <div
-                            class="p-3 bg-cyber-bg rounded border border-cyber-border/20"
-                        >
-                            <div class="flex items-center gap-3 mb-2">
-                                <input
-                                    type="checkbox"
-                                    checked={config.enable_custom_big_prompt ===
-                                        "true"}
-                                    onchange={(e) =>
-                                        (config.enable_custom_big_prompt = e
-                                            .target.checked
-                                            ? "true"
-                                            : "false")}
-                                    class="accent-cyber-cyan"
-                                />
-                                <span class="text-sm font-mono text-cyber-cyan"
-                                    >BIG Tier</span
-                                >
+                    <div class="rounded-xl border border-border bg-card p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg bg-violet-500/10">
+                                <Zap class="w-4 h-4 text-violet-400" />
                             </div>
-                            {#if config.enable_custom_big_prompt === "true"}
-                                <div class="space-y-2 pl-6">
-                                    <input
-                                        type="text"
-                                        bind:value={
-                                            config.big_system_prompt_file
-                                        }
-                                        class="cyber-input w-full text-sm"
-                                        placeholder="File path (optional)"
-                                    />
-                                    <textarea
-                                        bind:value={config.big_system_prompt}
-                                        class="cyber-input w-full text-sm h-16"
-                                        placeholder="Inline prompt..."
-                                    ></textarea>
-                                </div>
-                            {/if}
-                        </div>
-
-                        <!-- MIDDLE Prompt -->
-                        <div
-                            class="p-3 bg-cyber-bg rounded border border-cyber-border/20"
-                        >
-                            <div class="flex items-center gap-3 mb-2">
-                                <input
-                                    type="checkbox"
-                                    checked={config.enable_custom_middle_prompt ===
-                                        "true"}
-                                    onchange={(e) =>
-                                        (config.enable_custom_middle_prompt = e
-                                            .target.checked
-                                            ? "true"
-                                            : "false")}
-                                    class="accent-cyber-cyan"
-                                />
-                                <span class="text-sm font-mono text-cyber-cyan"
-                                    >MIDDLE Tier</span
+                            <div>
+                                <p
+                                    class="text-xs text-muted-foreground uppercase tracking-wide"
                                 >
+                                    Tokens
+                                </p>
+                                <p class="text-2xl font-bold text-foreground">
+                                    {stats.total_tokens.toLocaleString()}
+                                </p>
                             </div>
-                            {#if config.enable_custom_middle_prompt === "true"}
-                                <div class="space-y-2 pl-6">
-                                    <input
-                                        type="text"
-                                        bind:value={
-                                            config.middle_system_prompt_file
-                                        }
-                                        class="cyber-input w-full text-sm"
-                                        placeholder="File path (optional)"
-                                    />
-                                    <textarea
-                                        bind:value={config.middle_system_prompt}
-                                        class="cyber-input w-full text-sm h-16"
-                                        placeholder="Inline prompt..."
-                                    ></textarea>
-                                </div>
-                            {/if}
-                        </div>
-
-                        <!-- SMALL Prompt -->
-                        <div
-                            class="p-3 bg-cyber-bg rounded border border-cyber-border/20"
-                        >
-                            <div class="flex items-center gap-3 mb-2">
-                                <input
-                                    type="checkbox"
-                                    checked={config.enable_custom_small_prompt ===
-                                        "true"}
-                                    onchange={(e) =>
-                                        (config.enable_custom_small_prompt = e
-                                            .target.checked
-                                            ? "true"
-                                            : "false")}
-                                    class="accent-cyber-cyan"
-                                />
-                                <span class="text-sm font-mono text-cyber-cyan"
-                                    >SMALL Tier</span
-                                >
-                            </div>
-                            {#if config.enable_custom_small_prompt === "true"}
-                                <div class="space-y-2 pl-6">
-                                    <input
-                                        type="text"
-                                        bind:value={
-                                            config.small_system_prompt_file
-                                        }
-                                        class="cyber-input w-full text-sm"
-                                        placeholder="File path (optional)"
-                                    />
-                                    <textarea
-                                        bind:value={config.small_system_prompt}
-                                        class="cyber-input w-full text-sm h-16"
-                                        placeholder="Inline prompt..."
-                                    ></textarea>
-                                </div>
-                            {/if}
                         </div>
                     </div>
-                </details>
-
-                <button onclick={saveConfig} class="cyber-btn mt-6"
-                    >SAVE CONFIGURATION</button
-                >
-            </div>
-        {:else if activeTab === "cascade"}
-            <div class="max-w-2xl space-y-6">
-                <h2 class="font-mono text-xl text-cyber-cyan mb-6">
-                    // CASCADE FALLBACK
-                </h2>
-                <div class="cyber-card p-4 flex items-center justify-between">
-                    <div>
-                        <p class="font-mono text-cyber-text">
-                            Enable Model Cascade
-                        </p>
-                        <p class="text-sm text-cyber-muted">
-                            Auto-switch to fallback models on errors
-                        </p>
+                    <div class="rounded-xl border border-border bg-card p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg bg-emerald-500/10">
+                                <FileText class="w-4 h-4 text-emerald-400" />
+                            </div>
+                            <div>
+                                <p
+                                    class="text-xs text-muted-foreground uppercase tracking-wide"
+                                >
+                                    Cost
+                                </p>
+                                <p class="text-2xl font-bold text-foreground">
+                                    ${stats.est_cost.toFixed(4)}
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                    <button
-                        onclick={() =>
-                            (config.model_cascade = !config.model_cascade)}
-                        class={`w-12 h-6 rounded-full transition-colors ${config.model_cascade ? "bg-cyber-cyan" : "bg-cyber-border"}`}
-                        aria-label="Toggle cascade"
-                    >
-                        <div
-                            class={`w-5 h-5 rounded-full bg-white transform transition-transform ${config.model_cascade ? "translate-x-6" : "translate-x-0.5"}`}
-                        ></div>
-                    </button>
+                    <div class="rounded-xl border border-border bg-card p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg bg-amber-500/10">
+                                <Radio class="w-4 h-4 text-amber-400" />
+                            </div>
+                            <div>
+                                <p
+                                    class="text-xs text-muted-foreground uppercase tracking-wide"
+                                >
+                                    Latency
+                                </p>
+                                <p class="text-2xl font-bold text-foreground">
+                                    {stats.avg_latency}ms
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                {#if config.model_cascade}
-                    <div class="space-y-4 mt-6">
-                        <div>
-                            <label
-                                for="big_cascade"
-                                class="block text-sm font-mono text-cyber-muted mb-2"
-                                >BIG_CASCADE</label
-                            >
-                            <input
-                                id="big_cascade"
-                                type="text"
-                                bind:value={config.big_cascade}
-                                class="cyber-input w-full"
-                                placeholder="openai/gpt-4o,google/gemini-pro"
-                            />
-                        </div>
-                        <div>
-                            <label
-                                for="middle_cascade"
-                                class="block text-sm font-mono text-cyber-muted mb-2"
-                                >MIDDLE_CASCADE</label
-                            >
-                            <input
-                                id="middle_cascade"
-                                type="text"
-                                bind:value={config.middle_cascade}
-                                class="cyber-input w-full"
-                                placeholder="openai/gpt-4o-mini"
-                            />
-                        </div>
-                        <div>
-                            <label
-                                for="small_cascade"
-                                class="block text-sm font-mono text-cyber-muted mb-2"
-                                >SMALL_CASCADE</label
-                            >
-                            <input
-                                id="small_cascade"
-                                type="text"
-                                bind:value={config.small_cascade}
-                                class="cyber-input w-full"
-                                placeholder="google/gemini-flash"
-                            />
-                        </div>
-                    </div>
-                    <div
-                        class="cyber-card p-4 mt-6 border-l-4 border-cyber-amber"
-                    >
-                        <p class="font-mono text-sm text-cyber-amber">
-                            ⚡ CASCADE BEHAVIOR
-                        </p>
-                        <ul class="text-sm text-cyber-muted mt-2 space-y-1">
-                            <li>• SSL/Cert errors → Switch immediately</li>
-                            <li>• 400/401 errors → Switch immediately</li>
-                            <li>
-                                • Connection/Timeout/Rate limit → 5 retries
-                                before switch
-                            </li>
-                        </ul>
-                    </div>
-                {/if}
-                <button onclick={saveConfig} class="cyber-btn mt-6"
-                    >SAVE CASCADE CONFIG</button
-                >
-            </div>
-        {:else if activeTab === "routing"}
-            <div class="max-w-2xl space-y-6">
-                <h2 class="font-mono text-xl text-cyber-cyan mb-6">
-                    // HYBRID ROUTING
-                </h2>
-                <p class="text-cyber-muted mb-4">
-                    Route different model tiers to different API endpoints.
-                </p>
 
-                {#each [{ tier: "BIG", enable: "enable_big_endpoint", endpoint: "big_endpoint", apiKey: "big_api_key" }, { tier: "MIDDLE", enable: "enable_middle_endpoint", endpoint: "middle_endpoint", apiKey: "middle_api_key" }, { tier: "SMALL", enable: "enable_small_endpoint", endpoint: "small_endpoint", apiKey: "small_api_key" }] as route}
-                    <div class="cyber-card p-4">
-                        <div class="flex items-center justify-between mb-4">
-                            <span class="font-mono text-cyber-text"
-                                >{route.tier} Endpoint</span
-                            >
+                <!-- Enhanced Analytics Summary (when usage tracking is enabled) -->
+                {#if analyticsSummary && analyticsSummary.summary}
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                                7-Day Analytics Overview
+                            </h3>
                             <button
-                                onclick={() =>
-                                    (config[route.enable] =
-                                        !config[route.enable])}
-                                class={`w-12 h-6 rounded-full transition-colors ${config[route.enable] ? "bg-cyber-cyan" : "bg-cyber-border"}`}
-                                aria-label="Toggle endpoint"
+                                onclick={() => activeTab = "analytics"}
+                                class="text-xs text-primary hover:underline flex items-center gap-1"
                             >
-                                <div
-                                    class={`w-5 h-5 rounded-full bg-white transform transition-transform ${config[route.enable] ? "translate-x-6" : "translate-x-0.5"}`}
-                                ></div>
+                                View Full Analytics →
                             </button>
                         </div>
-                        {#if config[route.enable]}
-                            <div class="space-y-3">
-                                <div>
-                                    <label
-                                        class="block text-xs text-cyber-muted mb-1"
-                                        >Endpoint URL</label
-                                    >
-                                    <input
-                                        type="text"
-                                        bind:value={config[route.endpoint]}
-                                        class="cyber-input w-full"
-                                        placeholder="https://api.openai.com/v1"
-                                    />
-                                </div>
-                                <div>
-                                    <label
-                                        class="block text-xs text-cyber-muted mb-1"
-                                        >API Key</label
-                                    >
-                                    <input
-                                        type="password"
-                                        bind:value={config[route.apiKey]}
-                                        class="cyber-input w-full"
-                                        placeholder="sk-..."
-                                    />
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div class="rounded-xl border border-border bg-card/50 p-3">
+                                <div class="text-xs text-muted-foreground">Total Requests</div>
+                                <div class="text-lg font-bold">
+                                    {analyticsSummary.summary.total_requests?.toLocaleString() || 0}
                                 </div>
                             </div>
-                        {/if}
-                    </div>
-                {/each}
-                <button onclick={saveConfig} class="cyber-btn mt-6"
-                    >SAVE ROUTING</button
-                >
-            </div>
-        {:else if activeTab === "crosstalk"}
-            <div class="space-y-6">
-                <div class="flex items-center justify-between">
-                    <h2 class="font-mono text-xl text-cyber-cyan">
-                        // CROSSTALK ORCHESTRATION
-                    </h2>
-                    <div class="flex gap-2">
-                        <select
-                            onchange={(e) =>
-                                loadPreset(
-                                    (e.target as HTMLSelectElement).value,
-                                )}
-                            class="cyber-input text-sm"
-                        >
-                            <option value="">Load Preset...</option>
-                            {#each presets as preset}
-                                <option value={preset.filename}
-                                    >{preset.name}</option
-                                >
-                            {/each}
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Model Slots -->
-                <div class="cyber-card p-4">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="font-mono text-cyber-text">Model Slots</h3>
-                        <button
-                            onclick={addModelSlot}
-                            class="flex items-center gap-1 text-cyber-cyan text-sm"
-                        >
-                            <Plus class="w-4 h-4" /> Add Slot
-                        </button>
-                    </div>
-                    <div class="space-y-4">
-                        {#each crosstalkSession.models as model, i}
-                            <div
-                                class="p-4 bg-cyber-bg rounded-lg border border-cyber-border/30"
-                            >
-                                <div
-                                    class="flex items-center justify-between mb-3"
-                                >
-                                    <span
-                                        class="text-cyber-cyan font-mono text-sm"
-                                        >Slot #{model.slot_id}</span
-                                    >
-                                    {#if crosstalkSession.models.length > 2}
-                                        <button
-                                            onclick={() =>
-                                                removeModelSlot(model.slot_id)}
-                                            class="text-cyber-red p-1 hover:bg-cyber-red/10 rounded"
-                                        >
-                                            <Trash2 class="w-4 h-4" />
-                                        </button>
+                            <div class="rounded-xl border border-border bg-card/50 p-3">
+                                <div class="text-xs text-muted-foreground">Total Tokens</div>
+                                <div class="text-lg font-bold">
+                                    {#if analyticsSummary.summary.total_tokens > 1000000}
+                                        {(analyticsSummary.summary.total_tokens / 1000000).toFixed(1)}M
+                                    {:else if analyticsSummary.summary.total_tokens > 1000}
+                                        {(analyticsSummary.summary.total_tokens / 1000).toFixed(1)}K
+                                    {:else}
+                                        {analyticsSummary.summary.total_tokens}
                                     {/if}
                                 </div>
-
-                                <!-- Model ID & Template -->
-                                <div class="grid grid-cols-2 gap-3 mb-3">
-                                    <div>
-                                        <label
-                                            class="text-xs text-cyber-muted block mb-1"
-                                            >Model ID</label
-                                        >
-                                        <input
-                                            type="text"
-                                            bind:value={model.model_id}
-                                            class="cyber-input w-full text-sm"
-                                            placeholder="openai/gpt-4o-mini"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label
-                                            class="text-xs text-cyber-muted block mb-1"
-                                            >Jinja Template</label
-                                        >
-                                        <select
-                                            bind:value={model.jinja_template}
-                                            class="cyber-input w-full text-sm"
-                                        >
-                                            {#each jinjaTemplates as tpl}
-                                                <option value={tpl}
-                                                    >{tpl}</option
-                                                >
-                                            {/each}
-                                        </select>
-                                    </div>
+                            </div>
+                            <div class="rounded-xl border border-border bg-card/50 p-3">
+                                <div class="text-xs text-muted-foreground">Est. Cost</div>
+                                <div class="text-lg font-bold text-emerald-400">
+                                    ${analyticsSummary.summary.total_cost?.toFixed(4) || 0}
                                 </div>
-
-                                <!-- System Prompt -->
-                                <div class="mb-3">
-                                    <label
-                                        class="text-xs text-cyber-muted block mb-1"
-                                        >System Prompt</label
-                                    >
-                                    <textarea
-                                        bind:value={model.system_prompt}
-                                        class="cyber-input w-full text-sm h-16"
-                                        placeholder="You are a helpful assistant..."
-                                    ></textarea>
+                            </div>
+                            <div class="rounded-xl border border-border bg-card/50 p-3">
+                                <div class="text-xs text-muted-foreground">Avg Latency</div>
+                                <div class="text-lg font-bold">
+                                    {analyticsSummary.summary.avg_latency_ms?.toFixed(0) || 0}ms
                                 </div>
+                            </div>
+                        </div>
 
-                                <!-- Temp & Max Tokens -->
-                                <div class="grid grid-cols-4 gap-3 mb-3">
-                                    <div>
-                                        <label
-                                            class="text-xs text-cyber-muted block mb-1"
-                                            >Temp</label
-                                        >
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            min="0"
-                                            max="2"
-                                            bind:value={model.temperature}
-                                            class="cyber-input w-full text-sm"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label
-                                            class="text-xs text-cyber-muted block mb-1"
-                                            >Max Tokens</label
-                                        >
-                                        <input
-                                            type="number"
-                                            bind:value={model.max_tokens}
-                                            class="cyber-input w-full text-sm"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label
-                                            class="text-xs text-cyber-muted block mb-1"
-                                            >Endpoint</label
-                                        >
-                                        <input
-                                            type="text"
-                                            bind:value={model.endpoint}
-                                            class="cyber-input w-full text-sm"
-                                            placeholder="Custom API URL"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label
-                                            class="text-xs text-cyber-muted block mb-1"
-                                            >API Key Env</label
-                                        >
-                                        <input
-                                            type="text"
-                                            bind:value={model.api_key_env}
-                                            class="cyber-input w-full text-sm"
-                                            placeholder="OPENAI_API_KEY"
-                                        />
-                                    </div>
+                        <!-- Top Models from Analytics -->
+                        {#if analyticsSummary.top_models && analyticsSummary.top_models.length > 0}
+                            <div class="mt-4 rounded-xl border border-border bg-card overflow-hidden">
+                                <div class="px-4 py-2 bg-accent/30 border-b border-border text-xs font-medium">
+                                    Top Models (7 Days)
                                 </div>
+                                <div class="divide-y divide-border">
+                                    {#each analyticsSummary.top_models.slice(0, 3) as model}
+                                        <div class="px-4 py-2 flex items-center justify-between hover:bg-accent/30 transition-colors">
+                                            <div class="flex items-center gap-2">
+                                                <span class="font-mono text-xs">{model.model.split('/').pop() || model.model}</span>
+                                                <span class="text-[10px] text-muted-foreground">{model.request_count} reqs</span>
+                                            </div>
+                                            <div class="text-xs text-muted-foreground">
+                                                {model.total_tokens.toLocaleString()} tokens
+                                            </div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                        {/if}
 
-                                <!-- Context Modifiers -->
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label
-                                            class="text-xs text-cyber-muted block mb-1"
-                                            >Prepend (to outgoing)</label
-                                        >
-                                        <input
-                                            type="text"
-                                            bind:value={model.prepend}
-                                            class="cyber-input w-full text-sm"
-                                            placeholder="Added before responses..."
-                                        />
-                                    </div>
-                                    <div>
-                                        <label
-                                            class="text-xs text-cyber-muted block mb-1"
-                                            >Append (to incoming)</label
-                                        >
-                                        <input
-                                            type="text"
-                                            bind:value={model.append}
-                                            class="cyber-input w-full text-sm"
-                                            placeholder="Added to messages received..."
-                                        />
+                        <!-- Quick Insights -->
+                        {#if analyticsSummary.json_analysis && analyticsSummary.json_analysis.recommended}
+                            <div class="mt-3 p-3 rounded-lg border border-blue-500/30 bg-blue-500/10 flex items-start gap-2">
+                                <div class="text-blue-400 mt-0.5">💡</div>
+                                <div>
+                                    <div class="text-sm font-medium text-blue-300">TOON Optimization Available</div>
+                                    <div class="text-xs text-blue-200/80 mt-1">
+                                        You have {analyticsSummary.json_analysis.json_percentage}% JSON responses.
+                                        Estimated savings: {(analyticsSummary.json_analysis.estimated_toon_savings_bytes / 1024).toFixed(1)}KB
                                     </div>
                                 </div>
                             </div>
-                        {/each}
+                        {/if}
                     </div>
-                </div>
-
-                <!-- Session Settings -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="cyber-card p-4">
-                        <h3 class="font-mono text-cyber-text mb-4">Topology</h3>
-                        <select
-                            bind:value={crosstalkSession.topology.type}
-                            class="cyber-input w-full"
+                {:else if analyticsLoading}
+                    <div class="mb-6 text-center py-3 text-sm text-muted-foreground border border-border rounded-xl bg-card/50">
+                        Loading analytics...
+                    </div>
+                {:else}
+                    <div class="mb-6 p-4 rounded-xl border border-border bg-card/50 text-sm">
+                        <div class="flex items-center gap-2 text-muted-foreground">
+                            <span>📊</span>
+                            <span>Enable usage tracking to see detailed analytics and insights</span>
+                        </div>
+                        <button
+                            onclick={() => activeTab = "analytics"}
+                            class="mt-2 text-xs text-primary hover:underline"
                         >
-                            {#each topologies as t}<option value={t}
-                                    >{t.toUpperCase()}</option
-                                >{/each}
-                        </select>
-                    </div>
-                    <div class="cyber-card p-4">
-                        <h3 class="font-mono text-cyber-text mb-4">Paradigm</h3>
-                        <select
-                            bind:value={crosstalkSession.paradigm}
-                            class="cyber-input w-full"
-                        >
-                            {#each paradigms as p}<option value={p}
-                                    >{p.toUpperCase()}</option
-                                >{/each}
-                        </select>
-                    </div>
-                    <div class="cyber-card p-4">
-                        <h3 class="font-mono text-cyber-text mb-4">Rounds</h3>
-                        <div class="flex items-center gap-4">
-                            <input
-                                type="number"
-                                bind:value={crosstalkSession.rounds}
-                                class="cyber-input w-20"
-                                disabled={crosstalkSession.infinite}
-                            />
-                            <label
-                                class="flex items-center gap-2 text-sm text-cyber-muted"
-                            >
-                                <input
-                                    type="checkbox"
-                                    bind:checked={crosstalkSession.infinite}
-                                    class="accent-cyber-cyan"
-                                />
-                                Infinite
-                            </label>
-                        </div>
-                    </div>
-                    <div class="cyber-card p-4">
-                        <h3 class="font-mono text-cyber-text mb-4">
-                            Stop Conditions
-                        </h3>
-                        <div class="space-y-2 text-sm">
-                            <div class="flex items-center gap-2">
-                                <label class="text-cyber-muted w-24"
-                                    >Max Time:</label
-                                >
-                                <input
-                                    type="number"
-                                    bind:value={
-                                        crosstalkSession.stop_conditions
-                                            .max_time_seconds
-                                    }
-                                    class="cyber-input w-20"
-                                />
-                                <span class="text-cyber-muted">sec</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <label class="text-cyber-muted w-24"
-                                    >Max Cost:</label
-                                >
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    bind:value={
-                                        crosstalkSession.stop_conditions
-                                            .max_cost_dollars
-                                    }
-                                    class="cyber-input w-20"
-                                />
-                                <span class="text-cyber-muted">$</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <label class="text-cyber-muted w-24"
-                                    >Repetition:</label
-                                >
-                                <input
-                                    type="number"
-                                    step="0.05"
-                                    min="0"
-                                    max="1"
-                                    bind:value={
-                                        crosstalkSession.stop_conditions
-                                            .repetition_threshold
-                                    }
-                                    class="cyber-input w-20"
-                                />
-                                <span class="text-cyber-muted text-xs"
-                                    >similarity threshold</span
-                                >
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Advanced Options -->
-                <div class="cyber-card p-4 mt-4">
-                    <h3 class="font-mono text-cyber-text mb-4">
-                        Advanced Options
-                    </h3>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                            <label class="text-xs text-cyber-muted block mb-1"
-                                >Summarize Every</label
-                            >
-                            <div class="flex items-center gap-2">
-                                <input
-                                    type="number"
-                                    min="0"
-                                    bind:value={
-                                        crosstalkSession.summarize_every
-                                    }
-                                    class="cyber-input w-16 text-sm"
-                                />
-                                <span class="text-cyber-muted text-xs"
-                                    >rounds</span
-                                >
-                            </div>
-                            <p class="text-cyber-dim text-xs mt-1">
-                                0 = disabled
-                            </p>
-                        </div>
-                        <div>
-                            <label class="text-xs text-cyber-muted block mb-1"
-                                >Checkpoint Every</label
-                            >
-                            <div class="flex items-center gap-2">
-                                <input
-                                    type="number"
-                                    min="0"
-                                    bind:value={
-                                        crosstalkSession.checkpoint_every
-                                    }
-                                    class="cyber-input w-16 text-sm"
-                                />
-                                <span class="text-cyber-muted text-xs"
-                                    >rounds</span
-                                >
-                            </div>
-                            <p class="text-cyber-dim text-xs mt-1">
-                                For infinite mode
-                            </p>
-                        </div>
-                        <div class="col-span-2">
-                            <label
-                                class="flex items-center gap-2 text-sm text-cyber-muted"
-                            >
-                                <input
-                                    type="checkbox"
-                                    bind:checked={
-                                        crosstalkSession.final_round_vote
-                                            .enabled
-                                    }
-                                    class="accent-cyber-cyan"
-                                />
-                                Enable Final Round Voting
-                            </label>
-                            {#if crosstalkSession.final_round_vote.enabled}
-                                <input
-                                    type="text"
-                                    bind:value={
-                                        crosstalkSession.final_round_vote
-                                            .question
-                                    }
-                                    class="cyber-input w-full text-sm mt-2"
-                                    placeholder="Vote question..."
-                                />
-                            {/if}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Initial Prompt -->
-                <div class="cyber-card p-4">
-                    <h3 class="font-mono text-cyber-text mb-4">
-                        Initial Prompt
-                    </h3>
-                    <textarea
-                        bind:value={crosstalkSession.initial_prompt}
-                        class="cyber-input w-full h-32"
-                        placeholder="Enter the starting prompt for the conversation..."
-                    ></textarea>
-                </div>
-
-                <div class="flex gap-4">
-                    <button class="cyber-btn flex items-center gap-2">
-                        <Play class="w-4 h-4" /> RUN SESSION
-                    </button>
-                    <button
-                        class="px-4 py-2 border border-cyber-border rounded-lg text-cyber-muted hover:text-cyber-text transition-colors"
-                    >
-                        SAVE AS PRESET
-                    </button>
-                </div>
-
-                <!-- Recent Sessions -->
-                {#if sessions.length > 0}
-                    <div class="cyber-card p-4 mt-6">
-                        <h3 class="font-mono text-cyber-text mb-4">
-                            Recent Sessions
-                        </h3>
-                        <div class="space-y-2">
-                            {#each sessions.slice(0, 5) as session}
-                                <div
-                                    class="flex items-center justify-between p-2 bg-cyber-bg rounded"
-                                >
-                                    <span
-                                        class="font-mono text-sm text-cyber-muted"
-                                        >{session.filename}</span
-                                    >
-                                    <span class="text-xs text-cyber-dim"
-                                        >{session.messages} messages</span
-                                    >
-                                </div>
-                            {/each}
-                        </div>
+                            Learn more →
+                        </button>
                     </div>
                 {/if}
-            </div>
-        {:else if activeTab === "terminal"}
-            <div class="max-w-3xl space-y-6">
-                <h2 class="font-mono text-xl text-cyber-cyan mb-6">
-                    // TERMINAL OUTPUT
-                </h2>
 
-                <!-- Display Settings -->
-                <div class="cyber-card p-4 space-y-4">
-                    <h3 class="font-mono text-cyber-text mb-4">
-                        Display Settings
-                    </h3>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs text-cyber-muted mb-1"
-                                >Display Mode</label
-                            >
-                            <select
-                                bind:value={config.terminal_display_mode}
-                                class="cyber-input w-full text-sm"
-                            >
-                                <option value="minimal">Minimal</option>
-                                <option value="normal">Normal</option>
-                                <option value="detailed">Detailed</option>
-                                <option value="debug">Debug</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs text-cyber-muted mb-1"
-                                >Color Scheme</label
-                            >
-                            <select
-                                bind:value={config.terminal_color_scheme}
-                                class="cyber-input w-full text-sm"
-                            >
-                                <option value="auto">Auto</option>
-                                <option value="vibrant">Vibrant</option>
-                                <option value="subtle">Subtle</option>
-                                <option value="mono">Mono</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Metrics Toggles -->
-                <details class="cyber-card p-4" open>
-                    <summary
-                        class="font-mono text-cyber-text cursor-pointer select-none flex items-center gap-2"
-                    >
-                        <ChevronDown class="w-4 h-4" /> Metrics Display
-                    </summary>
-                    <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <label
-                            class="flex items-center gap-2 text-sm text-cyber-muted"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={config.terminal_show_workspace ===
-                                    "true"}
-                                onchange={(e) =>
-                                    (config.terminal_show_workspace = e.target
-                                        .checked
-                                        ? "true"
-                                        : "false")}
-                                class="accent-cyber-cyan"
-                            />
-                            Workspace
-                        </label>
-                        <label
-                            class="flex items-center gap-2 text-sm text-cyber-muted"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={config.terminal_show_context_pct ===
-                                    "true"}
-                                onchange={(e) =>
-                                    (config.terminal_show_context_pct = e.target
-                                        .checked
-                                        ? "true"
-                                        : "false")}
-                                class="accent-cyber-cyan"
-                            />
-                            Context %
-                        </label>
-                        <label
-                            class="flex items-center gap-2 text-sm text-cyber-muted"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={config.terminal_show_task_type ===
-                                    "true"}
-                                onchange={(e) =>
-                                    (config.terminal_show_task_type = e.target
-                                        .checked
-                                        ? "true"
-                                        : "false")}
-                                class="accent-cyber-cyan"
-                            />
-                            Task Type 🧠
-                        </label>
-                        <label
-                            class="flex items-center gap-2 text-sm text-cyber-muted"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={config.terminal_show_speed === "true"}
-                                onchange={(e) =>
-                                    (config.terminal_show_speed = e.target
-                                        .checked
-                                        ? "true"
-                                        : "false")}
-                                class="accent-cyber-cyan"
-                            />
-                            Speed (tok/s)
-                        </label>
-                        <label
-                            class="flex items-center gap-2 text-sm text-cyber-muted"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={config.terminal_show_cost === "true"}
-                                onchange={(e) =>
-                                    (config.terminal_show_cost = e.target
-                                        .checked
-                                        ? "true"
-                                        : "false")}
-                                class="accent-cyber-cyan"
-                            />
-                            Cost
-                        </label>
-                        <label
-                            class="flex items-center gap-2 text-sm text-cyber-muted"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={config.terminal_show_duration_colors ===
-                                    "true"}
-                                onchange={(e) =>
-                                    (config.terminal_show_duration_colors = e
-                                        .target.checked
-                                        ? "true"
-                                        : "false")}
-                                class="accent-cyber-cyan"
-                            />
-                            Duration Colors
-                        </label>
-                        <label
-                            class="flex items-center gap-2 text-sm text-cyber-muted"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={config.terminal_session_colors ===
-                                    "true"}
-                                onchange={(e) =>
-                                    (config.terminal_session_colors = e.target
-                                        .checked
-                                        ? "true"
-                                        : "false")}
-                                class="accent-cyber-cyan"
-                            />
-                            Session Colors
-                        </label>
-                    </div>
-                </details>
-
-                <!-- Logging Settings -->
-                <details class="cyber-card p-4">
-                    <summary
-                        class="font-mono text-cyber-text cursor-pointer select-none flex items-center gap-2"
-                    >
-                        <ChevronDown class="w-4 h-4" /> Logging
-                    </summary>
-                    <div class="mt-4 space-y-4">
-                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            <div>
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >Log Style</label
-                                >
-                                <select
-                                    bind:value={config.log_style}
-                                    class="cyber-input w-full text-sm"
-                                >
-                                    <option value="rich">Rich (colored)</option>
-                                    <option value="plain">Plain</option>
-                                    <option value="compact">Compact</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >Color Scheme</label
-                                >
-                                <select
-                                    bind:value={config.color_scheme}
-                                    class="cyber-input w-full text-sm"
-                                >
-                                    <option value="auto">Auto</option>
-                                    <option value="dark">Dark</option>
-                                    <option value="light">Light</option>
-                                    <option value="none">None</option>
-                                </select>
-                            </div>
-                            <label
-                                class="flex items-center gap-2 text-sm text-cyber-muted pt-5"
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={config.compact_logger === "true"}
-                                    onchange={(e) =>
-                                        (config.compact_logger = e.target
-                                            .checked
-                                            ? "true"
-                                            : "false")}
-                                    class="accent-cyber-cyan"
-                                />
-                                Compact Logger
-                            </label>
-                        </div>
-                        <div class="flex gap-6">
-                            <label
-                                class="flex items-center gap-2 text-sm text-cyber-muted"
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={config.show_token_counts ===
-                                        "true"}
-                                    onchange={(e) =>
-                                        (config.show_token_counts = e.target
-                                            .checked
-                                            ? "true"
-                                            : "false")}
-                                    class="accent-cyber-cyan"
-                                />
-                                Show Token Counts
-                            </label>
-                            <label
-                                class="flex items-center gap-2 text-sm text-cyber-muted"
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={config.show_performance === "true"}
-                                    onchange={(e) =>
-                                        (config.show_performance = e.target
-                                            .checked
-                                            ? "true"
-                                            : "false")}
-                                    class="accent-cyber-cyan"
-                                />
-                                Show Performance
-                            </label>
-                        </div>
-                    </div>
-                </details>
-
-                <!-- Dashboard Settings -->
-                <details class="cyber-card p-4">
-                    <summary
-                        class="font-mono text-cyber-text cursor-pointer select-none flex items-center gap-2"
-                    >
-                        <ChevronDown class="w-4 h-4" /> Terminal Dashboard
-                    </summary>
-                    <div class="mt-4 space-y-4">
-                        <label class="flex items-center gap-3">
-                            <input
-                                type="checkbox"
-                                checked={config.enable_dashboard === "true"}
-                                onchange={(e) =>
-                                    (config.enable_dashboard = e.target.checked
-                                        ? "true"
-                                        : "false")}
-                                class="accent-cyber-cyan"
-                            />
-                            <span class="text-sm text-cyber-muted"
-                                >Enable Live Dashboard</span
-                            >
-                        </label>
-                        {#if config.enable_dashboard === "true"}
-                            <div class="grid grid-cols-3 gap-4 pl-6">
-                                <div>
-                                    <label
-                                        class="block text-xs text-cyber-muted mb-1"
-                                        >Layout</label
-                                    >
-                                    <select
-                                        bind:value={config.dashboard_layout}
-                                        class="cyber-input w-full text-sm"
-                                    >
-                                        <option value="default">Default</option>
-                                        <option value="compact">Compact</option>
-                                        <option value="detailed"
-                                            >Detailed</option
-                                        >
-                                    </select>
-                                </div>
-                                <div>
-                                    <label
-                                        class="block text-xs text-cyber-muted mb-1"
-                                        >Refresh Rate</label
-                                    >
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        bind:value={config.dashboard_refresh}
-                                        class="cyber-input w-full text-sm"
-                                    />
-                                </div>
-                                <div>
-                                    <label
-                                        class="block text-xs text-cyber-muted mb-1"
-                                        >Waterfall Size</label
-                                    >
-                                    <input
-                                        type="number"
-                                        bind:value={
-                                            config.dashboard_waterfall_size
-                                        }
-                                        class="cyber-input w-full text-sm"
-                                    />
-                                </div>
-                            </div>
-                        {/if}
-                    </div>
-                </details>
-
-                <!-- Analytics -->
-                <details class="cyber-card p-4">
-                    <summary
-                        class="font-mono text-cyber-text cursor-pointer select-none flex items-center gap-2"
-                    >
-                        <ChevronDown class="w-4 h-4" /> Usage Analytics
-                    </summary>
-                    <div class="mt-4 space-y-4">
-                        <label class="flex items-center gap-3">
-                            <input
-                                type="checkbox"
-                                checked={config.track_usage === "true"}
-                                onchange={(e) =>
-                                    (config.track_usage = e.target.checked
-                                        ? "true"
-                                        : "false")}
-                                class="accent-cyber-cyan"
-                            />
-                            <span class="text-sm text-cyber-muted"
-                                >Track API Usage (SQLite)</span
-                            >
-                        </label>
-                        {#if config.track_usage === "true"}
-                            <div class="pl-6">
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >Database Path</label
-                                >
-                                <input
-                                    type="text"
-                                    bind:value={config.usage_db_path}
-                                    class="cyber-input w-full text-sm"
-                                />
-                            </div>
-                        {/if}
-                    </div>
-                </details>
-
-                <!-- Performance -->
-                <details class="cyber-card p-4">
-                    <summary
-                        class="font-mono text-cyber-text cursor-pointer select-none flex items-center gap-2"
-                    >
-                        <ChevronDown class="w-4 h-4" /> Performance
-                    </summary>
-                    <div class="mt-4 grid grid-cols-4 gap-4">
-                        <div>
-                            <label class="block text-xs text-cyber-muted mb-1"
-                                >Max Tokens</label
-                            >
-                            <input
-                                type="number"
-                                bind:value={config.max_tokens_limit}
-                                class="cyber-input w-full text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-xs text-cyber-muted mb-1"
-                                >Min Tokens</label
-                            >
-                            <input
-                                type="number"
-                                bind:value={config.min_tokens_limit}
-                                class="cyber-input w-full text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-xs text-cyber-muted mb-1"
-                                >Timeout (sec)</label
-                            >
-                            <input
-                                type="number"
-                                bind:value={config.request_timeout}
-                                class="cyber-input w-full text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-xs text-cyber-muted mb-1"
-                                >Max Retries</label
-                            >
-                            <input
-                                type="number"
-                                bind:value={config.max_retries}
-                                class="cyber-input w-full text-sm"
-                            />
-                        </div>
-                    </div>
-                </details>
-
-                <!-- Server Info (read-only) -->
-                <div class="cyber-card p-4">
-                    <h3 class="font-mono text-cyber-text mb-4">
-                        Server Info <span class="text-xs text-cyber-dim"
-                            >(restart required)</span
-                        >
-                    </h3>
-                    <div class="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                            <span class="text-cyber-muted">Host:</span>
-                            <span class="text-cyber-text ml-2 font-mono"
-                                >{config.host}</span
-                            >
-                        </div>
-                        <div>
-                            <span class="text-cyber-muted">Port:</span>
-                            <span class="text-cyber-text ml-2 font-mono"
-                                >{config.port}</span
-                            >
-                        </div>
-                        <div>
-                            <span class="text-cyber-muted">Log Level:</span>
-                            <span class="text-cyber-text ml-2 font-mono"
-                                >{config.log_level}</span
-                            >
-                        </div>
-                    </div>
-                </div>
-
-                <button onclick={saveConfig} class="cyber-btn mt-6"
-                    >SAVE SETTINGS</button
+                <!-- Model Cards -->
+                <h3
+                    class="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide"
                 >
-            </div>
-        {:else if activeTab === "playground"}
-            <div class="max-w-4xl space-y-6">
-                <h2 class="font-mono text-xl text-cyber-cyan mb-6">
-                    // MODEL PLAYGROUND
-                </h2>
-                <p class="text-cyber-muted">
-                    Test prompts against configured models.
-                </p>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="space-y-4">
-                        <div>
-                            <label
-                                class="block text-sm font-mono text-cyber-muted mb-2"
-                                >Model</label
-                            >
-                            <select
-                                bind:value={playground.tier}
-                                class="cyber-input w-full"
-                            >
-                                <option value="big"
-                                    >BIG: {config.big_model ||
-                                        "Not configured"}</option
-                                >
-                                <option value="middle"
-                                    >MIDDLE: {config.middle_model ||
-                                        "Not configured"}</option
-                                >
-                                <option value="small"
-                                    >SMALL: {config.small_model ||
-                                        "Not configured"}</option
-                                >
-                            </select>
+                    Active Models
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="model-card">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="model-tier big">BIG</span>
+                            <Zap class="w-4 h-4 text-primary" />
                         </div>
-
-                        <div>
-                            <label
-                                class="block text-sm font-mono text-cyber-muted mb-2"
-                                >System Prompt</label
-                            >
-                            <textarea
-                                bind:value={playground.systemPrompt}
-                                class="cyber-input w-full h-20"
-                                placeholder="You are a helpful assistant..."
-                            ></textarea>
-                        </div>
-
-                        <div>
-                            <label
-                                class="block text-sm font-mono text-cyber-muted mb-2"
-                                >User Message</label
-                            >
-                            <textarea
-                                bind:value={playground.userMessage}
-                                class="cyber-input w-full h-32"
-                                placeholder="Enter your prompt here..."
-                            ></textarea>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >Temperature: {playground.temperature}</label
-                                >
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="2"
-                                    step="0.1"
-                                    bind:value={playground.temperature}
-                                    class="w-full accent-cyber-cyan"
-                                />
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs text-cyber-muted mb-1"
-                                    >Max Tokens</label
-                                >
-                                <input
-                                    type="number"
-                                    bind:value={playground.maxTokens}
-                                    class="cyber-input w-full"
-                                />
-                            </div>
-                        </div>
-
-                        <button
-                            onclick={async () => {
-                                playground.loading = true;
-                                playground.error = "";
-                                try {
-                                    const res = await fetch(
-                                        "/api/playground/run",
-                                        {
-                                            method: "POST",
-                                            headers: {
-                                                "Content-Type":
-                                                    "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                model_tier: playground.tier,
-                                                system_prompt:
-                                                    playground.systemPrompt,
-                                                user_message:
-                                                    playground.userMessage,
-                                                temperature:
-                                                    playground.temperature,
-                                                max_tokens:
-                                                    playground.maxTokens,
-                                            }),
-                                        },
-                                    );
-                                    const data = await res.json();
-                                    if (data.success) {
-                                        playground.response = data.content;
-                                        playground.tokens = {
-                                            input: data.input_tokens,
-                                            output: data.output_tokens,
-                                        };
-                                        playground.latency = data.latency_ms;
-                                    } else {
-                                        playground.error =
-                                            data.error || "Request failed";
-                                    }
-                                } catch (e) {
-                                    playground.error = "Connection error";
-                                }
-                                playground.loading = false;
-                            }}
-                            disabled={playground.loading ||
-                                !playground.userMessage}
-                            class="cyber-btn w-full flex items-center justify-center gap-2"
-                        >
-                            {#if playground.loading}
-                                <span class="animate-spin">⟳</span> Running...
-                            {:else}
-                                <Play class="w-4 h-4" /> RUN PROMPT
-                            {/if}
-                        </button>
-                    </div>
-
-                    <div>
-                        <label
-                            class="block text-sm font-mono text-cyber-muted mb-2"
-                            >Response</label
-                        >
-                        <div
-                            class="cyber-card h-96 p-4 font-mono text-sm overflow-auto bg-cyber-bg"
-                        >
-                            {#if playground.error}
-                                <p class="text-cyber-red">
-                                    {playground.error}
-                                </p>
-                            {:else if playground.response}
-                                <p class="text-cyber-text whitespace-pre-wrap">
-                                    {playground.response}
-                                </p>
-                            {:else}
-                                <p class="text-cyber-dim">
-                                    Response will appear here...
-                                </p>
-                            {/if}
-                        </div>
-                        <div
-                            class="flex justify-between mt-2 text-xs text-cyber-dim"
-                        >
-                            <span
-                                >Tokens: {playground.tokens.input +
-                                    playground.tokens.output || "--"}</span
-                            >
-                            <span
-                                >Latency: {playground.latency
-                                    ? `${playground.latency}ms`
-                                    : "--"}</span
-                            >
-                        </div>
-                    </div>
-                </div>
-            </div>
-        {:else if activeTab === "logs"}
-            <div class="h-full space-y-4">
-                <div class="flex items-center justify-between">
-                    <h2 class="font-mono text-xl text-cyber-cyan">
-                        // LIVE LOGS
-                    </h2>
-                    <div class="flex items-center gap-4">
-                        <div class="flex items-center gap-2">
-                            <div
-                                class={`w-2 h-2 rounded-full ${wsConnected ? "bg-cyber-green status-online" : "bg-cyber-red"}`}
-                            ></div>
-                            <span class="text-xs text-cyber-muted"
-                                >{wsConnected
-                                    ? "Connected"
-                                    : "Disconnected"}</span
-                            >
-                        </div>
-                        <select
-                            bind:value={logFilter}
-                            class="cyber-input text-sm py-1"
-                        >
-                            <option value="all">All Levels</option>
-                            <option value="info">Info</option>
-                            <option value="warning">Warning</option>
-                            <option value="error">Error</option>
-                        </select>
-                        <button
-                            onclick={() => {
-                                if (!wsConnected) connectWebSocket();
-                            }}
-                            class="text-cyber-cyan text-sm hover:underline"
-                            disabled={wsConnected}
-                        >
-                            {wsConnected ? "Connected" : "Connect"}
-                        </button>
-                        <button
-                            onclick={clearLogs}
-                            class="text-cyber-muted text-sm hover:text-cyber-red"
-                            >Clear</button
-                        >
-                    </div>
-                </div>
-
-                <div
-                    class="cyber-card h-[calc(100vh-280px)] p-4 font-mono text-xs overflow-auto flex flex-col-reverse"
-                >
-                    {#if logs.length === 0}
-                        <p class="text-cyber-dim">
-                            No logs yet. Click Connect to start streaming.
+                        <p class="font-mono text-sm text-foreground truncate">
+                            {config.big_model || "—"}
                         </p>
+                    </div>
+                    <div class="model-card">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="model-tier middle">MIDDLE</span>
+                            <Zap class="w-4 h-4 text-violet-400" />
+                        </div>
+                        <p class="font-mono text-sm text-foreground truncate">
+                            {config.middle_model || "—"}
+                        </p>
+                    </div>
+                    <div class="model-card">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="model-tier small">SMALL</span>
+                            <Zap class="w-4 h-4 text-emerald-400" />
+                        </div>
+                        <p class="font-mono text-sm text-foreground truncate">
+                            {config.small_model || "—"}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <h3
+                    class="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide"
+                >
+                    Recent Activity
+                </h3>
+                <div
+                    class="rounded-xl border border-border bg-card overflow-hidden"
+                >
+                    {#if recentRequests.length === 0}
+                        <div class="p-8 text-center text-muted-foreground">
+                            <Activity class="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <p class="text-sm">No recent activity</p>
+                        </div>
                     {:else}
-                        <div class="space-y-1">
-                            {#each logs.filter((l) => logFilter === "all" || l.level === logFilter) as log}
+                        <div class="divide-y divide-border">
+                            {#each recentRequests.slice(0, 5) as req}
                                 <div
-                                    class="flex gap-2 {log.level === 'error'
-                                        ? 'text-cyber-red'
-                                        : log.level === 'warning'
-                                          ? 'text-cyber-amber'
-                                          : 'text-cyber-muted'}"
+                                    class="px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors"
                                 >
-                                    <span class="text-cyber-dim shrink-0"
-                                        >{log.timestamp?.slice(11, 19) ||
-                                            "--:--:--"}</span
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="w-2 h-2 rounded-full {req.status ===
+                                            'success'
+                                                ? 'bg-emerald-500'
+                                                : 'bg-red-500'}"
+                                        ></div>
+                                        <span class="font-mono text-sm"
+                                            >{req.model}</span
+                                        >
+                                    </div>
+                                    <div
+                                        class="flex items-center gap-4 text-sm text-muted-foreground"
                                     >
-                                    <span class="w-14 shrink-0 uppercase"
-                                        >[{log.level || "INFO"}]</span
-                                    >
-                                    <span class="text-cyber-text"
-                                        >{log.message}</span
-                                    >
-                                    {#if log.model}<span class="text-cyber-cyan"
-                                            >({log.model})</span
-                                        >{/if}
-                                    {#if log.duration_ms}<span
-                                            class="text-cyber-magenta"
-                                            >{log.duration_ms}ms</span
-                                        >{/if}
+                                        <span>{req.tokens} tokens</span>
+                                        <span>{req.duration}ms</span>
+                                        <span class="text-emerald-400"
+                                            >${req.cost}</span
+                                        >
+                                    </div>
                                 </div>
                             {/each}
                         </div>
                     {/if}
                 </div>
-            </div>
-        {/if}
-    </main>
-
-    <!-- Footer -->
-    <footer class="border-t border-cyber-border bg-cyber-surface px-6 py-3">
-        <div
-            class="flex items-center justify-between text-xs font-mono text-cyber-dim"
-        >
-            <span>Claude Code Proxy</span>
-            <span>localhost:8082</span>
-        </div>
-    </footer>
-</div>
-
-<!-- Setup Wizard Modal -->
-{#if showWizard}
-    <div
-        class="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
-    >
-        <div class="cyber-card p-6 max-w-md w-full mx-4 gradient-border">
-            <h2 class="font-mono text-xl text-cyber-cyan mb-2">
-                // SETUP WIZARD
-            </h2>
-            <p class="text-cyber-muted text-sm mb-6">
-                Configure your API provider to get started.
-            </p>
-
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-mono text-cyber-muted mb-2"
-                        >Provider</label
-                    >
-                    <select
-                        bind:value={config.default_provider}
-                        class="cyber-input w-full"
-                    >
-                        <option value="openrouter">OpenRouter</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="anthropic">Anthropic</option>
-                        <option value="google">Google AI</option>
-                        <option value="custom">Custom</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-mono text-cyber-muted mb-2"
-                        >API Key</label
-                    >
-                    <input
-                        type="password"
-                        class="cyber-input w-full"
-                        placeholder="sk-..."
-                    />
-                </div>
-
-                {#if config.default_provider === "custom"}
-                    <div>
-                        <label
-                            class="block text-sm font-mono text-cyber-muted mb-2"
-                            >Base URL</label
+            {:else if activeTab === "analytics"}
+                <!-- Enhanced Analytics Dashboard -->
+                <AnalyticsDashboard />
+            {:else if activeTab === "models"}
+                <!-- Models Configuration with Searchable Dropdowns -->
+                <div class="max-w-3xl space-y-6">
+                    <!-- Header with stats and refresh -->
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <h3 class="font-semibold text-lg">
+                                Model Configuration
+                            </h3>
+                            {#if modelStats.total}
+                                <span
+                                    class="text-xs text-muted-foreground bg-accent px-2 py-1 rounded"
+                                >
+                                    {modelStats.total} models available
+                                </span>
+                            {/if}
+                        </div>
+                        <button
+                            onclick={refreshModels}
+                            disabled={modelsLoading}
+                            class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-50"
                         >
-                        <input
-                            type="text"
-                            bind:value={config.provider_base_url}
-                            class="cyber-input w-full"
-                            placeholder="https://api.example.com/v1"
-                        />
+                            <RefreshCw
+                                class="w-4 h-4 {modelsLoading
+                                    ? 'animate-spin'
+                                    : ''}"
+                            />
+                            Refresh Models
+                        </button>
                     </div>
-                {/if}
 
-                <div
-                    class="cyber-card p-3 bg-cyber-bg border-l-4 border-cyber-cyan"
-                >
-                    <p class="text-xs text-cyber-muted">
-                        <strong class="text-cyber-cyan">Quick Start:</strong>
-                        Set API key in
-                        <code class="bg-cyber-elevated px-1 rounded">.env</code>
-                        file and restart proxy.
-                    </p>
+                    {#if modelsError}
+                        <div
+                            class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm"
+                        >
+                            {modelsError}
+                        </div>
+                    {/if}
+
+                    <!-- Model Tier Cards -->
+                    {#each [{ tier: "big" as const, label: "BIG Model", desc: "Opus-tier (complex reasoning)", color: "text-amber-400" }, { tier: "middle" as const, label: "MIDDLE Model", desc: "Sonnet-tier (balanced)", color: "text-blue-400" }, { tier: "small" as const, label: "SMALL Model", desc: "Haiku-tier (fast)", color: "text-emerald-400" }] as item}
+                        <div
+                            class="rounded-xl border border-border bg-card p-5"
+                        >
+                            <div class="flex items-center gap-3 mb-4">
+                                <span class="model-tier {item.tier}"
+                                    >{item.tier.toUpperCase()}</span
+                                >
+                                <div>
+                                    <h4 class="font-medium {item.color}">
+                                        {item.label}
+                                    </h4>
+                                    <p class="text-xs text-muted-foreground">
+                                        {item.desc}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Provider filter -->
+                            <div class="flex gap-3 mb-3">
+                                <select
+                                    class="flex-shrink-0 w-40 px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    value={modelFilters[item.tier].provider}
+                                    onchange={(e) =>
+                                        (modelFilters[item.tier].provider =
+                                            getValue(e))}
+                                >
+                                    <option value="">All Providers</option>
+                                    {#each availableProviders as provider}
+                                        <option value={provider.id}>
+                                            {provider.name} ({provider.model_count})
+                                        </option>
+                                    {/each}
+                                </select>
+
+                                <!-- Search input with dropdown -->
+                                <div class="relative flex-1">
+                                    <input
+                                        type="text"
+                                        placeholder="Search models..."
+                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                        value={modelFilters[item.tier].search}
+                                        oninput={(e) => {
+                                            modelFilters[item.tier].search =
+                                                getValue(e);
+                                            modelFilters[
+                                                item.tier
+                                            ].showDropdown = true;
+                                        }}
+                                        onfocus={() =>
+                                            (modelFilters[
+                                                item.tier
+                                            ].showDropdown = true)}
+                                    />
+
+                                    <!-- Dropdown results -->
+                                    {#if modelFilters[item.tier].showDropdown && (modelFilters[item.tier].search || modelFilters[item.tier].provider)}
+                                        <div
+                                            class="absolute z-50 top-full left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+                                        >
+                                            {#if modelsLoading}
+                                                <div
+                                                    class="p-4 text-center text-muted-foreground text-sm"
+                                                >
+                                                    Loading models...
+                                                </div>
+                                            {:else}
+                                                {#each getFilteredModels(item.tier) as model}
+                                                    <button
+                                                        type="button"
+                                                        class="w-full px-3 py-2 text-left hover:bg-accent transition-colors border-b border-border last:border-b-0"
+                                                        onclick={() =>
+                                                            selectModel(
+                                                                item.tier,
+                                                                model.id,
+                                                            )}
+                                                    >
+                                                        <div
+                                                            class="flex items-center justify-between"
+                                                        >
+                                                            <div
+                                                                class="flex-1 min-w-0"
+                                                            >
+                                                                <div
+                                                                    class="font-mono text-sm truncate"
+                                                                >
+                                                                    {model.id}
+                                                                </div>
+                                                                <div
+                                                                    class="text-xs text-muted-foreground truncate"
+                                                                >
+                                                                    {model.name}
+                                                                </div>
+                                                            </div>
+                                                            <div
+                                                                class="flex items-center gap-2 ml-2 text-xs text-muted-foreground flex-shrink-0"
+                                                            >
+                                                                <span
+                                                                    title="Context window"
+                                                                    >{formatContext(
+                                                                        model.context_length,
+                                                                    )}</span
+                                                                >
+                                                                <span
+                                                                    class="text-emerald-400"
+                                                                    title="Input price/M tokens"
+                                                                >
+                                                                    {formatPrice(
+                                                                        model
+                                                                            .pricing
+                                                                            .input_per_million,
+                                                                    )}
+                                                                </span>
+                                                                {#if model.supports_reasoning}
+                                                                    <span
+                                                                        title="Reasoning"
+                                                                        >🧠</span
+                                                                    >
+                                                                {/if}
+                                                                {#if model.supports_vision}
+                                                                    <span
+                                                                        title="Vision"
+                                                                        >👁</span
+                                                                    >
+                                                                {/if}
+                                                                {#if model.supports_tools}
+                                                                    <span
+                                                                        title="Tools"
+                                                                        >🔧</span
+                                                                    >
+                                                                {/if}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                {:else}
+                                                    <div
+                                                        class="p-4 text-center text-muted-foreground text-sm"
+                                                    >
+                                                        No models found
+                                                    </div>
+                                                {/each}
+                                            {/if}
+                                        </div>
+                                    {/if}
+                                </div>
+
+                                <!-- Close dropdown button -->
+                                {#if modelFilters[item.tier].showDropdown}
+                                    <button
+                                        type="button"
+                                        class="p-2 rounded-lg hover:bg-accent transition-colors"
+                                        onclick={() =>
+                                            (modelFilters[
+                                                item.tier
+                                            ].showDropdown = false)}
+                                    >
+                                        <X class="w-4 h-4" />
+                                    </button>
+                                {/if}
+                            </div>
+
+                            <!-- Current selection -->
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-muted-foreground"
+                                    >Selected:</span
+                                >
+                                <input
+                                    type="text"
+                                    class="flex-1 px-3 py-2 rounded-lg border border-input bg-background/50 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                                    value={item.tier === "big"
+                                        ? config.big_model
+                                        : item.tier === "middle"
+                                          ? config.middle_model
+                                          : config.small_model}
+                                    oninput={(e) => {
+                                        if (item.tier === "big")
+                                            config.big_model = getValue(e);
+                                        else if (item.tier === "middle")
+                                            config.middle_model = getValue(e);
+                                        else config.small_model = getValue(e);
+                                    }}
+                                    placeholder="Enter model ID manually..."
+                                />
+                            </div>
+                        </div>
+                    {/each}
+
+                    <!-- Save button -->
+                    <div class="flex items-center gap-4">
+                        <button
+                            onclick={saveConfig}
+                            class="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity"
+                        >
+                            Save Configuration
+                        </button>
+                        {#if saveMessage}
+                            <span class="text-sm text-muted-foreground"
+                                >{saveMessage}</span
+                            >
+                        {/if}
+                    </div>
+
+                    <!-- Model stats summary -->
+                    {#if modelStats.total}
+                        <div
+                            class="rounded-xl border border-border bg-card/50 p-4"
+                        >
+                            <h4 class="text-sm font-medium mb-3">
+                                Available Models
+                            </h4>
+                            <div
+                                class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center"
+                            >
+                                <div>
+                                    <div class="text-2xl font-bold">
+                                        {modelStats.total}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        Total
+                                    </div>
+                                </div>
+                                <div>
+                                    <div
+                                        class="text-2xl font-bold text-emerald-400"
+                                    >
+                                        {modelStats.free || 0}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        Free
+                                    </div>
+                                </div>
+                                <div>
+                                    <div
+                                        class="text-2xl font-bold text-purple-400"
+                                    >
+                                        {modelStats.reasoning || 0}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        Reasoning
+                                    </div>
+                                </div>
+                                <div>
+                                    <div
+                                        class="text-2xl font-bold text-blue-400"
+                                    >
+                                        {modelStats.vision || 0}
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        Vision
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
-            </div>
+            {:else if activeTab === "routing"}
+                <!-- Routing Configuration -->
+                <div class="max-w-2xl space-y-6">
+                    <div class="rounded-xl border border-border bg-card p-6">
+                        <h3 class="font-semibold mb-4">Hybrid Routing</h3>
+                        <p class="text-sm text-muted-foreground mb-4">
+                            Route different model tiers to alternative
+                            endpoints.
+                        </p>
 
-            <div class="flex gap-3 mt-6">
-                <button
-                    onclick={() => {
-                        saveConfig();
-                        showWizard = false;
-                    }}
-                    class="cyber-btn flex-1"
-                >
-                    SAVE & CONTINUE
-                </button>
-                <button
-                    onclick={() => (showWizard = false)}
-                    class="px-4 py-2 border border-cyber-border rounded-lg text-cyber-muted"
-                >
-                    SKIP
-                </button>
-            </div>
-        </div>
-    </div>
-{/if}
+                        <!-- BIG Endpoint -->
+                        <div class="p-4 rounded-lg border border-border mb-4">
+                            <div class="flex items-center gap-3 mb-3">
+                                <input
+                                    type="checkbox"
+                                    checked={config.enable_big_endpoint}
+                                    onchange={(e) =>
+                                        (config.enable_big_endpoint =
+                                            getChecked(e))}
+                                    class="w-4 h-4 rounded border-input"
+                                />
+                                <span class="model-tier big">BIG</span>
+                                <span class="text-sm text-muted-foreground"
+                                    >Custom Endpoint</span
+                                >
+                            </div>
+                            {#if config.enable_big_endpoint}
+                                <div class="space-y-2 mt-3">
+                                    <input
+                                        type="text"
+                                        value={config.big_endpoint}
+                                        oninput={(e) =>
+                                            (config.big_endpoint = getValue(e))}
+                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono"
+                                        placeholder="https://api.example.com/v1"
+                                    />
+                                </div>
+                            {/if}
+                        </div>
 
-<!-- Save Message Toast -->
-{#if saveMessage}
-    <div
-        class="fixed bottom-6 right-6 bg-cyber-surface border border-cyber-border rounded-lg px-4 py-3 font-mono text-sm z-50"
-    >
-        {saveMessage}
+                        <!-- MIDDLE Endpoint -->
+                        <div class="p-4 rounded-lg border border-border mb-4">
+                            <div class="flex items-center gap-3 mb-3">
+                                <input
+                                    type="checkbox"
+                                    checked={config.enable_middle_endpoint}
+                                    onchange={(e) =>
+                                        (config.enable_middle_endpoint =
+                                            getChecked(e))}
+                                    class="w-4 h-4 rounded border-input"
+                                />
+                                <span class="model-tier middle">MIDDLE</span>
+                                <span class="text-sm text-muted-foreground"
+                                    >Custom Endpoint</span
+                                >
+                            </div>
+                            {#if config.enable_middle_endpoint}
+                                <div class="space-y-2 mt-3">
+                                    <input
+                                        type="text"
+                                        value={config.middle_endpoint}
+                                        oninput={(e) =>
+                                            (config.middle_endpoint =
+                                                getValue(e))}
+                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono"
+                                        placeholder="https://api.example.com/v1"
+                                    />
+                                </div>
+                            {/if}
+                        </div>
+
+                        <!-- SMALL Endpoint -->
+                        <div class="p-4 rounded-lg border border-border">
+                            <div class="flex items-center gap-3 mb-3">
+                                <input
+                                    type="checkbox"
+                                    checked={config.enable_small_endpoint}
+                                    onchange={(e) =>
+                                        (config.enable_small_endpoint =
+                                            getChecked(e))}
+                                    class="w-4 h-4 rounded border-input"
+                                />
+                                <span class="model-tier small">SMALL</span>
+                                <span class="text-sm text-muted-foreground"
+                                    >Custom Endpoint</span
+                                >
+                            </div>
+                            {#if config.enable_small_endpoint}
+                                <div class="space-y-2 mt-3">
+                                    <input
+                                        type="text"
+                                        value={config.small_endpoint}
+                                        oninput={(e) =>
+                                            (config.small_endpoint =
+                                                getValue(e))}
+                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono"
+                                        placeholder="https://api.example.com/v1"
+                                    />
+                                </div>
+                            {/if}
+                        </div>
+
+                        <button
+                            onclick={saveConfig}
+                            class="mt-6 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity"
+                        >
+                            Save Configuration
+                        </button>
+                    </div>
+                </div>
+            {:else if activeTab === "logs"}
+                <!-- Logs -->
+                <div class="h-full flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <div
+                                class="w-2 h-2 rounded-full {wsConnected
+                                    ? 'bg-green-500 status-dot online'
+                                    : 'bg-red-500'}"
+                            ></div>
+                            <span class="text-sm text-muted-foreground">
+                                {wsConnected ? "Live" : "Disconnected"}
+                            </span>
+                        </div>
+                        <button
+                            onclick={clearLogs}
+                            class="px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-accent transition-colors"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                    <div
+                        class="flex-1 rounded-xl border border-border bg-zinc-950 p-4 font-mono text-xs overflow-auto"
+                    >
+                        {#each logs as log}
+                            <div
+                                class="py-1 {log.level === 'error'
+                                    ? 'text-red-400'
+                                    : log.level === 'warning'
+                                      ? 'text-amber-400'
+                                      : 'text-zinc-400'}"
+                            >
+                                <span class="text-zinc-600"
+                                    >{log.timestamp?.slice(11, 19) || ""}</span
+                                >
+                                <span class="ml-2">{log.message}</span>
+                            </div>
+                        {/each}
+                    </div>
+                </div>
+            {:else}
+                <!-- Placeholder for other tabs -->
+                <div class="flex items-center justify-center h-64">
+                    <div class="text-center">
+                        <Server
+                            class="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50"
+                        />
+                        <h3 class="font-semibold text-lg mb-2 capitalize">
+                            {activeTab}
+                        </h3>
+                        <p class="text-sm text-muted-foreground">
+                            This section is under development
+                        </p>
+                    </div>
+                </div>
+            {/if}
+        </main>
     </div>
-{/if}
+</div>

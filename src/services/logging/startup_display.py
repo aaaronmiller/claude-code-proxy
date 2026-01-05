@@ -31,7 +31,7 @@ def display_startup_config(config):
     
     # Header
     console.print()
-    console.print("🚀 [bold bright_cyan]Claude Code Proxy[/bold bright_cyan] [dim]v1.0.0[/dim]")
+    console.print("🚀 [bold bright_cyan]The Ultimate Proxy[/bold bright_cyan] [dim]v2.1.0[/dim]")
     console.print()
     
     # Provider Configuration
@@ -103,7 +103,7 @@ def display_startup_config(config):
         if config.enable_small_endpoint:
             hybrid_table.add_row("SMALL", config.small_endpoint)
         
-        console.print(Panel(hybrid_table, title="[bold magenta]Hybrid Mode[/bold magenta]", border_style="cyan"))
+        console.print(Panel(hybrid_table, title="[bold magenta]Model Routing[/bold magenta]", border_style="cyan"))
     
     # Server Settings
     server_table = Table(show_header=False, box=None, padding=(0, 2))
@@ -121,21 +121,25 @@ def display_startup_config(config):
     
     console.print(Panel(server_table, title="[bold magenta]Server[/bold magenta]", border_style="cyan"))
     
-    # Quick Tips
-    tips_table = Table(show_header=False, box=None, padding=(0, 2))
-    tips_table.add_column("Action", style="dim")
-    tips_table.add_column("Command", style="yellow")
+    # Quick Tips - Grouped by Category
+    tips_table = Table(show_header=True, box=None, padding=(0, 2))
+    tips_table.add_column("Category", style="dim", width=14)
+    tips_table.add_column("Command", style="yellow", width=45)
     
-    tips_table.add_row("Open Dashboard", "python start_proxy.py --configure-dashboard")
-    tips_table.add_row("Select Models", "python start_proxy.py --select-models")
-    tips_table.add_row("Configure Prompts", "python start_proxy.py --configure-prompts")
-    tips_table.add_row("View Analytics", "python start_proxy.py --analytics")
-    tips_table.add_row("Health Check", "python start_proxy.py --doctor")
+    # Most used commands
+    tips_table.add_row("Settings", "--settings (unified TUI)")
+    tips_table.add_row("Models", "--select-models  |  --set-big MODEL")
+    tips_table.add_row("Diagnostics", "--doctor  |  --config  |  --analytics")
+    tips_table.add_row("Crosstalk", "--crosstalk-studio  |  --crosstalk MODEL1,MODEL2")
+    tips_table.add_row("Help", "-h  |  --help")
 
-    console.print(Panel(tips_table, title="[bold green]Quick Shortcuts[/bold green]", border_style="cyan"))
+    console.print(Panel(tips_table, title="[bold green]CLI Arguments[/bold green]", border_style="cyan"))
     
+    # Endpoints
     console.print()
-    console.print(f"[dim]→ Listening on[/dim] [bold bright_cyan]http://{config.host}:{config.port}[/bold bright_cyan]")
+    console.print(f"[dim]→ API Endpoint[/dim]  [bold bright_cyan]http://{config.host}:{config.port}/v1[/bold bright_cyan]")
+    console.print(f"[dim]→ Web Dashboard[/dim] [bold bright_cyan]http://{config.host}:{config.port}/[/bold bright_cyan]")
+    console.print(f"[dim]→ Full help[/dim]     [yellow]python start_proxy.py --help[/yellow]")
     console.print()
 
 

@@ -15,21 +15,50 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Path to model limits files
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 JSON_PATH = MODELS_DIR / "model_limits.json"
+ENRICHED_PATH = PROJECT_ROOT / "data" / "openrouter_models_enriched.json"
 
 # Cache for loaded model limits
 _MODEL_LIMITS_CACHE: Optional[Dict[str, Dict[str, int]]] = None
 
 
 def _load_model_limits() -> Dict[str, Dict[str, int]]:
-    """Load model limits from JSON file or return fallback."""
+    """Load model limits from JSON file or return fallback.
+    
+    Priority order:
+    1. data/openrouter_models_enriched.json (richest, most up-to-date)
+    2. models/model_limits.json (legacy)
+    3. Static fallback
+    """
     global _MODEL_LIMITS_CACHE
     
     if _MODEL_LIMITS_CACHE is not None:
         return _MODEL_LIMITS_CACHE
     
-    # Try to load from scraped JSON file
+    # Priority 1: Try enriched OpenRouter data
+    if ENRICHED_PATH.exists():
+        try:
+            with open(ENRICHED_PATH, "r") as f:
+                data = json.load(f)
+                if 'models' in data:
+                    # Convert enriched format to limits format
+                    limits = {}
+                    for model in data['models']:
+                        model_id = model.get('id', '')
+                        if model_id:
+                            limits[model_id] = {
+                                "context": model.get('context_length', 128000),
+                                "output": model.get('max_completion_tokens', 4096) or 4096
+                            }
+                    _MODEL_LIMITS_CACHE = limits
+                    logger.info(f"Loaded {len(limits)} model limits from enriched data ({ENRICHED_PATH.name})")
+                    return _MODEL_LIMITS_CACHE
+        except Exception as e:
+            logger.warning(f"Failed to load enriched model limits: {e}")
+    
+    # Priority 2: Try legacy scraped JSON file
     if JSON_PATH.exists():
         try:
             with open(JSON_PATH, "r") as f:

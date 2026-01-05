@@ -458,6 +458,8 @@ def get_top_models_per_provider(
     )
     
     return sorted_models[:n]
+
+def format_model_display(model: ModelInfo) -> str:
     """Format a model for display in the selector."""
     def fmt_tokens(n: int) -> str:
         if n >= 1_000_000:

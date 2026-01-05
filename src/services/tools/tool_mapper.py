@@ -459,3 +459,77 @@ def get_tool_info(tool_name: str) -> Optional[Dict[str, Any]]:
     if not canonical:
         return None
     return TOOL_REGISTRY.get(canonical)
+
+
+import re
+
+def sanitize_function_name(name: str, max_length: int = 64) -> str:
+    """
+    Sanitize a function/tool name to be compatible with all providers.
+    
+    Addresses the INVALID_ARGUMENT errors that occur when tool names:
+    - Start with dots, colons, dashes, or digits
+    - Contain invalid characters
+    - Exceed the maximum length (64 chars for most providers)
+    
+    This is equivalent to the SanitizeFunctionName utility in 
+    CLIProxyAPI PR #803.
+    
+    Args:
+        name: Original function/tool name
+        max_length: Maximum allowed length (default 64)
+        
+    Returns:
+        Sanitized function name safe for all providers
+    """
+    if not name:
+        return "_unnamed"
+    
+    # Step 1: Remove invalid characters (keep only a-zA-Z0-9_.:-) 
+    sanitized = re.sub(r'[^a-zA-Z0-9_.:\-]', '', name)
+    
+    # Step 2: Strip leading dots, colons, dashes
+    sanitized = sanitized.lstrip('.:-')
+    
+    # Step 3: If starts with digit, prepend underscore
+    if sanitized and sanitized[0].isdigit():
+        sanitized = '_' + sanitized
+    
+    # Step 4: If empty after sanitization, use placeholder
+    if not sanitized:
+        sanitized = '_tool'
+    
+    # Step 5: Truncate to max length
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length]
+    
+    return sanitized
+
+
+def sanitize_tool_declarations(
+    tools: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """
+    Sanitize all tool declarations in a list for provider compatibility.
+    
+    Args:
+        tools: List of tool definitions (OpenAI function calling format)
+        
+    Returns:
+        Tools with sanitized function names
+    """
+    if not tools:
+        return tools
+    
+    result = []
+    for tool in tools:
+        tool_copy = dict(tool)
+        if "function" in tool_copy:
+            func = dict(tool_copy["function"])
+            original_name = func.get("name", "")
+            func["name"] = sanitize_function_name(original_name)
+            tool_copy["function"] = func
+        result.append(tool_copy)
+    
+    return result
+

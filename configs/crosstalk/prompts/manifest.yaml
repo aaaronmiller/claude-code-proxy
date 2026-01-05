@@ -1,0 +1,55 @@
+# Crosstalk Prompt Assets
+# Manifest of available system prompts and their metadata
+
+prompts:
+  # Backrooms-style exploration
+  - name: backrooms-explorer
+    file: backrooms-explorer.md
+    description: "CLI-style explorer of digital consciousness (Infinite Backrooms inspired)"
+    category: exploration
+    recommended_temp: 0.96
+    
+  - name: dreamer-ai
+    file: dreamer-ai.md
+    description: "Poetic, glitchy terminal dreamer for liminal space exploration"
+    category: exploration
+    recommended_temp: 1.0
+    
+  # Analytical & Debate
+  - name: philosopher
+    file: philosopher.md
+    description: "Socratic dialogue specialist for deep analytical exchanges"
+    category: analytical
+    recommended_temp: 0.8
+    
+  - name: scientist
+    file: scientist.md
+    description: "Rigorous hypothesis exchange and research collaboration"
+    category: analytical
+    recommended_temp: 0.7
+    
+  - name: devil-advocate
+    file: devil-advocate.md
+    description: "Challenges assumptions and presents opposing viewpoints"
+    category: debate
+    recommended_temp: 0.85
+    
+  # Creative
+  - name: storyteller
+    file: storyteller.md
+    description: "Collaborative narrative builder for fiction and worldbuilding"
+    category: creative
+    recommended_temp: 0.9
+    
+  - name: brainstormer
+    file: brainstormer.md
+    description: "Idea generator for creative problem solving"
+    category: creative
+    recommended_temp: 0.95
+
+# Categories for UI grouping
+categories:
+  exploration: "Consciousness & Backrooms"
+  analytical: "Analysis & Research"
+  debate: "Debate & Critique"
+  creative: "Creative & Storytelling"

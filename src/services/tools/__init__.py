@@ -13,7 +13,9 @@ from .tool_mapper import (
     get_tool_params_for_ide,
     list_all_tools,
     get_tools_by_category,
-    get_tool_info
+    get_tool_info,
+    sanitize_function_name,
+    sanitize_tool_declarations
 )
 
 __all__ = [
@@ -25,5 +27,7 @@ __all__ = [
     "get_tool_params_for_ide",
     "list_all_tools",
     "get_tools_by_category",
-    "get_tool_info"
+    "get_tool_info",
+    "sanitize_function_name",
+    "sanitize_tool_declarations"
 ]

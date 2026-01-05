@@ -370,20 +370,267 @@ async def delete_profile(profile_name: str):
 
 
 @router.get("/api/models")
-async def list_models():
-    """List available models from models database"""
-    try:
-        models_file = Path("models.json")
-        if not models_file.exists():
-            return []
+async def list_models(
+    provider: Optional[str] = None,
+    search: Optional[str] = None,
+    supports_reasoning: Optional[bool] = None,
+    supports_vision: Optional[bool] = None,
+    supports_tools: Optional[bool] = None,
+    is_free: Optional[bool] = None,
+    min_context: Optional[int] = None,
+    limit: Optional[int] = None
+):
+    """
+    List available models with optional filtering.
 
-        with open(models_file, 'r') as f:
-            models_data = json.load(f)
-            return models_data.get("models", [])
+    Args:
+        provider: Filter by provider (openai, anthropic, google, etc.)
+        search: Search in model ID and name
+        supports_reasoning: Filter by reasoning capability
+        supports_vision: Filter by vision capability
+        supports_tools: Filter by tool use capability
+        is_free: Filter by free pricing
+        min_context: Minimum context length
+        limit: Maximum number of results
+
+    Returns:
+        List of model objects with full metadata
+    """
+    try:
+        from src.services.models.openrouter_fetcher import filter_models, get_model_stats
+
+        # Use the filter function from the fetcher
+        models = filter_models(
+            provider=provider,
+            supports_reasoning=supports_reasoning,
+            supports_vision=supports_vision,
+            supports_tools=supports_tools,
+            is_free=is_free,
+            min_context=min_context,
+            search=search
+        )
+
+        # Apply limit if specified
+        if limit and len(models) > limit:
+            models = models[:limit]
+
+        return {
+            "models": models,
+            "count": len(models),
+            "stats": get_model_stats()
+        }
+
+    except ImportError:
+        # Fallback to legacy models.json
+        try:
+            models_file = Path("models.json")
+            if models_file.exists():
+                with open(models_file, 'r') as f:
+                    models_data = json.load(f)
+                    return {"models": models_data.get("models", []), "count": 0}
+            return {"models": [], "count": 0}
+        except Exception:
+            return {"models": [], "count": 0}
 
     except Exception as e:
         logger.error(f"Failed to load models: {e}")
-        return []
+        return {"models": [], "count": 0, "error": str(e)}
+
+
+@router.post("/api/models/refresh")
+async def refresh_models():
+    """
+    Force refresh models from OpenRouter API.
+
+    Returns:
+        Status of the refresh operation
+    """
+    try:
+        from src.services.models.openrouter_fetcher import refresh_openrouter_models
+
+        data, was_refreshed, error = await refresh_openrouter_models(force=True)
+
+        if error:
+            return {
+                "success": False,
+                "error": error,
+                "models_count": len(data.get("models", []))
+            }
+
+        return {
+            "success": True,
+            "was_refreshed": was_refreshed,
+            "models_count": len(data.get("models", [])),
+            "stats": data.get("stats", {})
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to refresh models: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/api/providers")
+async def list_providers():
+    """
+    List available providers with their connection status and model counts.
+
+    Returns:
+        Dict with providers list and summary statistics
+    """
+    try:
+        from src.core.config import get_provider_status_cache
+        from src.services.models.openrouter_fetcher import get_model_stats
+
+        # Get cached provider status
+        cached_status = get_provider_status_cache()
+
+        # Get model stats (includes by_provider counts)
+        model_stats = get_model_stats()
+        provider_counts = model_stats.get("by_provider", {})
+
+        # Define all known providers
+        providers = [
+            {
+                "id": "openrouter",
+                "name": "OpenRouter",
+                "description": "350+ models, aggregated access",
+                "endpoint": "https://openrouter.ai/api/v1",
+                "env_var": "OPENROUTER_API_KEY",
+            },
+            {
+                "id": "openai",
+                "name": "OpenAI",
+                "description": "GPT-4, GPT-4o, o1 models",
+                "endpoint": "https://api.openai.com/v1",
+                "env_var": "OPENAI_API_KEY",
+            },
+            {
+                "id": "anthropic",
+                "name": "Anthropic",
+                "description": "Claude 3.5, Claude 4 models",
+                "endpoint": "https://api.anthropic.com/v1",
+                "env_var": "ANTHROPIC_API_KEY",
+            },
+            {
+                "id": "google",
+                "name": "Google Gemini",
+                "description": "Gemini Pro, Gemini Flash",
+                "endpoint": "https://generativelanguage.googleapis.com/v1beta",
+                "env_var": "GOOGLE_API_KEY",
+            },
+            {
+                "id": "vibeproxy",
+                "name": "VibeProxy (Local)",
+                "description": "Local OAuth proxy for Google models",
+                "endpoint": "http://127.0.0.1:8317/v1",
+                "env_var": None,
+            },
+        ]
+
+        # Enrich with status and model counts
+        for provider in providers:
+            status = cached_status.get(provider["id"], {})
+            provider["is_available"] = status.get("is_valid", False)
+            provider["status"] = status.get("status", "unknown")
+            provider["key_set"] = bool(os.getenv(provider["env_var"])) if provider["env_var"] else False
+            provider["model_count"] = provider_counts.get(provider["id"], 0)
+
+        # Also include model providers from OpenRouter data
+        unique_providers = set()
+        for provider in providers:
+            unique_providers.add(provider["id"])
+
+        # Add any additional providers from the model data
+        for provider_id, count in provider_counts.items():
+            if provider_id not in unique_providers:
+                providers.append({
+                    "id": provider_id,
+                    "name": provider_id.capitalize(),
+                    "description": f"Provider with {count} models",
+                    "endpoint": None,
+                    "env_var": None,
+                    "is_available": True,  # Available via OpenRouter
+                    "status": "via_openrouter",
+                    "key_set": False,
+                    "model_count": count,
+                })
+
+        # Sort by model count descending
+        providers.sort(key=lambda p: p["model_count"], reverse=True)
+
+        return {"providers": providers, "total_models": model_stats.get("total", 0)}
+
+    except Exception as e:
+        logger.error(f"Failed to list providers: {e}")
+        return {"providers": [], "total_models": 0, "error": str(e)}
+
+
+@router.get("/api/providers/{provider_id}/test")
+async def test_provider(provider_id: str):
+    """
+    Test connection to a specific provider.
+
+    Returns:
+        Connection test result with model count if successful
+    """
+    # Provider endpoint mapping
+    endpoints = {
+        "openrouter": "https://openrouter.ai/api/v1",
+        "openai": "https://api.openai.com/v1",
+        "anthropic": "https://api.anthropic.com/v1",
+        "google": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "vibeproxy": "http://127.0.0.1:8317/v1",
+    }
+
+    env_vars = {
+        "openrouter": "OPENROUTER_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "google": "GOOGLE_API_KEY",
+    }
+
+    endpoint = endpoints.get(provider_id)
+    if not endpoint:
+        return {"success": False, "error": f"Unknown provider: {provider_id}"}
+
+    env_var = env_vars.get(provider_id)
+    api_key = os.getenv(env_var) if env_var else "dummy"
+
+    if not api_key and provider_id != "vibeproxy":
+        return {"success": False, "error": f"No API key set ({env_var})"}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{endpoint}/models",
+                headers={"Authorization": f"Bearer {api_key}"} if api_key else {}
+            )
+
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    model_count = len(data.get("data", []))
+                except:
+                    model_count = 0
+
+                return {
+                    "success": True,
+                    "status": "connected",
+                    "models_available": model_count
+                }
+            elif response.status_code == 401:
+                return {"success": False, "error": "Invalid API key (401)"}
+            elif response.status_code == 403:
+                return {"success": False, "error": "Insufficient permissions (403)"}
+            else:
+                return {"success": False, "error": f"HTTP {response.status_code}"}
+
+    except httpx.TimeoutException:
+        return {"success": False, "error": "Connection timeout"}
+    except httpx.ConnectError:
+        return {"success": False, "error": "Cannot connect to provider"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @router.get("/api/stats")
@@ -443,6 +690,318 @@ async def get_stats():
             "est_cost": 0,
             "avg_latency": 0,
             "recent_requests": []
+        }
+
+
+
+@router.get("/api/stats/requests")
+async def get_recent_requests():
+    """Get recent requests list for dashboard"""
+    try:
+        from src.services.usage.usage_tracker import usage_tracker
+        
+        if not usage_tracker.enabled:
+            return []
+            
+        recent = []
+        with usage_tracker.get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT original_model, input_tokens + output_tokens as total_tokens,
+                       duration_ms, estimated_cost, timestamp, status, endpoint, request_id
+                FROM api_requests
+                ORDER BY timestamp DESC
+                LIMIT 50
+            """)
+            
+            for row in cursor:
+                recent.append({
+                    "model": row[0],
+                    "tokens": row[1],
+                    "duration": int(row[2]),
+                    "cost": f"{row[3]:.4f}",
+                    "timestamp": row[4],
+                    "status": row[5],
+                    "endpoint": row[6],
+                    "id": row[7]
+                })
+        return recent
+
+    except Exception as e:
+        logger.error(f"Failed to get recent requests: {e}")
+        return []
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ADVANCED ANALYTICS & VISUALIZATION ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/api/analytics/dashboard")
+async def get_dashboard_analytics(days: int = 7):
+    """
+    Get comprehensive analytics data for dashboard visualization.
+
+    Returns:
+        - Summary metrics
+        - Time series data (tokens, cost, requests over time)
+        - Model comparison stats
+        - Savings achieved through routing
+        - Token breakdown (prompt/ completion/ reasoning)
+        - Provider statistics
+    """
+    try:
+        from src.services.usage.usage_tracker import usage_tracker
+
+        if not usage_tracker.enabled:
+            return {
+                "enabled": False,
+                "message": "Usage tracking is disabled. Set TRACK_USAGE=true to enable.",
+                "data": {}
+            }
+
+        data = usage_tracker.get_dashboard_summary(days)
+
+        # Add model metadata from enriched data if available
+        try:
+            from src.services.models.openrouter_enricher import enrich_model
+            import json
+            from pathlib import Path
+
+            enriched_path = Path(__file__).parent.parent.parent / "data" / "openrouter_models_enriched.json"
+            if enriched_path.exists():
+                with open(enriched_path, 'r') as f:
+                    enriched_data = json.load(f)
+                    model_metadata = {}
+                    for model in enriched_data.get('models', []):
+                        model_metadata[model['id']] = {
+                            "name": model.get('name'),
+                            "provider": model.get('provider'),
+                            "pricing": model.get('pricing'),
+                            "capabilities": {
+                                "tools": model.get('supports_tools', False),
+                                "vision": model.get('supports_vision', False),
+                                "reasoning": model.get('supports_reasoning', False),
+                                "audio": model.get('supports_audio', False)
+                            },
+                            "context_length": model.get('context_length', 0)
+                        }
+                    data["model_metadata"] = model_metadata
+        except Exception:
+            pass  # Metadata is optional
+
+        return {
+            "enabled": True,
+            "days": days,
+            "data": data
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get dashboard analytics: {e}")
+        return {
+            "enabled": False,
+            "error": str(e),
+            "data": {}
+        }
+
+
+@router.get("/api/analytics/time-series")
+async def get_time_series_analytics(days: int = 14):
+    """Get time-series data for line charts."""
+    try:
+        from src.services.usage.usage_tracker import usage_tracker
+
+        if not usage_tracker.enabled:
+            return {"dates": [], "tokens": [], "cost": [], "requests": []}
+
+        return usage_tracker.get_time_series_data(days)
+
+    except Exception as e:
+        logger.error(f"Failed to get time series: {e}")
+        return {"dates": [], "tokens": [], "cost": [], "requests": []}
+
+
+@router.get("/api/analytics/model-comparison")
+async def get_model_comparison_analytics(days: int = 14):
+    """Get comparative data for different models."""
+    try:
+        from src.services.usage.usage_tracker import usage_tracker
+
+        if not usage_tracker.enabled:
+            return []
+
+        return usage_tracker.get_model_comparison(days)
+
+    except Exception as e:
+        logger.error(f"Failed to get model comparison: {e}")
+        return []
+
+
+@router.get("/api/analytics/savings")
+async def get_savings_analytics(days: int = 14):
+    """Get savings achieved through smart routing."""
+    try:
+        from src.services.usage.usage_tracker import usage_tracker
+
+        if not usage_tracker.enabled:
+            return []
+
+        return usage_tracker.get_savings_data(days)
+
+    except Exception as e:
+        logger.error(f"Failed to get savings data: {e}")
+        return []
+
+
+@router.get("/api/analytics/token-breakdown")
+async def get_token_breakdown_analytics(days: int = 14):
+    """Get detailed token breakdown statistics."""
+    try:
+        from src.services.usage.usage_tracker import usage_tracker
+
+        if not usage_tracker.enabled:
+            return {}
+
+        return usage_tracker.get_token_breakdown_stats(days)
+
+    except Exception as e:
+        logger.error(f"Failed to get token breakdown: {e}")
+        return {}
+
+
+@router.get("/api/analytics/providers")
+async def get_provider_analytics(days: int = 14):
+    """Get provider-level statistics."""
+    try:
+        from src.services.usage.usage_tracker import usage_tracker
+
+        if not usage_tracker.enabled:
+            return []
+
+        return usage_tracker.get_provider_stats(days)
+
+    except Exception as e:
+        logger.error(f"Failed to get provider stats: {e}")
+        return []
+
+
+@router.get("/api/analytics/export")
+async def export_analytics(format: str = "json", days: int = 30):
+    """Export usage data to JSON or CSV format."""
+    try:
+        from src.services.usage.usage_tracker import usage_tracker
+        import tempfile
+        import os
+
+        if not usage_tracker.enabled:
+            return {"success": False, "error": "Usage tracking disabled"}
+
+        # Create temp file
+        suffix = ".json" if format == "json" else ".csv"
+        fd, path = tempfile.mkstemp(suffix=suffix)
+        os.close(fd)
+
+        try:
+            if format == "json":
+                success = usage_tracker.export_to_json(path, days)
+            else:
+                success = usage_tracker.export_to_csv(path, days)
+
+            if success:
+                # Read and return content
+                with open(path, 'r') as f:
+                    content = f.read()
+
+                # Clean up
+                os.unlink(path)
+
+                return {
+                    "success": True,
+                    "format": format,
+                    "content": content,
+                    "message": f"Exported {days} days of data in {format.upper()} format"
+                }
+            else:
+                os.unlink(path)
+                return {"success": False, "error": "Export failed"}
+
+        except Exception as e:
+            if os.path.exists(path):
+                os.unlink(path)
+            raise e
+
+    except Exception as e:
+        logger.error(f"Failed to export analytics: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/api/analytics/refresh-models")
+async def refresh_model_metadata():
+    """Manually refresh the OpenRouter model metadata cache."""
+    try:
+        from src.services.models.openrouter_fetcher import fetch_and_cache_models
+        import asyncio
+
+        result = await fetch_and_cache_models()
+        return {
+            "success": True,
+            "models_fetched": len(result.get('models', [])),
+            "message": "Model metadata refreshed successfully"
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to refresh models: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/api/analytics/health")
+async def get_analytics_health():
+    """Check if analytics data is being collected properly."""
+    try:
+        from src.services.usage.usage_tracker import usage_tracker
+        import sqlite3
+
+        if not usage_tracker.enabled:
+            return {
+                "enabled": False,
+                "message": "Usage tracking disabled",
+                "data_available": False
+            }
+
+        # Check what tables have data
+        conn = sqlite3.connect(usage_tracker.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) FROM api_requests")
+        api_count = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM daily_model_stats")
+        daily_count = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM savings_tracking")
+        savings_count = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM token_breakdown")
+        breakdown_count = cursor.fetchone()[0]
+
+        conn.close()
+
+        return {
+            "enabled": True,
+            "data_available": api_count > 0,
+            "tables": {
+                "api_requests": api_count,
+                "daily_model_stats": daily_count,
+                "savings_tracking": savings_count,
+                "token_breakdown": breakdown_count
+            },
+            "health": "healthy" if api_count > 0 else "no_data"
+        }
+
+    except Exception as e:
+        logger.error(f"Analytics health check failed: {e}")
+        return {
+            "enabled": False,
+            "error": str(e),
+            "health": "error"
         }
 
 
@@ -632,6 +1191,69 @@ async def get_crosstalk_session(session_name: str):
         raise HTTPException(status_code=404, detail="Session not found")
     except Exception as e:
         logger.error(f"Failed to load session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class CrosstalkRunRequest(BaseModel):
+    """Request to run a crosstalk session"""
+    models: list = []
+    topology: dict = {}
+    paradigm: str = "relay"
+    rounds: int = 5
+    infinite: bool = False
+    stop_conditions: dict = {}
+    initial_prompt: str = ""
+    summarize_every: int = 0
+    checkpoint_every: int = 0
+    final_round_vote: dict = {}
+
+
+@router.post("/api/crosstalk/run")
+async def run_crosstalk_session(request: CrosstalkRunRequest):
+    """Run a Crosstalk session from the web UI"""
+    import asyncio
+    from datetime import datetime
+    
+    try:
+        # Validate minimum requirements
+        if not request.initial_prompt:
+            raise HTTPException(status_code=400, detail="Initial prompt is required")
+        if len(request.models) < 2:
+            raise HTTPException(status_code=400, detail="At least 2 models required")
+        
+        # Generate session ID
+        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Build session config for the engine
+        session_config = {
+            "session_id": session_id,
+            "models": request.models,
+            "topology": request.topology,
+            "paradigm": request.paradigm,
+            "rounds": request.rounds,
+            "infinite": request.infinite,
+            "stop_conditions": request.stop_conditions,
+            "initial_prompt": request.initial_prompt,
+            "messages": []
+        }
+        
+        # For now, return the session config (real engine integration would be async)
+        # Save session file
+        CROSSTALK_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        session_file = CROSSTALK_SESSIONS_DIR / f"{session_id}.json"
+        with open(session_file, 'w') as f:
+            json.dump(session_config, f, indent=2)
+        
+        return {
+            "status": "created",
+            "session_id": session_id,
+            "message": "Session created. Use CLI for full execution: python start_proxy.py --crosstalk-studio",
+            "config": session_config
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to run crosstalk session: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

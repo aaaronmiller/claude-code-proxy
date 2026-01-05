@@ -364,3 +364,269 @@ async def get_cost_breakdown(
     except Exception as e:
         logger.error(f"Failed to get cost breakdown: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/analytics/dashboard")
+async def get_dashboard_data(
+    days: int = Query(7, ge=1, le=90, description="Number of days")
+):
+    """
+    Get comprehensive dashboard data with all visualization metrics.
+
+    Returns complete analytics for dashboard rendering:
+    - Time series data for charts
+    - Model comparison statistics
+    - Savings analysis from smart routing
+    - Token breakdown (prompt/completion/reasoning/etc)
+    - Provider statistics
+    - Overall summary metrics
+    """
+    if not usage_tracker.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Usage tracking is not enabled. Set TRACK_USAGE=true to enable analytics."
+        )
+
+    try:
+        data = usage_tracker.get_dashboard_summary(days=days)
+        if not data:
+            raise HTTPException(status_code=404, detail="No data available for the selected period")
+        return data
+    except Exception as e:
+        logger.error(f"Failed to get dashboard data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/analytics/savings")
+async def get_savings_analytics(
+    days: int = Query(7, ge=1, le=90, description="Number of days")
+):
+    """
+    Get detailed savings analysis from smart model routing.
+
+    Shows cost optimization achieved through routing decisions.
+    """
+    if not usage_tracker.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Usage tracking is not enabled."
+        )
+
+    try:
+        savings_data = usage_tracker.get_savings_data(days=days)
+        return {
+            "period": {"days": days},
+            "savings_by_routing": savings_data,
+            "total_savings": sum(s['total_savings'] for s in savings_data),
+            "total_requests": sum(s['request_count'] for s in savings_data)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get savings analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/analytics/token-breakdown")
+async def get_token_analytics(
+    days: int = Query(7, ge=1, le=90, description="Number of days")
+):
+    """
+    Get detailed token breakdown analytics.
+
+    Shows distribution across prompt, completion, reasoning, cached, tool_use, and audio tokens.
+    """
+    if not usage_tracker.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Usage tracking is not enabled."
+        )
+
+    try:
+        token_stats = usage_tracker.get_token_breakdown_stats(days=days)
+        if not token_stats:
+            return {
+                "period": {"days": days},
+                "summary": {"total_tokens": 0, "request_count": 0},
+                "breakdown": {}
+            }
+        return {
+            "period": {"days": days},
+            "summary": {
+                "total_tokens": token_stats.get('total_tokens', 0),
+                "request_count": token_stats.get('request_count', 0)
+            },
+            "breakdown": {
+                "prompt": token_stats.get('prompt', {}),
+                "completion": token_stats.get('completion', {}),
+                "reasoning": token_stats.get('reasoning', {}),
+                "cached": token_stats.get('cached', {}),
+                "tool_use": token_stats.get('tool_use', {}),
+                "audio": token_stats.get('audio', {})
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to get token breakdown: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/analytics/providers")
+async def get_provider_analytics(
+    days: int = Query(7, ge=1, le=90, description="Number of days")
+):
+    """
+    Get provider-level statistics and cost efficiency analysis.
+
+    Shows which providers are being used and their performance characteristics.
+    """
+    if not usage_tracker.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Usage tracking is not enabled."
+        )
+
+    try:
+        providers = usage_tracker.get_provider_stats(days=days)
+        return {
+            "period": {"days": days},
+            "providers": providers
+        }
+    except Exception as e:
+        logger.error(f"Failed to get provider analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/analytics/model-comparison")
+async def get_model_comparison_analytics(
+    days: int = Query(7, ge=1, le=90, description="Number of days"),
+    min_requests: int = Query(1, ge=1, le=1000, description="Filter by minimum request count")
+):
+    """
+    Get comparative analytics across different models.
+
+    Shows performance metrics for each model including latency, cost efficiency, and token usage.
+    """
+    if not usage_tracker.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Usage tracking is not enabled."
+        )
+
+    try:
+        models = usage_tracker.get_model_comparison(days=days)
+        # Filter by minimum request count
+        filtered_models = [m for m in models if m['total_requests'] >= min_requests]
+        return {
+            "period": {"days": days},
+            "filters": {"min_requests": min_requests},
+            "models": filtered_models
+        }
+    except Exception as e:
+        logger.error(f"Failed to get model comparison: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/analytics/insights")
+async def get_analytics_insights(
+    days: int = Query(7, ge=1, le=90, description="Number of days")
+):
+    """
+    Get AI-generated insights and recommendations from usage patterns.
+
+    Returns actionable insights about cost optimization, performance improvements,
+    and usage patterns based on the tracked data.
+    """
+    if not usage_tracker.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Usage tracking is not enabled."
+        )
+
+    try:
+        # Get all relevant data
+        summary = usage_tracker.get_cost_summary(days=days)
+        savings = usage_tracker.get_savings_data(days=days)
+        token_stats = usage_tracker.get_token_breakdown_stats(days=days)
+        providers = usage_tracker.get_provider_stats(days=days)
+        models = usage_tracker.get_model_comparison(days=days)
+
+        # Generate insights
+        insights = []
+
+        # Savings insights
+        total_savings = sum(s['total_savings'] for s in savings)
+        if total_savings > 0:
+            top_saving = max(savings, key=lambda x: x['total_savings']) if savings else None
+            if top_saving:
+                insights.append({
+                    "type": "cost_saving",
+                    "title": "Smart Routing Savings",
+                    "description": f"Saved ${total_savings:.4f} ({top_saving['avg_savings_percent']:.1f}%) by routing {top_saving['request_count']} requests from {top_saving['original_model']} to {top_saving['routed_model']}",
+                    "priority": "high" if top_saving['avg_savings_percent'] > 20 else "medium"
+                })
+
+        # Token efficiency insights
+        if token_stats and token_stats.get('total_tokens', 0) > 0:
+            reasoning_pct = token_stats['reasoning']['percentage']
+            if reasoning_pct > 30:
+                insights.append({
+                    "type": "efficiency",
+                    "title": "High Reasoning Token Usage",
+                    "description": f"{reasoning_pct:.1f}% of tokens are reasoning tokens. Consider optimizing prompts or using smaller models for simpler tasks.",
+                    "priority": "medium"
+                })
+
+            cached_pct = token_stats['cached']['percentage']
+            if cached_pct < 5:
+                insights.append({
+                    "type": "optimization",
+                    "title": "Low Cache Utilization",
+                    "description": f"Only {cached_pct:.1f}% of tokens are cached. Consider using prompt caching for repetitive requests.",
+                    "priority": "low"
+                })
+
+        # Provider insights
+        if len(providers) > 1:
+            top_provider = providers[0]
+            second_provider = providers[1] if len(providers) > 1 else None
+            if second_provider and top_provider['total_cost'] > second_provider['total_cost'] * 2:
+                insights.append({
+                    "type": "provider_concentration",
+                    "title": "Provider Concentration",
+                    "description": f"{top_provider['provider']} accounts for {top_provider['total_cost'] / (top_provider['total_cost'] + second_provider['total_cost']) * 100:.1f}% of costs. Consider diversifying providers.",
+                    "priority": "low"
+                })
+
+        # Performance insights
+        if summary and summary.get('avg_duration_ms', 0) > 5000:
+            insights.append({
+                "type": "performance",
+                "title": "High Average Latency",
+                "description": f"Average request latency is {summary['avg_duration_ms']:.0f}ms. Consider using faster models or enabling streaming.",
+                "priority": "medium"
+            })
+
+        # Model usage insights
+        if len(models) > 3:
+            # Check for inefficient models (high cost per 1k tokens)
+            inefficient = [m for m in models if m['avg_cost_per_1k_tokens'] > 10 and m['total_requests'] > 10]
+            if inefficient:
+                top_inefficient = inefficient[0]
+                insights.append({
+                    "type": "model_efficiency",
+                    "title": "High Cost Model Usage",
+                    "description": f"{top_inefficient['model']} costs ${top_inefficient['avg_cost_per_1k_tokens']:.2f}/1k tokens. Consider alternatives.",
+                    "priority": "medium"
+                })
+
+        return {
+            "period": {"days": days},
+            "insights": insights,
+            "summary": {
+                "total_insights": len(insights),
+                "high_priority": len([i for i in insights if i['priority'] == 'high']),
+                "medium_priority": len([i for i in insights if i['priority'] == 'medium']),
+                "low_priority": len([i for i in insights if i['priority'] == 'low'])
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to generate insights: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

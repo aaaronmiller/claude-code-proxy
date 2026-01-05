@@ -1,0 +1,21 @@
+# Crosstalk Configuration Example
+# Save this file and load with: python start_proxy.py --crosstalk-config examples/crosstalk-config.yaml
+
+models:
+  - big
+  - small
+
+system_prompts:
+  big: path:examples/prompts/alice.txt
+  small: path:examples/prompts/bob.txt
+
+paradigm: debate
+iterations: 20
+
+topic: "What are the most important challenges facing artificial intelligence in the next 5 years?"
+
+# Available paradigms:
+# - memory: Each model analyzes independently and shares insights
+# - report: Sequential reporting between models
+# - relay: Chain communication through all models
+# - debate: Contradictory reasoning with confidence evaluation

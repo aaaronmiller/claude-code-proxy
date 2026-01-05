@@ -1,0 +1,18 @@
+{#- 
+  Debate Template - Structured argumentation
+  Frames messages for formal debate exchanges.
+-#}
+## Debate Round {{ round | default("N") }}
+
+**Opposing Argument ({{ previous_model | default("Opponent") }}):**
+
+{{ message }}
+
+---
+
+**Your Response Guidelines:**
+1. Directly address the strongest point made
+2. Provide counter-evidence or counter-reasoning
+3. Identify logical fallacies if present
+4. Strengthen your position with new arguments
+5. Conclude with a clear statement of your stance

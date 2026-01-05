@@ -10,13 +10,14 @@ from src.api.billing import router as billing_router
 from src.api.benchmarks import router as benchmarks_router
 from src.api.users import router as users_router
 from src.api.openai_endpoints import router as openai_router
+from src.api.docs_routes import router as docs_router
 import uvicorn
 import sys
 import os
 from pathlib import Path
 from src.core.config import config
 
-app = FastAPI(title="Claude-to-OpenAI API Proxy", version="1.0.0")
+app = FastAPI(title="The Ultimate Proxy", version="2.0.0")
 
 # Include API routers
 app.include_router(api_router)
@@ -28,31 +29,45 @@ app.include_router(analytics_router)
 app.include_router(billing_router)
 app.include_router(benchmarks_router)
 app.include_router(users_router)
+app.include_router(docs_router)  # Documentation API
 
-# Mount static files for web UI
-static_dir = Path(__file__).parent / "static"
-if static_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+# ═══════════════════════════════════════════════════════════════════════════════
+# STATIC FILE SERVING - Svelte Web UI
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Priority 1: Serve pre-built Svelte web-ui if available
+svelte_build_dir = Path(__file__).parent.parent / "web-ui" / "build"
+legacy_static_dir = Path(__file__).parent / "static"
+
+# Determine which UI to serve
+# Determine which UI to serve
+if svelte_build_dir.exists():
+    # Svelte web-ui is built - serve it
+    print(f"🌐 Serving Svelte Web UI from: {svelte_build_dir}")
     
-    # Serve index.html at root
+    # Mount build directory at root to handle all static assets (/_app, /favicon.ico, etc)
+    # html=True ensures index.html is served for root path /
+    app.mount("/", StaticFiles(directory=str(svelte_build_dir), html=True), name="site")
+
+elif legacy_static_dir.exists():
+    # Fallback to legacy HTML dashboard
+    print(f"📊 Serving legacy dashboard from: {legacy_static_dir}")
+    app.mount("/", StaticFiles(directory=str(legacy_static_dir), html=True), name="static_legacy")
+
+else:
     @app.get("/")
     async def read_root():
-        return FileResponse(str(static_dir / "index.html"))
-
-# Serve web UI at root (This block is now redundant if the above @app.get("/") is active)
-# Keeping it for now as the instruction implies it should remain, but it will be shadowed.
-# If the intent was to remove the old @app.get("/") and replace it, the instruction was a bit ambiguous.
-# Given the instruction structure, I'm replacing the old @app.get("/") with the new one,
-# and the lines after the new @app.get("/") in the instruction seem to be a remnant of the old one.
-# I will interpret the instruction as replacing the entire old @app.get("/") block with the new one.
-# The lines `index_file = static_dir / "index.html"` and subsequent `if` block in the instruction
-# appear to be part of the old logic that the new `@app.get("/")` is replacing.
-# So, the old `@app.get("/")` block will be removed.
+        """No UI available."""
+        return {"message": "No web UI available. Build with: cd web-ui && bun run build"}
 
 @app.get("/config")
 async def serve_config_ui():
     """Serve the web UI at /config path for convenience"""
-    index_file = static_dir / "index.html"
+    if svelte_build_dir.exists():
+        index_file = svelte_build_dir / "index.html"
+    else:
+        index_file = legacy_static_dir / "index.html"
+    
     if index_file.exists():
         return FileResponse(index_file)
     return {"message": "Web UI not available"}
@@ -113,49 +128,55 @@ def main(env_updates: dict = None, skip_validation: bool = False):
         print(f"  Claude sonnet/opus models -> {config.big_model}")
         sys.exit(0)
 
-    # Update model limits from OpenRouter
-    print("🔄 Updating model limits from OpenRouter...")
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # OPENROUTER MODEL CACHE REFRESH
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # Fetch latest model data from OpenRouter on startup (with caching)
+    try:
+        from src.services.models.openrouter_fetcher import startup_refresh
+        startup_refresh()
+    except Exception as e:
+        print(f"⚠️  OpenRouter model fetch failed: {e}")
+
+    # Legacy: Update model limits from OpenRouter scraper (for context window info)
     try:
         import asyncio
         import json
-        
+
         # Import scraper function
         scraper_path = Path(__file__).parent.parent / "scripts" / "maintenance" / "scrape_openrouter_models.py"
-        sys.path.insert(0, str(scraper_path.parent))
-        
-        from scrape_openrouter_models import fetch_openrouter_models, parse_model_limits
-        
-        # Run scraper
-        models = asyncio.run(fetch_openrouter_models())
-        if models:
-            model_limits = []
-            for model in models:
-                limits = parse_model_limits(model)
-                if limits["model_id"] and limits["context_limit"] > 0:
-                    model_limits.append(limits)
-            
-            # Save JSON
-            models_dir = Path(__file__).parent.parent / "models"
-            models_dir.mkdir(exist_ok=True)
-            json_path = models_dir / "model_limits.json"
-            
-            json_data = {
-                item["model_id"]: {
-                    "context": item["context_limit"],
-                    "output": item["output_limit"],
-                    "name": item["name"]
+        if scraper_path.exists():
+            sys.path.insert(0, str(scraper_path.parent))
+
+            from scrape_openrouter_models import fetch_openrouter_models, parse_model_limits
+
+            # Run scraper
+            models = asyncio.run(fetch_openrouter_models())
+            if models:
+                model_limits = []
+                for model in models:
+                    limits = parse_model_limits(model)
+                    if limits["model_id"] and limits["context_limit"] > 0:
+                        model_limits.append(limits)
+
+                # Save JSON
+                models_dir = Path(__file__).parent.parent / "models"
+                models_dir.mkdir(exist_ok=True)
+                json_path = models_dir / "model_limits.json"
+
+                json_data = {
+                    item["model_id"]: {
+                        "context": item["context_limit"],
+                        "output": item["output_limit"],
+                        "name": item["name"]
+                    }
+                    for item in model_limits
                 }
-                for item in model_limits
-            }
-            
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(json_data, f, indent=2)
-            
-            print(f"✅ Updated {len(model_limits)} model limits")
-        else:
-            print("⚠️  Failed to fetch models, using cached limits")
+
+                with open(json_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=2)
     except Exception as e:
-        print(f"⚠️  Model limits update failed: {e}, using cached limits")
+        pass  # Model limits are now also available from openrouter_fetcher
     
     # Display comprehensive configuration
     from src.services.logging.startup_display import print_startup_banner

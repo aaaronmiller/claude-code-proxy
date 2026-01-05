@@ -1,5 +1,90 @@
 import os
 import sys
+import re
+from typing import Dict, Optional, Tuple
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# API KEY FORMAT PATTERNS BY PROVIDER
+# ═══════════════════════════════════════════════════════════════════════════════
+# Each provider has specific key format patterns for validation
+
+API_KEY_PATTERNS: Dict[str, re.Pattern] = {
+    'openai': re.compile(r'^sk-[a-zA-Z0-9]{20,}$'),
+    'openrouter': re.compile(r'^sk-or-v1-[a-f0-9]{64}$'),  # OpenRouter format
+    'anthropic': re.compile(r'^sk-ant-[a-zA-Z0-9\-_]{20,}$'),
+    'google': re.compile(r'^AIza[a-zA-Z0-9_-]{35}$'),
+    'gemini': re.compile(r'^AIza[a-zA-Z0-9_-]{35}$'),
+    'azure': re.compile(r'^[a-f0-9]{32}$'),
+    'vibeproxy': re.compile(r'^ya29\.[a-zA-Z0-9_-]+$'),  # OAuth tokens
+}
+
+# Provider status cache (populated on startup)
+_provider_status_cache: Dict[str, dict] = {}
+
+
+def validate_api_key_format(key: str, provider: str = None) -> Tuple[bool, str]:
+    """
+    Validate API key format for a specific provider.
+
+    Args:
+        key: The API key to validate
+        provider: Optional provider name (openai, openrouter, anthropic, google, azure)
+                 If not specified, tries to auto-detect from key format
+
+    Returns:
+        Tuple of (is_valid, message)
+    """
+    if not key:
+        return False, "No API key provided"
+
+    # Auto-detect provider from key format if not specified
+    if not provider:
+        if key.startswith('sk-or-'):
+            provider = 'openrouter'
+        elif key.startswith('sk-ant-'):
+            provider = 'anthropic'
+        elif key.startswith('AIza'):
+            provider = 'google'
+        elif key.startswith('ya29.'):
+            provider = 'vibeproxy'
+        elif key.startswith('sk-'):
+            provider = 'openai'
+        elif len(key) == 32 and all(c in '0123456789abcdef' for c in key.lower()):
+            provider = 'azure'
+        else:
+            # Unknown format - accept but warn
+            if len(key) >= 20:
+                return True, "Unknown key format (accepted)"
+            return False, "Key too short (minimum 20 characters)"
+
+    # Validate against provider-specific pattern
+    pattern = API_KEY_PATTERNS.get(provider.lower())
+    if pattern:
+        if pattern.match(key):
+            return True, f"Valid {provider} key format"
+        else:
+            # Check for common issues
+            if provider == 'openrouter' and key.startswith('sk-or-'):
+                return True, f"Valid OpenRouter key (relaxed validation)"
+            elif provider in ('google', 'gemini') and key.startswith('AIza'):
+                return True, f"Valid Google key (relaxed validation)"
+            return False, f"Invalid {provider} key format"
+
+    # No pattern for this provider - accept if reasonable length
+    if len(key) >= 10:
+        return True, f"Accepted key for {provider}"
+    return False, "Key too short"
+
+
+def get_provider_status_cache() -> Dict[str, dict]:
+    """Get cached provider status from startup validation."""
+    return _provider_status_cache
+
+
+def set_provider_status(provider: str, status: dict):
+    """Update provider status in cache."""
+    _provider_status_cache[provider] = status
+
 
 # Configuration
 class Config:
@@ -111,10 +196,48 @@ class Config:
         self.small_endpoint = os.environ.get("SMALL_ENDPOINT", self.openai_base_url)
 
         # Per-model API keys (if enabled above)
-        # If not set, falls back to main OPENAI_API_KEY
-        self.big_api_key = os.environ.get("BIG_API_KEY", self.openai_api_key)
-        self.middle_api_key = os.environ.get("MIDDLE_API_KEY", self.openai_api_key)
-        self.small_api_key = os.environ.get("SMALL_API_KEY", self.openai_api_key)
+        # CRITICAL: Each endpoint MUST have its own API key if routing to different providers
+        # Do NOT fallback to main provider key - that causes auth failures
+        
+        # BIG endpoint key validation
+        big_key_from_env = os.environ.get("BIG_API_KEY")
+        if self.enable_big_endpoint:
+            if big_key_from_env:
+                self.big_api_key = big_key_from_env
+            elif self.big_endpoint != self.openai_base_url:
+                # Different endpoint but no key - defer to auto-detection
+                self.big_api_key = None
+            else:
+                self.big_api_key = self.openai_api_key
+        else:
+            self.big_api_key = self.openai_api_key
+        
+        # MIDDLE endpoint key validation  
+        middle_key_from_env = os.environ.get("MIDDLE_API_KEY")
+        if self.enable_middle_endpoint:
+            if middle_key_from_env:
+                self.middle_api_key = middle_key_from_env
+            elif self.middle_endpoint != self.openai_base_url:
+                # Different endpoint but no key - defer to auto-detection
+                self.middle_api_key = None
+            else:
+                self.middle_api_key = self.openai_api_key
+        else:
+            self.middle_api_key = self.openai_api_key
+            
+        # SMALL endpoint key validation
+        small_key_from_env = os.environ.get("SMALL_API_KEY")
+        if self.enable_small_endpoint:
+            if small_key_from_env:
+                self.small_api_key = small_key_from_env
+            elif self.small_endpoint != self.openai_base_url:
+                # Different endpoint but no key - defer to auto-detection
+                self.small_api_key = None
+            else:
+                self.small_api_key = self.openai_api_key
+        else:
+            self.small_api_key = self.openai_api_key
+
 
         # ═══════════════════════════════════════════════════════════════════════════════
         # PROVIDER DETECTION (Auto-detected from URLs, can be overridden)
@@ -142,6 +265,58 @@ class Config:
             "SMALL_PROVIDER",
             detect_provider(self.small_endpoint) if self.enable_small_endpoint else self.default_provider
         )
+        
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # AUTO API KEY LOOKUP BY PROVIDER
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # If no explicit API key is set for an endpoint, look up by detected provider
+        # Provider -> Environment Variable mapping:
+        #   openrouter -> OPENROUTER_API_KEY
+        #   openai -> OPENAI_API_KEY  
+        #   anthropic -> ANTHROPIC_API_KEY
+        #   google/gemini -> GOOGLE_API_KEY or GEMINI_API_KEY
+        #   azure -> AZURE_API_KEY
+        
+        provider_key_map = {
+            "openrouter": os.environ.get("OPENROUTER_API_KEY"),
+            "openai": os.environ.get("OPENAI_API_KEY"),
+            "anthropic": os.environ.get("ANTHROPIC_API_KEY"),
+            "google": os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"),
+            "gemini": os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"),
+            "azure": os.environ.get("AZURE_API_KEY") or os.environ.get("AZURE_OPENAI_API_KEY"),
+            "vibeproxy": self.openai_api_key,  # VibeProxy uses main provider key (Antigravity token)
+            "local": "dummy",  # Local endpoints don't need auth
+        }
+        
+        # Auto-assign API keys based on detected provider if not explicitly set
+        if self.enable_big_endpoint and self.big_api_key is None:
+            auto_key = provider_key_map.get(self.big_provider.lower())
+            if auto_key:
+                print(f"✅ AUTO: Using {self.big_provider.upper()}_API_KEY for BIG endpoint")
+                self.big_api_key = auto_key
+            else:
+                print(f"⚠️  WARNING: BIG endpoint enabled but no API key found")
+                print(f"   → Set BIG_API_KEY or {self.big_provider.upper()}_API_KEY in .env")
+                
+        if self.enable_middle_endpoint and self.middle_api_key is None:
+            auto_key = provider_key_map.get(self.middle_provider.lower())
+            if auto_key:
+                print(f"✅ AUTO: Using {self.middle_provider.upper()}_API_KEY for MIDDLE endpoint")
+                self.middle_api_key = auto_key
+            else:
+                print(f"⚠️  WARNING: MIDDLE endpoint enabled but no API key found")
+                print(f"   → Set MIDDLE_API_KEY or {self.middle_provider.upper()}_API_KEY in .env")
+                
+        if self.enable_small_endpoint and self.small_api_key is None:
+            auto_key = provider_key_map.get(self.small_provider.lower())
+            if auto_key:
+                print(f"✅ AUTO: Using {self.small_provider.upper()}_API_KEY for SMALL endpoint")
+                self.small_api_key = auto_key
+            else:
+                print(f"⚠️  WARNING: SMALL endpoint enabled but no API key found")
+                print(f"   → Set SMALL_API_KEY or {self.small_provider.upper()}_API_KEY in .env")
+
+
 
         # ═══════════════════════════════════════════════════════════════════════════════
         # CUSTOM SYSTEM PROMPTS
@@ -279,12 +454,13 @@ class Config:
                 print(f"Warning: REASONING_MAX_TOKENS {self.reasoning_max_tokens} exceeds maximum (131072). "
                       f"Will be adjusted per provider limits.")
     
-    def validate_api_key(self, api_key: str = None):
+    def validate_api_key(self, api_key: str = None, provider: str = None) -> bool:
         """
-        Validate OpenAI API key format.
+        Validate API key format with provider-aware validation.
 
         Args:
             api_key: API key to validate. If None, uses self.openai_api_key
+            provider: Optional provider name for format validation
 
         Returns:
             True if valid, False otherwise
@@ -294,15 +470,9 @@ class Config:
         if not key_to_validate:
             return False
 
-        # Basic format check for OpenAI API keys
-        if not key_to_validate.startswith('sk-'):
-            return False
-
-        # Minimum length check (OpenAI keys are typically 48+ characters)
-        if len(key_to_validate) < 20:
-            return False
-
-        return True
+        # Use provider-aware validation
+        is_valid, _ = validate_api_key_format(key_to_validate, provider)
+        return is_valid
         
     def validate_client_api_key(self, client_api_key):
         """Validate client's Anthropic API key"""

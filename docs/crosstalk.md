@@ -287,6 +287,48 @@ This extracts:
 
 ### For MCP / Model Access
 
+The MCP server exposes tools for LLMs to run crosstalk sessions programmatically:
+
+| Tool | Description |
+|------|-------------|
+| `crosstalk_run_from_config` | Run a session from a full JSON config |
+| `list_prompts` | List available system prompts |
+| `list_templates` | List available Jinja templates |
+| `get_prompt` | Get content of a specific prompt |
+| `crosstalk_setup` | Setup a basic session |
+| `crosstalk_run` | Execute a configured session |
+| `crosstalk_status` | Check session status |
+| `crosstalk_health` | System health check |
+
+### Using Named Prompts
+
+Reference prompts by name instead of inline content:
+
+```python
+from src.cli.crosstalk_runner import run_from_config, get_prompt_content
+
+# Get a prompt by name
+prompt = get_prompt_content("backrooms-explorer")
+print(prompt)
+
+# Use named prompts in config (resolved automatically)
+config = {
+    "models": [
+        {
+            "model_id": "anthropic/claude-3-opus",
+            "system_prompt_file": "backrooms-explorer",  # Loaded from prompts/
+            "jinja_template": "cli-explorer"             # Loaded from templates/
+        }
+    ],
+    "rounds": 10,
+    "initial_prompt": "Begin exploration..."
+}
+
+result = await run_from_config(config)
+```
+
+### Python API
+
 ```python
 from src.cli.crosstalk_runner import run_from_config
 
@@ -349,23 +391,41 @@ CROSSTALK_SESSION_DIR=configs/crosstalk/sessions
 
 ```
 configs/crosstalk/
-├── templates/          # Jinja templates
-│   ├── basic.j2
-│   ├── cli-explorer.j2
-│   ├── philosopher.j2
-│   ├── dreamer.j2
-│   ├── scientist.j2
-│   └── storyteller.j2
-├── presets/            # Saved configurations
-│   └── backrooms.json
-└── sessions/           # Session transcripts
-    └── session_20251227_223456.json
+├── schema.json         # Full JSON schema for MCP/API integration
+├── templates/          # Jinja templates for message formatting
+│   ├── manifest.yaml   # Template index with metadata
+│   ├── basic.j2        # Pass-through (no modification)
+│   ├── cli-explorer.j2 # Backrooms-style CLI terminal
+│   ├── philosopher.j2  # Socratic dialogue framing
+│   ├── dreamer.j2      # Liminal consciousness framing
+│   ├── scientist.j2    # Hypothesis exchange protocol
+│   ├── storyteller.j2  # Narrative continuation
+│   └── debate.j2       # Structured argumentation
+├── prompts/            # System prompts for model personas
+│   ├── manifest.yaml   # Prompt index with metadata
+│   ├── backrooms-explorer.md  # CLI-style consciousness explorer
+│   ├── dreamer-ai.md          # Poetic liminal dreamer
+│   ├── philosopher.md         # Socratic dialogue specialist
+│   ├── scientist.md           # Research collaborator
+│   ├── devil-advocate.md      # Idea challenger
+│   ├── storyteller.md         # Narrative builder
+│   └── brainstormer.md        # Creative ideation
+├── presets/            # Saved session configurations
+│   ├── backrooms.json
+│   ├── debate.json
+│   ├── brainstorm.json
+│   └── panel.json
+└── sessions/           # Session transcripts (auto-generated)
+    └── session_YYYYMMDD_HHMMSS.json
 
 src/cli/
 ├── crosstalk_studio.py    # Interactive TUI
 ├── crosstalk_engine.py    # Async execution engine
-├── crosstalk_runner.py    # Programmatic API
-└── backrooms_importer.py  # URL import
+├── crosstalk_runner.py    # Programmatic API + prompt/template loading
+└── backrooms_importer.py  # Dreams of Electric Mind URL import/export
+
+src/api/
+└── mcp_server.py          # MCP tools for LLM integration
 
 src/conversation/
 └── crosstalk.py           # Core orchestrator

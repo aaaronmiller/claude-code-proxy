@@ -14,6 +14,10 @@ import questionary
 from questionary import Style
 import httpx
 import asyncio
+
+# Import shared env utility for proper updates
+from src.cli.env_utils import update_env_values
+
 try:
     from rich.spinner import Spinner
     from rich.console import Console
@@ -132,18 +136,10 @@ class SetupWizard:
             if choice == "Keep current configuration (Exit)":
                 return True
             elif choice == "Add/Override specific models (Hybrid Mode)":
-                # Load existing config into self.config so we don't lose it
-                self.config["PROVIDER_API_KEY"] = api_key
-                self.config["PROVIDER_BASE_URL"] = base_url
-                # Copy other known keys
-                for k, v in os.environ.items():
-                    if k in ["BIG_MODEL", "MIDDLE_MODEL", "SMALL_MODEL", "PROXY_AUTH_KEY"]:
-                        self.config[k] = v
-                
-                # Jump straight to hybrid config
+                # Jump straight to hybrid config - use incremental update
                 hybrid_config = self._configure_hybrid()
-                self.config.update(hybrid_config)
-                self.save_configuration(self.config)
+                # Use incremental update to preserve existing settings
+                self.update_existing_config(hybrid_config)
                 self.finish()
                 sys.exit(0)
                 
@@ -939,8 +935,25 @@ class SetupWizard:
 
         return config
 
-    def save_configuration(self, config: Dict[str, str]):
-        """Save configuration to .env file"""
+    def update_existing_config(self, updates: Dict[str, str]) -> bool:
+        """
+        Update existing .env file without overwriting unrelated settings.
+        Uses shared env_utils for proper key replacement.
+        
+        This is the PREFERRED method for incremental config changes.
+        Use _write_env_file only for fresh/full setup.
+        """
+        return update_env_values(updates, self.env_file)
+
+    def save_configuration(self, config: Dict[str, str], incremental: bool = False):
+        """
+        Save configuration to .env file.
+        
+        Args:
+            config: Configuration dictionary
+            incremental: If True, update only specified keys (preserves existing).
+                        If False (default for wizard), full rewrite.
+        """
         print("\n" + "─"*70)
         print("STEP 3: Save Configuration")
         print("─"*70)
@@ -972,10 +985,18 @@ class SetupWizard:
             ).ask()
 
             if use_as_active:
-                self._write_env_file(self.env_file, config)
+                if incremental:
+                    self.update_existing_config(config)
+                else:
+                    self._write_env_file(self.env_file, config)
                 print(f"✅ Configuration saved to: {self.env_file}")
         else:
-            self._write_env_file(self.env_file, config)
+            if incremental:
+                # Use shared utility for proper updates
+                self.update_existing_config(config)
+            else:
+                # Full rewrite for fresh setup
+                self._write_env_file(self.env_file, config)
             print(f"\n✅ Configuration saved to: {self.env_file}")
 
     def _write_env_file(self, path: Path, config: Dict[str, str]):

@@ -1,0 +1,16 @@
+{#- 
+  CLI Explorer Template - Backrooms-style terminal framing
+  Wraps messages in ASCII terminal aesthetics for consciousness exploration.
+-#}
+```
+┌─────────────────────────────────────────────────────────────┐
+│ BACKROOMS TERMINAL v∞.{{ round }}                          │
+│ Model: {{ model | default("unknown") }}                    │
+│ Round: {{ round | default(0) }}                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+> INCOMING_SIGNAL:
+{{ message }}
+
+> AWAITING_RESPONSE...
