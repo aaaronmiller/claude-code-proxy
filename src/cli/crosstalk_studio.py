@@ -337,21 +337,89 @@ class CrosstalkStudio:
         )
     
     def render_circle_panel(self) -> Panel:
-        """Render the circular model arrangement."""
+        """Render the circular model arrangement with enhanced topology visualization."""
         circle_art = render_circle(
             self.session.models,
             self.selected_model_idx,
             width=50,
             height=12
         )
-        
+
+        # Add topology diagram
+        topo_info = self._render_topology_diagram()
+
+        combined = f"{circle_art}\n\n{topo_info}"
+
         return Panel(
-            circle_art,
-            title="[bold cyan]🔮 Model Circle[/]",
+            combined,
+            title="[bold cyan]🔮 Model Circle + Flow Diagram[/]",
             border_style="cyan" if self.mode == "circle" else "dim",
             box=box.ROUNDED,
-            height=16
+            height=20
         )
+
+    def _render_topology_diagram(self) -> str:
+        """Create ASCII representation of the current topology flow."""
+        topo_type = self.session.topology.type
+        paradigm = self.session.paradigm
+
+        # Color codes
+        colors = {
+            "relay": "cyan",
+            "memory": "green",
+            "debate": "magenta",
+            "report": "yellow"
+        }
+
+        color = colors.get(paradigm, "white")
+        diagram = []
+
+        if topo_type == "ring":
+            # Ring flow: 1→2→3→1
+            flow = " → ".join([f"[bold {color}]{i+1}[/]" for i in range(len(self.session.models))])
+            if len(self.session.models) > 1:
+                flow += f" → [bold {color}]1[/]"
+            diagram.append(f"[dim]Topology: Ring[/]")
+            diagram.append(f"Flow: {flow}")
+
+        elif topo_type == "star":
+            # Star: center to spokes and back
+            center = self.session.topology.center
+            spokes = self.session.topology.spokes or [i+1 for i in range(len(self.session.models)) if i+1 != center]
+            diagram.append(f"[dim]Topology: Star (Center={center})[/]")
+            diagram.append(f"[bold {color}]C({center})[/]")
+            for spoke in spokes:
+                diagram.append(f"  ↓ [dim]{spoke}[/]  ↑")
+
+        elif topo_type == "mesh":
+            # Mesh: all-to-all
+            diagram.append(f"[dim]Topology: Mesh (All-to-All)[/]")
+            pairs = []
+            for i in range(len(self.session.models)):
+                for j in range(i+1, len(self.session.models)):
+                    pairs.append(f"{i+1}↔{j+1}")
+            diagram.append(f"[bold {color}]{'  '.join(pairs)}[/]")
+
+        elif topo_type == "chain":
+            # Chain: linear
+            flow = " → ".join([f"[bold {color}]{i+1}[/]" for i in range(len(self.session.models))])
+            diagram.append(f"[dim]Topology: Chain[/]")
+            diagram.append(f"Flow: {flow}")
+
+        else:
+            diagram.append(f"[dim]Topology: {topo_type}[/]")
+            diagram.append("[yellow]Custom visualization[/]")
+
+        # Add paradigm info
+        paradigms = {
+            "relay": "Each model sees only previous response",
+            "memory": "All models see full conversation",
+            "debate": "Models critique each other",
+            "report": "Models summarize before passing"
+        }
+        diagram.append(f"[dim]Paradigm: {paradigm} - {paradigms.get(paradigm, 'Unknown')}[/]")
+
+        return "\n".join(diagram)
     
     def render_model_config(self) -> Panel:
         """Render the selected model's configuration."""
@@ -360,25 +428,40 @@ class CrosstalkStudio:
             content = "[dim]No model selected[/]"
         else:
             lines = []
-            
-            # Model selection
+
+            # Model selection with tier indicator
+            tier = ["big", "middle", "small"][min(model.slot_id-1, 2)] if model.slot_id <= 3 else "aux"
             style = "bold cyan reverse" if self.selected_field == 0 else "cyan"
-            lines.append(f"[{style}]🤖 Model:[/] {model.model_id}")
-            
-            # System prompt
+            lines.append(f"[{style}]🤖 Model:[/] {model.model_id} [dim]({tier})[/]")
+
+            # System prompt (truncated for display)
             style = "bold cyan reverse" if self.selected_field == 1 else "magenta"
-            prompt_display = model.system_prompt_file or "(inline)" if model.system_prompt_inline else "(default)"
+            if model.system_prompt_file:
+                prompt_display = model.system_prompt_file.split('/')[-1]
+            elif model.system_prompt_inline:
+                preview = model.system_prompt_inline[:30]
+                prompt_display = f"inline:{preview}{'...' if len(model.system_prompt_inline) > 30 else ''}"
+            else:
+                prompt_display = "(default)"
             lines.append(f"[{style}]📝 System:[/] {prompt_display}")
-            
+
             # Jinja template
             style = "bold cyan reverse" if self.selected_field == 2 else "yellow"
-            lines.append(f"[{style}]🎨 Jinja:[/] {model.jinja_template}.j2")
-            
+            template_icon = {
+                "basic": "📄",
+                "cli-explorer": "💻",
+                "philosopher": "🤔",
+                "dreamer": "💭",
+                "scientist": "🔬",
+                "storyteller": "📖"
+            }.get(model.jinja_template, "🎨")
+            lines.append(f"[{style}]🎨 Jinja:[/] {template_icon} {model.jinja_template}.j2")
+
             lines.append("")
-            lines.append(f"[dim]🌡️  {model.temperature}  📏 {model.max_tokens} tokens[/]")
-            
+            lines.append(f"[dim]🌡️  {model.temperature}  📏 {model.max_tokens}[/]")
+
             content = "\n".join(lines)
-        
+
         return Panel(
             content,
             title=f"[bold yellow]MODEL {self.selected_model_idx + 1} CONFIG[/]",
@@ -388,10 +471,10 @@ class CrosstalkStudio:
         )
     
     def render_session_config(self) -> Panel:
-        """Render session configuration panel."""
+        """Render session configuration panel with enhanced info."""
         s = self.session
         t = s.topology
-        
+
         # Topology display with emoji
         t_emoji = self.TOPOLOGY_EMOJI.get(t.type, "⭕")
         topo_str = f"{t_emoji} {t.type}"
@@ -399,16 +482,19 @@ class CrosstalkStudio:
             topo_str = f"{t_emoji} star (center={t.center})"
         elif t.type == "ring" and t.order:
             topo_str = f"{t_emoji} ring ({','.join(map(str, t.order))})"
-        
+
         # Paradigm with emoji
         p_emoji = self.PARADIGM_EMOJI.get(s.paradigm, "🔮")
-        
+
         # Mode display
         mode_str = f"[bold red]♾️  infinite[/]" if s.infinite else f"[green]🔁 {s.rounds} rounds[/]"
-        
+
+        # Visual flow indicator
+        flow = self._get_flow_string()
+
         content = Text()
         content.append(f"Mode:     ", style="dim")
-        content.append(f"{'♾️  infinite' if s.infinite else f'🔁 {s.rounds} rounds'}\n", 
+        content.append(f"{'♾️  infinite' if s.infinite else f'🔁 {s.rounds} rounds'}\n",
                       style="bold red" if s.infinite else "green")
         content.append(f"Topology: ", style="dim")
         content.append(f"{topo_str}\n", style="yellow")
@@ -417,9 +503,15 @@ class CrosstalkStudio:
         if s.summarize_every:
             content.append(f"Summary:  ", style="dim")
             content.append(f"📝 every {s.summarize_every}\n", style="cyan")
+
+        content.append(f"\n[dim]Flow:[/]\n", style="dim")
+        content.append(f"[bold cyan]{flow}[/]\n")
+
         content.append("\n")
         content.append("[T]", style="bold yellow")
         content.append("opology ", style="dim")
+        content.append("[I]", style="bold magenta")
+        content.append("mport ", style="dim")
         content.append("[R]", style="bold green")
         content.append("un ", style="dim")
         content.append("[S]", style="bold blue")
@@ -428,36 +520,74 @@ class CrosstalkStudio:
         content.append("oad ", style="dim")
         content.append("[Q]", style="bold red")
         content.append("uit", style="dim")
-        
+
         return Panel(
             content,
             title="[bold green]⚙️  SESSION[/]",
             border_style="green",
             box=box.ROUNDED,
-            height=10
+            height=12
         )
+
+    def _get_flow_string(self) -> str:
+        """Get visual flow string for current topology."""
+        t = self.session.topology
+        n = len(self.session.models)
+
+        if n == 0:
+            return "[dim]No models[/]"
+
+        if t.type == "ring":
+            flow = " → ".join([f"{i+1}" for i in range(n)])
+            if n > 1:
+                flow += " → 1"
+            return flow
+
+        elif t.type == "star":
+            center = t.center
+            spokes = t.spokes or [i+1 for i in range(n) if i+1 != center]
+            return f"C({center}) ⇄ " + " ⇄ ".join([str(s) for s in spokes])
+
+        elif t.type == "mesh":
+            return "All ↔ All"
+
+        elif t.type == "chain":
+            return " → ".join([f"{i+1}" for i in range(n)])
+
+        elif t.type == "random":
+            return "🎲 Random(1-" + str(n) + ")"
+
+        elif t.type == "tournament":
+            return "🏆 Bracket"
+
+        else:
+            return t.type
     
     def render_controls(self) -> Panel:
         """Render user controls panel."""
         controls = Table(box=None, show_header=False, padding=(0, 1))
         controls.add_column("", width=30)
         controls.add_column("", width=35)
-        
+
         controls.add_row(
             "[bold green]+[/] Add  [bold red]-[/] Delete  [bold yellow]C[/]opy",
             f"[dim]←/→[/] Model [bold cyan]{self.selected_model_idx + 1}[/]/{len(self.session.models)}"
         )
         controls.add_row(
             "[dim]↑/↓[/] Field  [bold magenta]E[/]dit  [bold blue]P[/]rompt",
-            "[bold yellow]T[/]opo  [bold magenta]I[/]mport  [dim]1-8[/] Jump"
+            "[bold yellow]T[/]opo  [bold magenta]D[/]iagram  [dim]1-8[/] Jump"
         )
-        
+        controls.add_row(
+            "[bold cyan]I[/]mport  [bold green]R[/]un  [bold blue]S[/]ave  [bold yellow]L[/]oad",
+            "[bold red]Q[/]uit  [dim]Ctrl+C[/] cancel"
+        )
+
         return Panel(
             controls,
             title="[bold blue]🎮 CONTROLS[/]",
             border_style="blue",
             box=box.ROUNDED,
-            height=6
+            height=8
         )
     
     def render_prompt(self) -> Panel:
@@ -486,17 +616,25 @@ class CrosstalkStudio:
     def draw(self):
         """Draw the full TUI."""
         console.clear()
-        
+
+        # Add a subtle background banner
+        console.print(Panel(
+            "[bold cyan]🔮 CROSSTALK STUDIO V2[/] [dim]→ AI Model-to-Model Conversation Orchestrator[/]",
+            box=box.SIMPLE,
+            border_style="dim",
+            padding=(0, 1)
+        ))
+
         # Header
         console.print(self.render_header())
-        
+
         # Main layout: circle on left, config on right
         layout = Layout()
         layout.split_row(
             Layout(name="left", ratio=3),
             Layout(name="right", ratio=2)
         )
-        
+
         # Left side: circle + controls + prompt
         left_layout = Layout()
         left_layout.split_column(
@@ -505,7 +643,7 @@ class CrosstalkStudio:
             Layout(self.render_prompt(), name="prompt", ratio=1),
         )
         layout["left"].update(left_layout)
-        
+
         # Right side: model config + session config
         right_layout = Layout()
         right_layout.split_column(
@@ -513,9 +651,18 @@ class CrosstalkStudio:
             Layout(self.render_session_config(), name="session", ratio=1),
         )
         layout["right"].update(right_layout)
-        
+
         console.print(layout)
         console.print(self.render_status())
+
+        # Subtle footer tips
+        if not self.status_message:
+            console.print(Panel(
+                "[dim]💡 Tip: Press [D] for detailed topology diagram  |  [T] for topology settings  |  [R] to run[/]",
+                box=box.SIMPLE,
+                border_style="dim",
+                padding=(0, 1)
+            ))
     
     def handle_input(self):
         """Handle keyboard input."""
@@ -559,6 +706,8 @@ class CrosstalkStudio:
                 self.import_from_url()
             elif key.lower() == 't':
                 self.edit_topology()
+            elif key.lower() == 'd':
+                self.show_diagram()
             elif key.lower() == 'q':
                 self.running = False
         else:
@@ -806,7 +955,166 @@ class CrosstalkStudio:
                     
         except ValueError:
             pass
-    
+
+    def show_diagram(self):
+        """Show detailed topology diagram in a modal view."""
+        console.clear()
+
+        # Header
+        console.print(Panel(
+            "[bold cyan]✨ CROSSTALK TOPOLOGY DIAGRAM[/]",
+            border_style="cyan",
+            box=box.DOUBLE
+        ))
+
+        # Current config summary
+        t = self.session.topology
+        s = self.session
+
+        console.print(f"\n[dim]Configuration:[/]")
+        console.print(f"  [bold yellow]Topology:[/] {t.type}")
+        console.print(f"  [bold magenta]Paradigm:[/] {s.paradigm}")
+        console.print(f"  [bold green]Models:[/] {len(s.models)}")
+        console.print(f"  [bold blue]Rounds:[/] {s.rounds if not s.infinite else 'Infinite'}")
+
+        # Model details
+        console.print(f"\n[dim]Model Configuration:[/]")
+        for i, model in enumerate(s.models, 1):
+            template = f"[bold cyan]{model.jinja_template}[/]"
+            temp = model.temperature
+            prompt_display = model.system_prompt[:50] + "..." if model.system_prompt else "(default)"
+
+            console.print(f"  AI{i}: {model.model_id}")
+            console.print(f"    Template: {template} | Temp: {temp}")
+            if model.system_prompt:
+                console.print(f"    Prompt: [dim]{prompt_display}[/]")
+
+        # Visual diagram
+        console.print(f"\n[dim]Visual Flow Diagram:[/]")
+        diagram = self._render_ascii_diagram()
+        console.print(Panel(
+            diagram,
+            title="[bold magenta]Flow Diagram[/]",
+            border_style="magenta",
+            box=box.ROUNDED
+        ))
+
+        console.print(f"\n[dim]Paradigm Explanation:[/]")
+        paradigms = {
+            "relay": "Sequential passing: each model sees only the immediately previous response, creating a chain of evolving perspectives",
+            "memory": "Full context: all models see the complete conversation history at every step",
+            "debate": "Critical exchange: models challenge each other's responses, refining arguments",
+            "report": "Synthesis: each model summarizes before passing to the next, creating distilled insights"
+        }
+        console.print(f"[yellow]{paradigms.get(s.paradigm, 'Unknown paradigm')}[/]")
+
+        input("\n[dim]Press Enter to continue...[/]")
+
+    def _render_ascii_diagram(self) -> str:
+        """Create a detailed ASCII art diagram of the current topology."""
+        t = self.session.topology
+        models = self.session.models
+
+        if len(models) == 0:
+            return "[red]No models configured[/]"
+
+        # Choose color based on paradigm
+        color_map = {
+            "relay": "cyan",
+            "memory": "green",
+            "debate": "magenta",
+            "report": "yellow"
+        }
+        color = color_map.get(self.session.paradigm, "white")
+
+        if t.type == "ring":
+            return self._ring_diagram(color)
+
+        elif t.type == "star":
+            return self._star_diagram(color)
+
+        elif t.type == "mesh":
+            return self._mesh_diagram(color)
+
+        elif t.type == "chain":
+            return self._chain_diagram(color)
+
+        else:
+            return f"[dim]Custom topology: {t.type}[/]"
+
+    def _ring_diagram(self, color: str) -> str:
+        """Create ring diagram."""
+        n = len(self.session.models)
+        if n <= 1:
+            return "[dim]Single model ring[/]"
+
+        radius = 8
+        lines = []
+        center_x, center_y = 25, 7
+
+        import math
+
+        # Create canvas
+        canvas = [[' ' for _ in range(50)] for _ in range(15)]
+
+        # Draw models
+        for i in range(n):
+            angle = (2 * math.pi * i / n) - (math.pi / 2)
+            x = int(center_x + radius * math.cos(angle))
+            y = int(center_y + radius * math.sin(angle))
+
+            label = f"{i+1}"
+            if 0 <= y < 15 and 0 <= x < 50:
+                canvas[y][x] = f"[{color}]{label}[/]"
+
+            # Draw connections
+            next_i = (i + 1) % n
+            next_angle = (2 * math.pi * next_i / n) - (math.pi / 2)
+            nx = int(center_x + radius * math.cos(next_angle))
+            ny = int(center_y + radius * math.sin(next_angle))
+
+            # Simple line
+            mid_x = (x + nx) // 2
+            mid_y = (y + ny) // 2
+            if 0 <= mid_y < 15 and 0 <= mid_x < 50:
+                canvas[mid_y][mid_x] = f"[{color}]→[/]"
+
+        # Convert to string
+        result = []
+        for row in canvas:
+            result.append(''.join(row))
+        return '\n'.join(result)
+
+    def _star_diagram(self, color: str) -> str:
+        """Create star diagram."""
+        center = self.session.topology.center
+        spokes = self.session.topology.spokes or [i+1 for i in range(len(self.session.models)) if i+1 != center]
+
+        lines = []
+        lines.append(f"  [bold {color}]CENTER({center})[/]")
+        lines.append("    │")
+
+        for spoke in spokes:
+            lines.append(f"    ↓  [dim]AI{spoke}[/]  ↑")
+
+        return "\n".join(lines)
+
+    def _mesh_diagram(self, color: str) -> str:
+        """Create mesh diagram."""
+        n = len(self.session.models)
+        lines = []
+
+        for i in range(n):
+            peers = [j+1 for j in range(n) if j != i]
+            lines.append(f"[bold {color}]AI{i+1}[/] ↔ " + " ↔ ".join([str(p) for p in peers]))
+
+        return "\n".join(lines)
+
+    def _chain_diagram(self, color: str) -> str:
+        """Create chain diagram."""
+        flow = " → ".join([f"[bold {color}]{i+1}[/]" for i in range(len(self.session.models))])
+        return flow
+
     def save_config(self):
         """Save current configuration to a preset file."""
         console.clear()

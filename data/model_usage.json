@@ -81,8 +81,8 @@
       "first_used": "2025-12-20T23:06:35.747146"
     },
     "gemini-claude-opus-4-5-thinking": {
-      "count": 1218,
-      "last_used": "2026-01-04T21:33:16.266307",
+      "count": 1568,
+      "last_used": "2026-01-05T07:48:58.239215",
       "first_used": "2025-12-21T05:01:06.515376"
     },
     "gemini-claude-sonnet-4-5-thinking": {
@@ -111,8 +111,8 @@
       "first_used": "2025-12-29T22:41:15.011050"
     },
     "xiaomi/mimo-v2-flash:free": {
-      "count": 867,
-      "last_used": "2026-01-04T21:29:04.790405",
+      "count": 1032,
+      "last_used": "2026-01-05T07:49:12.104809",
       "first_used": "2025-12-31T11:12:19.142227"
     },
     "xiaomi/mimo-v2-flash": {
@@ -141,5 +141,5 @@
       "first_used": "2026-01-03T07:52:05.006641"
     }
   },
-  "last_updated": "2026-01-04T21:33:16.266311"
+  "last_updated": "2026-01-05T07:49:12.104813"
 }

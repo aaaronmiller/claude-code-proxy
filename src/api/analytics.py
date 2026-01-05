@@ -1,632 +1,339 @@
 """
-Analytics API Endpoints
-
-Provides REST API access to historical usage data and analytics.
+Analytics API Endpoints - Phase 2
 """
-
-from fastapi import APIRouter, Query, HTTPException
-from fastapi.responses import FileResponse
-from typing import Optional, List
+from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime, timedelta
-import os
-from pathlib import Path
-
-from src.services.usage.usage_tracker import usage_tracker
-from src.services.usage.cost_calculator import calculate_cost
+from typing import List, Dict, Optional, Any
+import sqlite3, json
 from src.core.logging import logger
+from src.services.usage.usage_tracker import usage_tracker
 
 router = APIRouter()
 
-
-@router.get("/api/analytics/summary")
-async def get_analytics_summary(
-    days: int = Query(7, ge=1, le=365, description="Number of days to analyze")
-):
-    """
-    Get analytics summary for the specified time period.
-
-    Returns aggregated metrics including:
-    - Total requests
-    - Token usage
-    - Cost estimates
-    - Performance metrics
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled. Set TRACK_USAGE=true to enable analytics."
-        )
-
-    try:
-        summary = usage_tracker.get_cost_summary(days=days)
-        top_models = usage_tracker.get_top_models(limit=10)
-        json_analysis = usage_tracker.get_json_toon_analysis()
-
-        return {
-            "period": {
-                "days": days,
-                "start": (datetime.utcnow() - timedelta(days=days)).isoformat(),
-                "end": datetime.utcnow().isoformat()
-            },
-            "summary": summary,
-            "top_models": top_models,
-            "json_analysis": json_analysis
-        }
-    except Exception as e:
-        logger.error(f"Failed to get analytics summary: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/api/analytics/models")
-async def get_model_usage(
-    limit: int = Query(20, ge=1, le=100, description="Maximum number of models to return")
-):
-    """
-    Get model usage statistics.
-
-    Returns a list of models sorted by request count with detailed metrics.
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled. Set TRACK_USAGE=true to enable analytics."
-        )
-
-    try:
-        models = usage_tracker.get_top_models(limit=limit)
-        return {
-            "models": models,
-            "count": len(models)
-        }
-    except Exception as e:
-        logger.error(f"Failed to get model usage: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.get("/api/analytics/timeseries")
 async def get_timeseries_data(
-    days: int = Query(7, ge=1, le=90, description="Number of days"),
-    interval: str = Query("hour", description="Interval: hour or day")
+    metric: str = Query(...),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    group_by: str = Query("hour"),
+    provider: Optional[str] = None,
+    model: Optional[str] = None
 ):
-    """
-    Get time-series data for charting.
-
-    Returns aggregated metrics over time intervals for visualization.
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled."
-        )
-
     try:
-        import sqlite3
+        if not usage_tracker.enabled:
+            return {"error": "Usage tracking disabled"}
+        if not end_date:
+            end_date = datetime.now().strftime('%Y-%m-%d')
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+        
+        conn = sqlite3.connect(usage_tracker.db_path)
+        conn.row_factory = sqlite3.Row
+        
+        time_cond = {
+            "hour": "strftime('%Y-%m-%d %H:00', timestamp)",
+            "day": "strftime('%Y-%m-%d', timestamp)",
+            "week": "strftime('%Y-W%W', timestamp)"
+        }.get(group_by, "strftime('%Y-%m-%d %H:00', timestamp)")
+        
+        filters = [f"{time_cond} >= ?", f"{time_cond} <= ?"]
+        params = [start_date, end_date]
+        
+        if provider:
+            filters.append("provider = ?")
+            params.append(provider)
+        if model:
+            filters.append("routed_model = ?")
+            params.append(model)
+        
+        where = " AND ".join(filters)
+        select = {"tokens": "SUM(total_tokens)", "cost": "SUM(estimated_cost)", "requests": "COUNT(*)", "latency": "AVG(duration_ms)"}.get(metric, "COUNT(*)")
+        
+        cursor = conn.execute(f"SELECT {time_cond} as time_bucket, {select} as value FROM api_requests WHERE {where} GROUP BY time_bucket ORDER BY time_bucket", params)
+        rows = cursor.fetchall()
+        
+        labels = [r["time_bucket"] for r in rows]
+        values = [r["value"] or 0 for r in rows]
+        conn.close()
+        
+        return {"labels": labels, "datasets": [{"label": metric.capitalize(), "data": values}], "meta": {"metric": metric, "total": len(labels)}}
+    except Exception as e:
+        logger.error(f"Timeseries failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/analytics/aggregate")
+async def get_aggregated_stats(start_date: Optional[str] = None, end_date: Optional[str] = None):
+    try:
+        if not usage_tracker.enabled:
+            return {"error": "Usage tracking disabled"}
+        if not end_date:
+            end_date = datetime.now().strftime('%Y-%m-%d')
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+        
+        conn = sqlite3.connect(usage_tracker.db_path)
+        conn.row_factory = sqlite3.Row
+        
+        cursor = conn.execute("""
+            SELECT COUNT(*) as requests, SUM(total_tokens) as tokens, SUM(estimated_cost) as cost,
+                   AVG(duration_ms) as latency, COUNT(DISTINCT provider) as providers, COUNT(DISTINCT routed_model) as models,
+                   SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as errors
+            FROM api_requests
+            WHERE timestamp >= ? AND timestamp <= ?
+        """, [start_date, end_date])
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        reqs = row["requests"] or 0
+        errs = row["errors"] or 0
+        error_rate = (errs / reqs * 100) if reqs > 0 else 0
+        
+        cost = row["cost"] or 0
+        tokens = row["tokens"] or 0
+        efficiency = (tokens / cost) if cost > 0 else 0
+        
+        return {
+            "requests": {"total": reqs, "errors": errs, "error_rate": round(error_rate, 2)},
+            "usage": {"tokens": tokens, "cost": round(cost, 4), "efficiency": round(efficiency, 2)},
+            "performance": {"avg": round(row["latency"] or 0, 0)},
+            "distribution": {"providers": row["providers"] or 0, "models": row["models"] or 0}
+        }
+    except Exception as e:
+        logger.error(f"Aggregate failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/analytics/query")
+async def execute_custom_query(query_config: Dict[str, Any]):
+    try:
+        if not usage_tracker.enabled:
+            return {"error": "Usage tracking disabled"}
+        
+        conn = sqlite3.connect(usage_tracker.db_path)
+        conn.row_factory = sqlite3.Row
+        
+        query_parts = ["SELECT * FROM api_requests"]
+        conditions = []
+        params = []
+        
+        if "filters" in query_config:
+            for f in query_config["filters"]:
+                field, operator, value = f["field"], f["operator"], f["value"]
+                if field not in {"provider", "routed_model", "status", "estimated_cost", "total_tokens", "duration_ms", "timestamp", "model"}:
+                    continue
+                if operator == "=":
+                    conditions.append(f"{field} = ?")
+                    params.append(value)
+                elif operator == ">":
+                    conditions.append(f"{field} > ?")
+                    params.append(value)
+                elif operator == "contains":
+                    conditions.append(f"{field} LIKE ?")
+                    params.append(f"%{value}%")
+        
+        if conditions:
+            query_parts.append("WHERE " + " AND ".join(conditions))
+        
+        if "sort" in query_config:
+            sort_field = query_config["sort"]["field"]
+            sort_order = query_config["sort"]["order"]
+            if sort_field in {"timestamp", "estimated_cost", "total_tokens", "duration_ms"}:
+                query_parts.append(f"ORDER BY {sort_field} {sort_order}")
+        
+        limit = query_config.get("limit", 100)
+        offset = query_config.get("offset", 0)
+        query_parts.append(f"LIMIT {limit} OFFSET {offset}")
+        
+        cursor = conn.execute(" ".join(query_config), params)
+        rows = cursor.fetchall()
+        results = [dict(row) for row in rows]
+        
+        count_query = "SELECT COUNT(*) as total FROM api_requests"
+        if conditions:
+            count_query += " WHERE " + " AND ".join(conditions)
+        total_cursor = conn.execute(count_query, params)
+        total = total_cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            "results": results,
+            "pagination": {"total": total, "limit": limit, "offset": offset, "has_more": (offset + limit) < total},
+            "query": query_config
+        }
+    except Exception as e:
+        logger.error(f"Custom query failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/analytics/custom")
+async def get_custom_analytics(
+    metrics: str = Query(...),
+    start_date: str = Query(...),
+    end_date: str = Query(...),
+    group_by: str = Query("day"),
+    aggregator: str = Query("sum")
+):
+    """Custom analytics endpoint for query builder"""
+    try:
+        if not usage_tracker.enabled:
+            return {"error": "Usage tracking disabled", "data": []}
 
         conn = sqlite3.connect(usage_tracker.db_path)
-        cursor = conn.cursor()
+        conn.row_factory = sqlite3.Row
 
-        since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        # Parse metrics
+        metric_list = [m.strip() for m in metrics.split(",")]
 
-        if interval == "hour":
-            time_format = '%Y-%m-%d %H:00:00'
-        else:
-            time_format = '%Y-%m-%d'
+        # Time grouping
+        time_cond = {
+            "hour": "strftime('%Y-%m-%d %H:00', timestamp)",
+            "day": "strftime('%Y-%m-%d', timestamp)",
+            "week": "strftime('%Y-W%W', timestamp)",
+            "month": "strftime('%Y-%m', timestamp)"
+        }.get(group_by, "strftime('%Y-%m-%d', timestamp)")
 
-        cursor.execute(f"""
-            SELECT
-                strftime('{time_format}', timestamp) as time_bucket,
-                COUNT(*) as request_count,
-                SUM(estimated_cost) as cost,
-                AVG(duration_ms) as avg_duration,
-                SUM(total_tokens) as total_tokens
+        # Metric mapping
+        metric_selects = []
+        for m in metric_list:
+            if m == "tokens":
+                metric_selects.append(f"{aggregator}(total_tokens) as tokens")
+            elif m == "cost":
+                metric_selects.append(f"{aggregator}(estimated_cost) as cost")
+            elif m == "requests":
+                metric_selects.append("COUNT(*) as requests")
+            elif m == "latency":
+                metric_selects.append("AVG(duration_ms) as latency")
+
+        if not metric_selects:
+            return {"error": "No valid metrics specified", "data": []}
+
+        # Parse URL parameters for filters
+        filter_conditions = []
+        filter_params = []
+
+        # For now, use the original API structure with query params
+        # In future, could parse from URL or request body
+        filter_conditions.append(f"{time_cond} >= ?")
+        filter_params.append(start_date)
+        filter_conditions.append(f"{time_cond} <= ?")
+        filter_params.append(end_date)
+
+        where_clause = " AND ".join(filter_conditions)
+        metric_sql = ", ".join(metric_selects)
+
+        query = f"""
+            SELECT {time_cond} as date, {metric_sql}
             FROM api_requests
-            WHERE timestamp >= ? AND status = 'success'
-            GROUP BY time_bucket
-            ORDER BY time_bucket ASC
-        """, (since,))
+            WHERE {where_clause}
+            GROUP BY date
+            ORDER BY date
+        """
+
+        cursor = conn.execute(query, filter_params)
+        rows = cursor.fetchall()
+        conn.close()
+
+        # Convert to list of dicts
+        data = [dict(row) for row in rows]
+
+        return {"data": data, "meta": {"metrics": metric_list, "group_by": group_by, "aggregator": aggregator}}
+
+    except Exception as e:
+        logger.error(f"Custom analytics failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/analytics/queries")
+async def save_query(query_data: Dict[str, Any]):
+    """Save a custom query"""
+    try:
+        if not usage_tracker.enabled:
+            return {"error": "Usage tracking disabled"}
+
+        conn = sqlite3.connect(usage_tracker.db_path)
+
+        # Create table if not exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS saved_queries (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                query TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        import uuid
+        query_id = str(uuid.uuid4())
+        name = query_data.get("name", "Untitled Query")
+        query = json.dumps(query_data.get("query", {}))
+        created_at = datetime.utcnow().isoformat()
+
+        conn.execute(
+            "INSERT INTO saved_queries (id, name, query, created_at) VALUES (?, ?, ?, ?)",
+            (query_id, name, query, created_at)
+        )
+        conn.commit()
+        conn.close()
+
+        return {"id": query_id, "name": name, "status": "saved"}
+
+    except Exception as e:
+        logger.error(f"Save query failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/analytics/queries")
+async def get_saved_queries():
+    """Get all saved queries"""
+    try:
+        if not usage_tracker.enabled:
+            return []
+
+        conn = sqlite3.connect(usage_tracker.db_path)
+        conn.row_factory = sqlite3.Row
+
+        try:
+            cursor = conn.execute("SELECT * FROM saved_queries ORDER BY created_at DESC")
+        except sqlite3.OperationalError:
+            # Table doesn't exist yet
+            conn.close()
+            return []
 
         rows = cursor.fetchall()
         conn.close()
 
-        data_points = []
-        for row in rows:
-            data_points.append({
-                "timestamp": row[0],
-                "requests": row[1],
-                "cost": round(row[2] or 0.0, 4),
-                "avg_duration_ms": round(row[3] or 0.0, 2),
-                "tokens": row[4] or 0
-            })
+        return [{
+            "id": row["id"],
+            "name": row["name"],
+            "query": json.loads(row["query"]),
+            "created_at": row["created_at"]
+        } for row in rows]
 
-        return {
-            "period": {
-                "days": days,
-                "interval": interval
-            },
-            "data": data_points
-        }
     except Exception as e:
-        logger.error(f"Failed to get timeseries data: {e}")
+        logger.error(f"Get queries failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/api/analytics/errors")
-async def get_error_analytics(
-    days: int = Query(7, ge=1, le=90, description="Number of days")
-):
-    """
-    Get error analytics.
-
-    Returns error rates, types, and trends.
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled."
-        )
-
+@router.delete("/api/analytics/queries/{query_id}")
+async def delete_query(query_id: str):
+    """Delete a saved query"""
     try:
-        import sqlite3
+        if not usage_tracker.enabled:
+            return {"error": "Usage tracking disabled"}
 
         conn = sqlite3.connect(usage_tracker.db_path)
-        cursor = conn.cursor()
-
-        since = (datetime.utcnow() - timedelta(days=days)).isoformat()
-
-        # Get error summary
-        cursor.execute("""
-            SELECT
-                status,
-                COUNT(*) as count,
-                AVG(duration_ms) as avg_duration
-            FROM api_requests
-            WHERE timestamp >= ?
-            GROUP BY status
-        """, (since,))
-
-        status_counts = {}
-        total_requests = 0
-        for row in cursor.fetchall():
-            status_counts[row[0]] = {
-                "count": row[1],
-                "avg_duration_ms": round(row[2] or 0.0, 2)
-            }
-            total_requests += row[1]
-
-        # Get error types
-        cursor.execute("""
-            SELECT
-                error_message,
-                COUNT(*) as count
-            FROM api_requests
-            WHERE timestamp >= ? AND status = 'error'
-            GROUP BY error_message
-            ORDER BY count DESC
-            LIMIT 10
-        """, (since,))
-
-        error_types = []
-        for row in cursor.fetchall():
-            error_types.append({
-                "message": row[0],
-                "count": row[1]
-            })
-
+        cursor = conn.execute("DELETE FROM saved_queries WHERE id = ?", (query_id,))
+        deleted = cursor.rowcount
+        conn.commit()
         conn.close()
 
-        success_count = status_counts.get('success', {}).get('count', 0)
-        error_count = total_requests - success_count
-        success_rate = (success_count / total_requests * 100) if total_requests > 0 else 100
+        return {"deleted": deleted > 0, "id": query_id}
 
-        return {
-            "period": {
-                "days": days
-            },
-            "summary": {
-                "total_requests": total_requests,
-                "success_count": success_count,
-                "error_count": error_count,
-                "success_rate": round(success_rate, 2)
-            },
-            "status_breakdown": status_counts,
-            "top_errors": error_types
-        }
     except Exception as e:
-        logger.error(f"Failed to get error analytics: {e}")
+        logger.error(f"Delete query failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/api/analytics/export")
-async def export_analytics_data(
-    days: int = Query(30, ge=1, le=365, description="Number of days to export"),
-    format: str = Query("csv", description="Export format: csv or json")
-):
-    """
-    Export analytics data to file.
-
-    Returns a downloadable file with historical data.
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled."
-        )
-
-    try:
-        export_dir = Path("exports")
-        export_dir.mkdir(exist_ok=True)
-
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        filename = f"analytics_export_{timestamp}.{format}"
-        filepath = export_dir / filename
-
-        if format == "csv":
-            success = usage_tracker.export_to_csv(str(filepath), days=days)
-        elif format == "json":
-            success = usage_tracker.export_to_json(str(filepath), days=days)
-        else:
-            raise HTTPException(status_code=400, detail="Invalid format. Use 'csv' or 'json'.")
-
-        if success and filepath.exists():
-            return FileResponse(
-                path=str(filepath),
-                filename=filename,
-                media_type='application/octet-stream'
-            )
-        else:
-            raise HTTPException(status_code=500, detail="Export failed")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to export data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/api/analytics/cost-breakdown")
-async def get_cost_breakdown(
-    days: int = Query(7, ge=1, le=90, description="Number of days")
-):
-    """
-    Get detailed cost breakdown by model, provider, and time.
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled."
-        )
-
-    try:
-        import sqlite3
-
-        conn = sqlite3.connect(usage_tracker.db_path)
-        cursor = conn.cursor()
-
-        since = (datetime.utcnow() - timedelta(days=days)).isoformat()
-
-        # Cost by model
-        cursor.execute("""
-            SELECT
-                routed_model,
-                COUNT(*) as requests,
-                SUM(estimated_cost) as total_cost,
-                SUM(input_tokens) as input_tokens,
-                SUM(output_tokens) as output_tokens
-            FROM api_requests
-            WHERE timestamp >= ? AND status = 'success'
-            GROUP BY routed_model
-            ORDER BY total_cost DESC
-        """, (since,))
-
-        model_costs = []
-        total_cost = 0.0
-        for row in cursor.fetchall():
-            cost = row[2] or 0.0
-            total_cost += cost
-            model_costs.append({
-                "model": row[0],
-                "requests": row[1],
-                "cost": round(cost, 4),
-                "input_tokens": row[3] or 0,
-                "output_tokens": row[4] or 0
-            })
-
-        # Cost by provider
-        cursor.execute("""
-            SELECT
-                provider,
-                COUNT(*) as requests,
-                SUM(estimated_cost) as total_cost
-            FROM api_requests
-            WHERE timestamp >= ? AND status = 'success'
-            GROUP BY provider
-            ORDER BY total_cost DESC
-        """, (since,))
-
-        provider_costs = []
-        for row in cursor.fetchall():
-            provider_costs.append({
-                "provider": row[0] or "unknown",
-                "requests": row[1],
-                "cost": round(row[2] or 0.0, 4)
-            })
-
-        conn.close()
-
-        return {
-            "period": {
-                "days": days
-            },
-            "total_cost": round(total_cost, 4),
-            "by_model": model_costs,
-            "by_provider": provider_costs
-        }
-    except Exception as e:
-        logger.error(f"Failed to get cost breakdown: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/api/analytics/dashboard")
-async def get_dashboard_data(
-    days: int = Query(7, ge=1, le=90, description="Number of days")
-):
-    """
-    Get comprehensive dashboard data with all visualization metrics.
-
-    Returns complete analytics for dashboard rendering:
-    - Time series data for charts
-    - Model comparison statistics
-    - Savings analysis from smart routing
-    - Token breakdown (prompt/completion/reasoning/etc)
-    - Provider statistics
-    - Overall summary metrics
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled. Set TRACK_USAGE=true to enable analytics."
-        )
-
-    try:
-        data = usage_tracker.get_dashboard_summary(days=days)
-        if not data:
-            raise HTTPException(status_code=404, detail="No data available for the selected period")
-        return data
-    except Exception as e:
-        logger.error(f"Failed to get dashboard data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/api/analytics/savings")
-async def get_savings_analytics(
-    days: int = Query(7, ge=1, le=90, description="Number of days")
-):
-    """
-    Get detailed savings analysis from smart model routing.
-
-    Shows cost optimization achieved through routing decisions.
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled."
-        )
-
-    try:
-        savings_data = usage_tracker.get_savings_data(days=days)
-        return {
-            "period": {"days": days},
-            "savings_by_routing": savings_data,
-            "total_savings": sum(s['total_savings'] for s in savings_data),
-            "total_requests": sum(s['request_count'] for s in savings_data)
-        }
-    except Exception as e:
-        logger.error(f"Failed to get savings analytics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/api/analytics/token-breakdown")
-async def get_token_analytics(
-    days: int = Query(7, ge=1, le=90, description="Number of days")
-):
-    """
-    Get detailed token breakdown analytics.
-
-    Shows distribution across prompt, completion, reasoning, cached, tool_use, and audio tokens.
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled."
-        )
-
-    try:
-        token_stats = usage_tracker.get_token_breakdown_stats(days=days)
-        if not token_stats:
-            return {
-                "period": {"days": days},
-                "summary": {"total_tokens": 0, "request_count": 0},
-                "breakdown": {}
-            }
-        return {
-            "period": {"days": days},
-            "summary": {
-                "total_tokens": token_stats.get('total_tokens', 0),
-                "request_count": token_stats.get('request_count', 0)
-            },
-            "breakdown": {
-                "prompt": token_stats.get('prompt', {}),
-                "completion": token_stats.get('completion', {}),
-                "reasoning": token_stats.get('reasoning', {}),
-                "cached": token_stats.get('cached', {}),
-                "tool_use": token_stats.get('tool_use', {}),
-                "audio": token_stats.get('audio', {})
-            }
-        }
-    except Exception as e:
-        logger.error(f"Failed to get token breakdown: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/api/analytics/providers")
-async def get_provider_analytics(
-    days: int = Query(7, ge=1, le=90, description="Number of days")
-):
-    """
-    Get provider-level statistics and cost efficiency analysis.
-
-    Shows which providers are being used and their performance characteristics.
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled."
-        )
-
-    try:
-        providers = usage_tracker.get_provider_stats(days=days)
-        return {
-            "period": {"days": days},
-            "providers": providers
-        }
-    except Exception as e:
-        logger.error(f"Failed to get provider analytics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/api/analytics/model-comparison")
-async def get_model_comparison_analytics(
-    days: int = Query(7, ge=1, le=90, description="Number of days"),
-    min_requests: int = Query(1, ge=1, le=1000, description="Filter by minimum request count")
-):
-    """
-    Get comparative analytics across different models.
-
-    Shows performance metrics for each model including latency, cost efficiency, and token usage.
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled."
-        )
-
-    try:
-        models = usage_tracker.get_model_comparison(days=days)
-        # Filter by minimum request count
-        filtered_models = [m for m in models if m['total_requests'] >= min_requests]
-        return {
-            "period": {"days": days},
-            "filters": {"min_requests": min_requests},
-            "models": filtered_models
-        }
-    except Exception as e:
-        logger.error(f"Failed to get model comparison: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/api/analytics/insights")
-async def get_analytics_insights(
-    days: int = Query(7, ge=1, le=90, description="Number of days")
-):
-    """
-    Get AI-generated insights and recommendations from usage patterns.
-
-    Returns actionable insights about cost optimization, performance improvements,
-    and usage patterns based on the tracked data.
-    """
-    if not usage_tracker.enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Usage tracking is not enabled."
-        )
-
-    try:
-        # Get all relevant data
-        summary = usage_tracker.get_cost_summary(days=days)
-        savings = usage_tracker.get_savings_data(days=days)
-        token_stats = usage_tracker.get_token_breakdown_stats(days=days)
-        providers = usage_tracker.get_provider_stats(days=days)
-        models = usage_tracker.get_model_comparison(days=days)
-
-        # Generate insights
-        insights = []
-
-        # Savings insights
-        total_savings = sum(s['total_savings'] for s in savings)
-        if total_savings > 0:
-            top_saving = max(savings, key=lambda x: x['total_savings']) if savings else None
-            if top_saving:
-                insights.append({
-                    "type": "cost_saving",
-                    "title": "Smart Routing Savings",
-                    "description": f"Saved ${total_savings:.4f} ({top_saving['avg_savings_percent']:.1f}%) by routing {top_saving['request_count']} requests from {top_saving['original_model']} to {top_saving['routed_model']}",
-                    "priority": "high" if top_saving['avg_savings_percent'] > 20 else "medium"
-                })
-
-        # Token efficiency insights
-        if token_stats and token_stats.get('total_tokens', 0) > 0:
-            reasoning_pct = token_stats['reasoning']['percentage']
-            if reasoning_pct > 30:
-                insights.append({
-                    "type": "efficiency",
-                    "title": "High Reasoning Token Usage",
-                    "description": f"{reasoning_pct:.1f}% of tokens are reasoning tokens. Consider optimizing prompts or using smaller models for simpler tasks.",
-                    "priority": "medium"
-                })
-
-            cached_pct = token_stats['cached']['percentage']
-            if cached_pct < 5:
-                insights.append({
-                    "type": "optimization",
-                    "title": "Low Cache Utilization",
-                    "description": f"Only {cached_pct:.1f}% of tokens are cached. Consider using prompt caching for repetitive requests.",
-                    "priority": "low"
-                })
-
-        # Provider insights
-        if len(providers) > 1:
-            top_provider = providers[0]
-            second_provider = providers[1] if len(providers) > 1 else None
-            if second_provider and top_provider['total_cost'] > second_provider['total_cost'] * 2:
-                insights.append({
-                    "type": "provider_concentration",
-                    "title": "Provider Concentration",
-                    "description": f"{top_provider['provider']} accounts for {top_provider['total_cost'] / (top_provider['total_cost'] + second_provider['total_cost']) * 100:.1f}% of costs. Consider diversifying providers.",
-                    "priority": "low"
-                })
-
-        # Performance insights
-        if summary and summary.get('avg_duration_ms', 0) > 5000:
-            insights.append({
-                "type": "performance",
-                "title": "High Average Latency",
-                "description": f"Average request latency is {summary['avg_duration_ms']:.0f}ms. Consider using faster models or enabling streaming.",
-                "priority": "medium"
-            })
-
-        # Model usage insights
-        if len(models) > 3:
-            # Check for inefficient models (high cost per 1k tokens)
-            inefficient = [m for m in models if m['avg_cost_per_1k_tokens'] > 10 and m['total_requests'] > 10]
-            if inefficient:
-                top_inefficient = inefficient[0]
-                insights.append({
-                    "type": "model_efficiency",
-                    "title": "High Cost Model Usage",
-                    "description": f"{top_inefficient['model']} costs ${top_inefficient['avg_cost_per_1k_tokens']:.2f}/1k tokens. Consider alternatives.",
-                    "priority": "medium"
-                })
-
-        return {
-            "period": {"days": days},
-            "insights": insights,
-            "summary": {
-                "total_insights": len(insights),
-                "high_priority": len([i for i in insights if i['priority'] == 'high']),
-                "medium_priority": len([i for i in insights if i['priority'] == 'medium']),
-                "low_priority": len([i for i in insights if i['priority'] == 'low'])
-            }
-        }
-    except Exception as e:
-        logger.error(f"Failed to generate insights: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/api/analytics/health")
+async def analytics_health():
+    return {"status": "healthy", "enabled": usage_tracker.enabled, "database": usage_tracker.db_path if usage_tracker.enabled else None}

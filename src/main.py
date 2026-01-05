@@ -11,13 +11,109 @@ from src.api.benchmarks import router as benchmarks_router
 from src.api.users import router as users_router
 from src.api.openai_endpoints import router as openai_router
 from src.api.docs_routes import router as docs_router
+# NEW: System monitoring and live metrics
+from src.api.system_monitor import router as system_monitor_router
+from src.api.websocket_live import router as websocket_live_router
+from src.api.websocket_live import start_live_metrics, stop_live_metrics
+# NEW: Alert management and notifications (Phase 3)
+from src.api.alerts import router as alerts_router
+# NEW: Report generation (Phase 3)
+from src.api.reports import router as reports_router
+# NEW: Predictive alerting & analytics (Phase 4)
+from src.api.predictive import router as predictive_router
+# NEW: Third-party integrations (Phase 4)
+from src.api.integrations import router as integrations_router
+# NEW: Custom dashboard builder (Phase 4)
+from src.api.dashboards import router as dashboards_router
+# NEW: User management & RBAC (Phase 4)
+from src.api.users_rbac import router as users_rbac_router
+# NEW: GraphQL API (Phase 4)
+from src.api.graphql_schema import get_graphql_router
 import uvicorn
 import sys
 import os
 from pathlib import Path
 from src.core.config import config
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="The Ultimate Proxy", version="2.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan events for startup and shutdown."""
+    # Startup: Start live metrics system
+    try:
+        await start_live_metrics()
+        print("✅ Live metrics system started")
+    except Exception as e:
+        print(f"⚠️  Failed to start live metrics: {e}")
+
+    # Startup: Initialize notification service
+    try:
+        from src.services.notifications import notification_service
+        await notification_service.initialize()
+        print("✅ Notification service initialized")
+    except Exception as e:
+        print(f"⚠️  Failed to initialize notification service: {e}")
+
+    # Startup: Initialize user management (Phase 4)
+    try:
+        from src.services.user_management import user_service, create_default_admin
+        user_service.initialize()
+        create_default_admin()
+        print("✅ User management initialized")
+    except Exception as e:
+        print(f"⚠️  Failed to initialize user management: {e}")
+
+    # Startup: Start alert engine (Phase 3)
+    try:
+        from src.services.alert_engine import alert_engine
+        await alert_engine.start()
+        print("✅ Alert engine started")
+    except Exception as e:
+        print(f"⚠️  Failed to start alert engine: {e}")
+
+    # Startup: Start advanced scheduler (Phase 4)
+    try:
+        from src.services.advanced_scheduler import advanced_scheduler
+        import asyncio
+        scheduler_task = asyncio.create_task(advanced_scheduler.start())
+        print("✅ Advanced scheduler started")
+    except Exception as e:
+        print(f"⚠️  Failed to start advanced scheduler: {e}")
+
+    yield
+
+    # Shutdown: Stop advanced scheduler
+    try:
+        from src.services.advanced_scheduler import advanced_scheduler
+        await advanced_scheduler.stop()
+        print("✅ Advanced scheduler stopped")
+    except Exception as e:
+        print(f"⚠️  Failed to stop advanced scheduler: {e}")
+
+    # Shutdown: Stop alert engine
+    try:
+        from src.services.alert_engine import alert_engine
+        await alert_engine.stop()
+        print("✅ Alert engine stopped")
+    except Exception as e:
+        print(f"⚠️  Failed to stop alert engine: {e}")
+
+    # Shutdown: Close notification service
+    try:
+        from src.services.notifications import notification_service
+        await notification_service.close()
+        print("✅ Notification service closed")
+    except Exception as e:
+        print(f"⚠️  Failed to close notification service: {e}")
+
+    # Shutdown: Stop live metrics system
+    try:
+        await stop_live_metrics()
+        print("✅ Live metrics system stopped")
+    except Exception as e:
+        print(f"⚠️  Failed to stop live metrics: {e}")
+
+app = FastAPI(title="The Ultimate Proxy", version="2.1.0", lifespan=lifespan)
 
 # Include API routers
 app.include_router(api_router)
@@ -30,6 +126,59 @@ app.include_router(billing_router)
 app.include_router(benchmarks_router)
 app.include_router(users_router)
 app.include_router(docs_router)  # Documentation API
+
+# NEW: Enhanced monitoring and live metrics
+app.include_router(system_monitor_router)  # System health and stats
+app.include_router(websocket_live_router)  # Real-time WebSocket feed
+# NEW: Alert management and notifications (Phase 3)
+app.include_router(alerts_router)  # Alert rules, history, notifications
+# NEW: Report generation (Phase 3)
+app.include_router(reports_router)  # Reports, templates, scheduling
+# NEW: Predictive alerting & analytics (Phase 4)
+app.include_router(predictive_router)  # AI predictions, anomaly detection, forecasting
+# NEW: Third-party integrations (Phase 4)
+app.include_router(integrations_router)  # Datadog, PagerDuty, Slack, etc.
+# NEW: Custom dashboard builder (Phase 4)
+app.include_router(dashboards_router)  # Custom dashboards
+# NEW: User management & RBAC (Phase 4)
+app.include_router(users_rbac_router)  # Authentication, users, API keys
+# NEW: GraphQL API (Phase 4)
+app.include_router(get_graphql_router(), prefix="/graphql")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# INTEGRATION HOOKS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Hook into existing request flow to broadcast to live metrics
+# This is called from endpoints.py to add live tracking
+@app.middleware("http")
+async def live_tracking_middleware(request, call_next):
+    """Add live request tracking"""
+    from src.api.websocket_live import broadcast_request_event
+    from datetime import datetime
+    import time
+
+    start_time = time.time()
+    response = await call_next(request)
+    duration_ms = (time.time() - start_time) * 1000
+
+    # If it's an API request and tracking is enabled, broadcast
+    if request.url.path.startswith("/v1/chat") and hasattr(request.state, 'metrics'):
+        metrics = request.state.metrics
+        try:
+            await broadcast_request_event({
+                "path": request.url.path,
+                "method": request.method,
+                "duration_ms": duration_ms,
+                "status": "success" if response.status_code < 400 else "error",
+                "model": metrics.get("model", "unknown"),
+                "cost": metrics.get("cost", 0),
+                "tokens": metrics.get("total_tokens", 0)
+            })
+        except:
+            pass  # Ignore broadcast errors
+
+    return response
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STATIC FILE SERVING - Svelte Web UI

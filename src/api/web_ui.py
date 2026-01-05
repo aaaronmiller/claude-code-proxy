@@ -378,10 +378,11 @@ async def list_models(
     supports_tools: Optional[bool] = None,
     is_free: Optional[bool] = None,
     min_context: Optional[int] = None,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
+    group_by_provider: bool = False
 ):
     """
-    List available models with optional filtering.
+    List available models with optional filtering and organization.
 
     Args:
         provider: Filter by provider (openai, anthropic, google, etc.)
@@ -392,9 +393,10 @@ async def list_models(
         is_free: Filter by free pricing
         min_context: Minimum context length
         limit: Maximum number of results
+        group_by_provider: Return models organized by provider instead of flat list
 
     Returns:
-        List of model objects with full metadata
+        Either flat list or grouped structure based on group_by_provider
     """
     try:
         from src.services.models.openrouter_fetcher import filter_models, get_model_stats
@@ -413,6 +415,44 @@ async def list_models(
         # Apply limit if specified
         if limit and len(models) > limit:
             models = models[:limit]
+
+        # Group by provider if requested
+        if group_by_provider:
+            grouped = {}
+            for model in models:
+                model_provider = model.get('provider', 'unknown')
+                if model_provider not in grouped:
+                    grouped[model_provider] = []
+                grouped[model_provider].append(model)
+
+            # Get provider status for additional context
+            try:
+                from src.core.config import get_provider_status_cache
+                provider_status = get_provider_status_cache()
+            except:
+                provider_status = {}
+
+            # Format response for grouped UI
+            grouped_response = []
+            for provider_name, provider_models in grouped.items():
+                status = provider_status.get(provider_name, {})
+                grouped_response.append({
+                    "provider": provider_name,
+                    "is_available": status.get("is_valid", False),
+                    "model_count": len(provider_models),
+                    "models": provider_models,
+                    "display_name": provider_name.replace("_", " ").title()
+                })
+
+            # Sort by availability and model count
+            grouped_response.sort(key=lambda x: (not x["is_available"], -x["model_count"]))
+
+            return {
+                "grouped": grouped_response,
+                "flat": models,
+                "count": len(models),
+                "stats": get_model_stats()
+            }
 
         return {
             "models": models,
@@ -631,6 +671,210 @@ async def test_provider(provider_id: str):
         return {"success": False, "error": "Cannot connect to provider"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@router.get("/api/routing/auto")
+async def get_auto_routing_config(provider: str):
+    """
+    Get automatic routing configuration for a provider.
+
+    When a user selects a provider, this returns the recommended:
+    - Base URL
+    - Model tier recommendations
+    - Any special settings
+
+    This eliminates manual "select API backend" dialogs.
+    """
+    routing_configs = {
+        "openrouter": {
+            "base_url": "https://openrouter.ai/api/v1",
+            "recommended_big": "anthropic/claude-3.5-sonnet",
+            "recommended_middle": "openai/gpt-4o",
+            "recommended_small": "google/gemini-2.0-flash-exp",
+            "special_notes": "Uses OPENROUTER_API_KEY - routes to 350+ models",
+            "auto_config": True
+        },
+        "openai": {
+            "base_url": "https://api.openai.com/v1",
+            "recommended_big": "gpt-4o",
+            "recommended_middle": "gpt-4o-mini",
+            "recommended_small": "gpt-4o-mini",
+            "special_notes": "Uses OPENAI_API_KEY - direct OpenAI access",
+            "auto_config": True
+        },
+        "anthropic": {
+            "base_url": "https://api.anthropic.com/v1",
+            "recommended_big": "claude-3-5-sonnet-20241022",
+            "recommended_middle": "claude-3-5-sonnet-20241022",
+            "recommended_small": "claude-3-haiku-20240307",
+            "special_notes": "Uses ANTHROPIC_API_KEY - direct Anthropic access",
+            "auto_config": True
+        },
+        "google": {
+            "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+            "recommended_big": "gemini-1.5-pro",
+            "recommended_middle": "gemini-1.5-flash",
+            "recommended_small": "gemini-1.5-flash",
+            "special_notes": "Uses GOOGLE_API_KEY - Google AI Studio",
+            "auto_config": True
+        },
+        "vibeproxy": {
+            "base_url": "http://127.0.0.1:8317/v1",
+            "recommended_big": "gemini-claude-opus-4-5-thinking",
+            "recommended_middle": "gemini-3-pro-preview",
+            "recommended_small": "mimo-v2-flash:free",
+            "special_notes": "Local OAuth proxy - no API key needed for some models",
+            "auto_config": True
+        }
+    }
+
+    config = routing_configs.get(provider.lower())
+    if not config:
+        return {"error": "Unknown provider", "auto_config": False}
+
+    # Get current config to show what will be overwritten
+    current_config = {
+        "openai_api_key": "***" if config.openai_api_key else "",
+        "openai_base_url": config.openai_base_url,
+        "big_model": config.big_model,
+        "middle_model": config.middle_model,
+        "small_model": config.small_model
+    } if hasattr(config, 'openai_api_key') else {}
+
+    return {
+        "provider": provider,
+        "routing": config,
+        "current": current_config,
+        "status": "ready"
+    }
+
+
+@router.post("/api/routing/apply")
+async def apply_auto_routing(provider: str):
+    """
+    Apply automatic routing configuration for a provider.
+
+    This eliminates the need for manual backend selection dialogs
+    and automatically configures the system for the selected provider.
+    """
+    try:
+        from src.core.config import config
+
+        # Get the routing configuration
+        routing_response = await get_auto_routing_config(provider)
+        if "error" in routing_response:
+            raise HTTPException(status_code=400, detail=routing_response["error"])
+
+        routing = routing_response["routing"]
+
+        # Apply the configuration
+        config.openai_base_url = routing["base_url"]
+        config.big_model = routing["recommended_big"]
+        config.middle_model = routing["recommended_middle"]
+        config.small_model = routing["recommended_small"]
+
+        # Clear tier-specific endpoints (use default)
+        config.enable_big_endpoint = False
+        config.enable_middle_endpoint = False
+        config.enable_small_endpoint = False
+        config.big_endpoint = ""
+        config.middle_endpoint = ""
+        config.small_endpoint = ""
+
+        # Set default provider for tracking
+        config.default_provider = provider.lower()
+
+        logger.info(f"Auto-routed to {provider}: {routing['base_url']}")
+
+        return {
+            "success": True,
+            "message": f"Automatically configured for {provider}",
+            "applied": {
+                "base_url": routing["base_url"],
+                "big_model": routing["recommended_big"],
+                "middle_model": routing["recommended_middle"],
+                "small_model": routing["recommended_small"]
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to apply auto routing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/config/api-key")
+async def save_api_key(provider: str, api_key: str):
+    """
+    Save API key for a specific provider.
+
+    Args:
+        provider: Provider name (openrouter, openai, anthropic, google)
+        api_key: API key to save
+    """
+    try:
+        import os
+        import dotenv
+
+        # Map provider to environment variable
+        env_vars = {
+            "openrouter": "OPENROUTER_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "google": "GOOGLE_API_KEY"
+        }
+
+        env_var = env_vars.get(provider.lower())
+        if not env_var:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+
+        # Update environment variable
+        os.environ[env_var] = api_key
+
+        # Update config object
+        from src.core.config import config
+        if provider.lower() == "openrouter" or provider.lower() == "openai":
+            config.openai_api_key = api_key
+        elif provider.lower() == "anthropic":
+            config.anthropic_api_key = api_key
+
+        # Update .env file if it exists
+        env_file = Path(".env")
+        if env_file.exists():
+            content = env_file.read_text()
+            # Update or add the key
+            lines = content.split('\n')
+            updated = False
+            for i, line in enumerate(lines):
+                if line.strip().startswith(f"{env_var}="):
+                    lines[i] = f"{env_var}={api_key}"
+                    updated = True
+                    break
+            if not updated:
+                lines.append(f"{env_var}={api_key}")
+            env_file.write_text('\n'.join(lines))
+
+        logger.info(f"Updated API key for {provider}")
+        return {
+            "success": True,
+            "message": f"API key saved for {getProviderDisplayName(provider)}",
+            "env_var": env_var
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to save API key: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Helper function for display names
+def getProviderDisplayName(provider: str):
+    names = {
+        "openrouter": "OpenRouter",
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "google": "Google",
+        "vibeproxy": "VibeProxy"
+    }
+    return names.get(provider.lower(), provider)
 
 
 @router.get("/api/stats")

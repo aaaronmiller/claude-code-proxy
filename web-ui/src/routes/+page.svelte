@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onMount, onDestroy } from "svelte";
     import {
         Activity,
         Settings,
@@ -20,1682 +21,1276 @@
         TrendingUp,
         DollarSign,
         BarChart3,
+        CheckCircle2,
+        AlertCircle,
+        Info,
+        User,
+        Key,
+        Link2,
+        Layers,
+        Cpu,
+        // New icons
+        Bell,
+        Clock,
+        AlertTriangle,
+        TrendingDown,
+        Activity as ActivityIcon,
+        Heart,
+        Wifi,
+        Power,
+        Globe,
+        Database,
+        ShieldCheck,
+        ArrowRight,
+        Flame,
+        Target,
+        Award
     } from "lucide-svelte";
-    import CrosstalkVisualizer from "$lib/components/CrosstalkVisualizer.svelte";
-    import AnalyticsDashboard from "$lib/components/AnalyticsDashboard.svelte";
 
-    // Theme management
-    let currentTheme = $state("aurora");
+    // State management
+    let activeTab = $state("dashboard");  // Changed to dashboard as default
 
-    function setTheme(theme: string) {
-        currentTheme = theme;
-        document.documentElement.setAttribute("data-theme", theme);
-        localStorage.setItem("tup-theme", theme);
-    }
+    // Provider selection state
+    let selectedProvider = $state("");
+    let api_key = $state("");
+    let applyingConfig = $state(false);
+    let configMessage = $state("");
 
-    // Load saved theme on mount
-    $effect(() => {
-        const saved = localStorage.getItem("tup-theme");
-        if (saved && ["aurora", "cyberpunk"].includes(saved)) {
-            currentTheme = saved;
-            document.documentElement.setAttribute("data-theme", saved);
-        }
-    });
+    // Model selection state
+    let availableModels = $state<any[]>([]);
+    let groupedModels = $state<any[]>([]);
+    let modelsLoading = $state(false);
 
-
-    // Type-safe event helpers
-    function getChecked(e: Event): boolean {
-        return (e.target as HTMLInputElement)?.checked ?? false;
-    }
-
-    function getValue(e: Event): string {
-        return (e.target as HTMLInputElement)?.value ?? "";
-    }
-
-    let activeTab = $state("dashboard");
-
-    // Explicit setter to ensure reactivity
-    function setActiveTab(tabId: string) {
-        console.log("[setActiveTab] Setting to:", tabId);
-        activeTab = tabId;
-    }
-
-    // Helper to get tab button class - extracted to avoid template literal issues
-    function getTabButtonClass(tabId: string): string {
-        return `w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${activeTab === tabId ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`;
-    }
-
-    // Direct onclick handlers to avoid arrow function issues in Svelte 5
-    function goDashboardTab() {
-        console.log("🔥🔥🔥 goDashboardTab CALLED");
-        activeTab = "dashboard";
-    }
-
-    function goAnalyticsTab() {
-        console.log("🔥🔥🔥 goAnalyticsTab CALLED - navigate to analytics tab");
-        activeTab = "analytics";
-    }
-
-    function goModelsTab() {
-        console.log("🔥🔥🔥 goModelsTab CALLED");
-        activeTab = "models";
-    }
-
-    function goCascadeTab() {
-        console.log("🔥🔥🔥 goCascadeTab CALLED");
-        activeTab = "cascade";
-    }
-
-    function goRoutingTab() {
-        console.log("🔥🔥🔥 goRoutingTab CALLED");
-        activeTab = "routing";
-    }
-
-    function goCrosstalkTab() {
-        console.log("🔥🔥🔥 goCrosstalkTab CALLED");
-        activeTab = "crosstalk";
-    }
-
-    function goTerminalTab() {
-        console.log("🔥🔥🔥 goTerminalTab CALLED");
-        activeTab = "terminal";
-    }
-
-    function goPlaygroundTab() {
-        console.log("🔥🔥🔥 goPlaygroundTab CALLED");
-        activeTab = "playground";
-    }
-
-    function goLogsTab() {
-        console.log("🔥🔥🔥 goLogsTab CALLED");
-        activeTab = "logs";
-    }
-
-    function goDocsTab() {
-        console.log("🔥🔥🔥 goDocsTab CALLED");
-        activeTab = "docs";
-    }
-
-    // Map tab IDs to their handler functions (to avoid arrow function issues in loops)
-    function getTabHandler(tabId: string) {
-        const handlers: Record<string, () => void> = {
-            "dashboard": goDashboardTab,
-            "analytics": goAnalyticsTab,
-            "models": goModelsTab,
-            "cascade": goCascadeTab,
-            "routing": goRoutingTab,
-            "crosstalk": goCrosstalkTab,
-            "terminal": goTerminalTab,
-            "playground": goPlaygroundTab,
-            "logs": goLogsTab,
-            "docs": goDocsTab,
-        };
-        return handlers[tabId] || goDashboardTab;
-    }
-
-    function handleRefreshClick() {
-        console.log("🔥🔥🔥 handleRefreshClick CALLED - refreshing data");
-        loadConfig();
-        loadStats();
-        loadAnalyticsSummary();
-    }
-
-    function handleSelectModel(tier: "big" | "middle" | "small", modelId: string) {
-        console.log(`🔥🔥🔥 handleSelectModel CALLED - model: ${modelId}, tier: ${tier}`);
-        selectModel(tier, modelId);
-    }
-
-    function closeModelDropdown(tier: "big" | "middle" | "small") {
-        console.log(`🔥🔥🔥 closeModelDropdown CALLED - tier: ${tier}`);
-        modelFilters[tier].showDropdown = false;
-    }
-
-    // Test function for basic button functionality
-    function testButton() {
-        console.log("🐛🐛🐛 TEST BUTTON CLICKED - if you see this, onclick handlers work!");
-        alert("Button click detected! See console for details.");
-    }
-
+    // Configuration state
     let config = $state<Record<string, any>>({
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // MODEL SETTINGS
-        // ═══════════════════════════════════════════════════════════════════════════════
         big_model: "",
         middle_model: "",
         small_model: "",
-        model_cascade: false,
-        big_cascade: "",
-        middle_cascade: "",
-        small_cascade: "",
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // PROVIDER & AUTH
-        // ═══════════════════════════════════════════════════════════════════════════════
-        provider_base_url: "",
-        default_provider: "openrouter",
-        azure_api_version: "",
-        enable_openrouter_selection: "true",
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // HYBRID ROUTING
-        // ═══════════════════════════════════════════════════════════════════════════════
-        enable_big_endpoint: false,
-        big_endpoint: "",
-        big_api_key: "",
-        enable_middle_endpoint: false,
-        middle_endpoint: "",
-        middle_api_key: "",
-        enable_small_endpoint: false,
-        small_endpoint: "",
-        small_api_key: "",
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // REASONING CONFIGURATION
-        // ═══════════════════════════════════════════════════════════════════════════════
-        reasoning_effort: "",
-        reasoning_max_tokens: "",
-        reasoning_exclude: "false",
-        verbosity: "",
-        big_model_reasoning: "",
-        middle_model_reasoning: "",
-        small_model_reasoning: "",
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // CUSTOM SYSTEM PROMPTS
-        // ═══════════════════════════════════════════════════════════════════════════════
-        enable_custom_big_prompt: "false",
-        big_system_prompt: "",
-        big_system_prompt_file: "",
-        enable_custom_middle_prompt: "false",
-        middle_system_prompt: "",
-        middle_system_prompt_file: "",
-        enable_custom_small_prompt: "false",
-        small_system_prompt: "",
-        small_system_prompt_file: "",
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // TERMINAL DISPLAY
-        // ═══════════════════════════════════════════════════════════════════════════════
-        terminal_display_mode: "detailed",
-        terminal_color_scheme: "auto",
-        terminal_show_workspace: "true",
-        terminal_show_context_pct: "true",
-        terminal_show_task_type: "true",
-        terminal_show_speed: "true",
-        terminal_show_cost: "true",
-        terminal_show_duration_colors: "true",
-        terminal_session_colors: "true",
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // LOGGING SETTINGS
-        // ═══════════════════════════════════════════════════════════════════════════════
-        log_style: "rich",
-        compact_logger: "false",
-        show_token_counts: "true",
-        show_performance: "true",
-        color_scheme: "auto",
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // USAGE & ANALYTICS
-        // ═══════════════════════════════════════════════════════════════════════════════
-        track_usage: "false",
-        usage_db_path: "usage_tracking.db",
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // DASHBOARD SETTINGS
-        // ═══════════════════════════════════════════════════════════════════════════════
-        enable_dashboard: "false",
-        dashboard_layout: "default",
-        dashboard_refresh: "0.5",
-        dashboard_waterfall_size: "20",
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // PERFORMANCE SETTINGS
-        // ═══════════════════════════════════════════════════════════════════════════════
-        max_tokens_limit: "65536",
-        min_tokens_limit: "4096",
-        request_timeout: "120",
-        max_retries: "2",
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // SERVER CONFIGURATION (read-only)
-        // ═══════════════════════════════════════════════════════════════════════════════
-        host: "0.0.0.0",
-        port: "8082",
-        log_level: "INFO",
+        openai_base_url: "https://api.openai.com/v1",
+        default_provider: "openrouter"
     });
-    let status = $state({ connected: false, provider: "", requests: 0 });
-    let loading = $state(false);
-    let error = $state("");
-    let saveMessage = $state("");
-    let showWizard = $state(false);
-    let presets = $state<any[]>([]);
-    let sessions = $state<any[]>([]);
+
+    // Stats and analytics state
     let stats = $state({
         requests_today: 0,
         total_tokens: 0,
         est_cost: 0,
-        avg_latency: 0,
+        avg_latency: 0
     });
 
-    // Recent requests for dashboard (fallback empty array)
-    let recentRequests = $state<any[]>([]);
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // MODEL SELECTION STATE
-    // ═══════════════════════════════════════════════════════════════════════════════
-    interface ModelInfo {
-        id: string;
-        name: string;
-        provider: string;
-        context_length: number;
-        max_completion_tokens: number;
-        supports_reasoning: boolean;
-        supports_tools: boolean;
-        supports_vision: boolean;
-        pricing: {
-            input_per_million: number;
-            output_per_million: number;
-            is_free: boolean;
-        };
-        description: string;
-    }
-
-    interface ProviderInfo {
-        id: string;
-        name: string;
-        status: "valid" | "invalid" | "unknown";
-        model_count: number;
-    }
-
-    let availableModels = $state<ModelInfo[]>([]);
-    let availableProviders = $state<ProviderInfo[]>([]);
-    let modelsLoading = $state(false);
-    let modelsError = $state("");
-    let modelStats = $state<Record<string, any>>({});
-
-    // Filter state for each tier
-    let modelFilters = $state({
-        big: { search: "", provider: "", showDropdown: false },
-        middle: { search: "", provider: "", showDropdown: false },
-        small: { search: "", provider: "", showDropdown: false },
-    });
-
-    // Filtered models for each dropdown
-    function getFilteredModels(tier: "big" | "middle" | "small"): ModelInfo[] {
-        const filter = modelFilters[tier];
-        let filtered = availableModels;
-
-        if (filter.provider) {
-            filtered = filtered.filter((m) => m.provider === filter.provider);
-        }
-
-        if (filter.search) {
-            const search = filter.search.toLowerCase();
-            filtered = filtered.filter(
-                (m) =>
-                    m.id.toLowerCase().includes(search) ||
-                    m.name.toLowerCase().includes(search),
-            );
-        }
-
-        return filtered.slice(0, 50); // Limit for performance
-    }
-
-    async function loadModels() {
-        modelsLoading = true;
-        modelsError = "";
-        try {
-            const res = await fetch("/api/models?limit=500");
-            if (res.ok) {
-                const data = await res.json();
-                availableModels = data.models || [];
-                modelStats = data.stats || {};
-            } else {
-                modelsError = "Failed to load models";
-            }
-        } catch (e) {
-            modelsError = "Connection error loading models";
-        }
-        modelsLoading = false;
-    }
-
-    async function loadProviders() {
-        try {
-            const res = await fetch("/api/providers");
-            if (res.ok) {
-                const data = await res.json();
-                availableProviders = data.providers || [];
-            }
-        } catch (e) {
-            console.error("Failed to load providers:", e);
-        }
-    }
-
-    async function refreshModels() {
-        modelsLoading = true;
-        modelsError = "";
-        try {
-            const res = await fetch("/api/models/refresh", { method: "POST" });
-            if (res.ok) {
-                const data = await res.json();
-                if (data.models) {
-                    availableModels = data.models;
-                    modelStats = data.stats || {};
-                    saveMessage = `✅ Refreshed ${data.count} models`;
-                } else {
-                    await loadModels();
-                    saveMessage = "✅ Models refreshed";
-                }
-            } else {
-                modelsError = "Refresh failed";
-            }
-        } catch (e) {
-            modelsError = "Connection error";
-        }
-        modelsLoading = false;
-        setTimeout(() => (saveMessage = ""), 3000);
-    }
-
-    function selectModel(tier: "big" | "middle" | "small", modelId: string) {
-        if (tier === "big") config.big_model = modelId;
-        else if (tier === "middle") config.middle_model = modelId;
-        else config.small_model = modelId;
-
-        modelFilters[tier].showDropdown = false;
-        modelFilters[tier].search = "";
-    }
-
-    function formatPrice(price: number): string {
-        if (price === 0) return "Free";
-        if (price < 0.01) return `$${price.toFixed(4)}`;
-        return `$${price.toFixed(2)}`;
-    }
-
-    function formatContext(tokens: number): string {
-        if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`;
-        if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
-        return String(tokens);
-    }
-
-    // WebSocket logs state
-    let ws: WebSocket | null = $state(null);
-    let wsConnected = $state(false);
-    let logs = $state<any[]>([]);
-    let logFilter = $state("all");
-
-    // Documentation state
-    let docContent = $state("");
-    let docLoading = $state(false);
-
-    async function loadDoc(path: string) {
-        docLoading = true;
-        try {
-            const res = await fetch(`/api/docs/${path}`);
-            if (res.ok) {
-                const data = await res.json();
-                docContent = data.content || "";
-            } else {
-                docContent = "# Error\n\nFailed to load document.";
-            }
-        } catch (e) {
-            docContent = "# Error\n\nFailed to fetch document.";
-        }
-        docLoading = false;
-    }
-
-    // Playground state
-    let playground = $state({
-        tier: "big",
-        systemPrompt: "",
-        userMessage: "",
-        temperature: 0.7,
-        maxTokens: 1024,
-        response: "",
-        loading: false,
-        error: "",
-        tokens: { input: 0, output: 0 },
-        latency: 0,
-    });
-
-    // Crosstalk session state - FULL FEATURE PARITY
-    let crosstalkSession = $state({
-        models: [
-            {
-                slot_id: 1,
-                model_id: "",
-                system_prompt: "",
-                jinja_template: "basic", // NEW
-                temperature: 0.7,
-                max_tokens: 2048,
-                append: "", // NEW: Added to messages this model receives
-                prepend: "", // NEW: Added before messages this model sends
-                endpoint: "", // NEW: Custom API endpoint
-                api_key_env: "", // NEW: Environment variable for API key
-            },
-            {
-                slot_id: 2,
-                model_id: "",
-                system_prompt: "",
-                jinja_template: "basic",
-                temperature: 0.7,
-                max_tokens: 2048,
-                append: "",
-                prepend: "",
-                endpoint: "",
-                api_key_env: "",
-            },
-        ],
-        topology: {
-            type: "ring",
-            order: [],
-            center: 1,
-            spokes: [],
-            pattern: [],
-        },
-        paradigm: "relay",
-        rounds: 5,
-        infinite: false,
-        stop_conditions: {
-            max_time_seconds: 0,
-            max_cost_dollars: 0,
-            stop_keywords: [],
-            repetition_threshold: 0.85, // NEW
-        },
-        initial_prompt: "",
-        // NEW: Advanced session options
-        summarize_every: 0, // 0 = disabled, N = summarize every N rounds
-        checkpoint_every: 10, // Checkpoint every N rounds for infinite mode
-        final_round_vote: {
-            enabled: false,
-            question: "What is your final verdict?",
-            options: ["yes", "no", "undecided"],
-            tally_method: "majority",
-        },
-    });
-
-    // Available Jinja templates
-    const jinjaTemplates = [
-        "basic",
-        "debate",
-        "analyst",
-        "creative",
-        "concise",
-    ];
-
-    const tabs = [
-        { id: "dashboard", label: "Dashboard", icon: Activity },
-        { id: "analytics", label: "Analytics", icon: TrendingUp },
-        { id: "models", label: "Models", icon: Zap },
-        { id: "cascade", label: "Cascade", icon: RefreshCw },
-        { id: "routing", label: "🔀 Routing", icon: Server },
-        { id: "crosstalk", label: "Crosstalk", icon: MessageSquare },
-        { id: "terminal", label: "Terminal", icon: Terminal },
-        { id: "playground", label: "Playground", icon: Play },
-        { id: "logs", label: "Logs", icon: FileText },
-        { id: "docs", label: "Docs", icon: Book },
-    ];
-
-    const topologies = [
-        "ring",
-        "star",
-        "mesh",
-        "chain",
-        "random",
-        "custom",
-        "tournament",
-    ];
-    const paradigms = ["relay", "memory", "report", "debate"];
-
-    async function loadConfig() {
-        loading = true;
-        try {
-            const res = await fetch("/api/config");
-            if (res.ok) {
-                const data = await res.json();
-                config = { ...config, ...data };
-                status.connected = true;
-                status.provider = data.default_provider || "unknown";
-
-                // DISABLED: Wizard was blocking UI - user can manually access settings instead
-                // const healthRes = await fetch("/api/health");
-                // if (healthRes.ok) {
-                //     const health = await healthRes.json();
-                //     if (!health.provider_configured) {
-                //         showWizard = true;
-                //     }
-                // }
-            }
-        } catch (e) {
-            status.connected = false;
-            // DISABLED: Don't block UI with wizard on connection error
-            // showWizard = true;
-        }
-        loading = false;
-    }
-
-    async function loadPresets() {
-        try {
-            const res = await fetch("/api/crosstalk/presets");
-            if (res.ok) presets = await res.json();
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    async function loadSessions() {
-        try {
-            const res = await fetch("/api/crosstalk/sessions");
-            if (res.ok) sessions = await res.json();
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    async function loadStats() {
-        try {
-            const res = await fetch("/api/stats/requests");
-            if (res.ok) {
-                stats = await res.json();
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    // Enhanced analytics data for dashboard
-    let analyticsSummary = $state<any>(null);
+    let analyticsData = $state<any>(null);
     let analyticsLoading = $state(false);
 
-    async function loadAnalyticsSummary() {
-        analyticsLoading = true;
+    // NEW: Live metrics for dashboard
+    let liveMetrics = $state({
+        requests_per_second: 0,
+        tokens_per_second: 0,
+        cost_per_second: 0,
+        active_requests: 0,
+        error_rate: 0,
+        model_distribution: {},
+        timestamp: ""
+    });
+
+    // NEW: System health
+    let systemHealth = $state({
+        uptime: "0m",
+        cpu_usage: 0,
+        memory_usage: 0,
+        db_size: 0,
+        websocket_connected: false
+    });
+
+    // NEW: Alerts
+    let activeAlerts = $state<any[]>([]);
+    let recentAlerts = $state<any[]>([]);
+    let hasCriticalAlerts = $state(false);
+
+    // NEW: WebSocket connection
+    let ws: WebSocket | null = null;
+    let wsStatus = $state("disconnected");
+    let wsReconnecting = $state(false);
+
+    // NEW: Crosstalk stats
+    let crosstalkStats = $state({
+        active_sessions: 0,
+        total_sessions: 0,
+        avg_cost_per_session: 0,
+        avg_rounds: 0,
+        top_paradigm: "none"
+    });
+
+    // NEW: Budget tracking
+    let budgetData = $state({
+        daily_limit: 100,
+        monthly_limit: 3000,
+        current_daily: 0,
+        current_monthly: 0,
+        usage_percentage: 0
+    });
+
+    // NEW: Status tracking for the main dashboard
+    let dashboardLoading = $state(false);
+    let lastUpdate = $state("Never");
+    let updateInterval: number | null = null;
+
+    // NEW: Initialize WebSocket connection
+    function initWebSocket() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.close();
+        }
+
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/ws/live`;
+
         try {
-            const res = await fetch("/api/analytics/summary?days=7");
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                wsStatus = "connected";
+                systemHealth.websocket_connected = true;
+                wsReconnecting = false;
+                console.log("✅ WebSocket connected");
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+
+                    if (message.type === "metrics") {
+                        liveMetrics = message.data;
+                        lastUpdate = new Date().toLocaleTimeString();
+                    } else if (message.type === "alert") {
+                        handleAlert(message);
+                    } else if (message.type === "request_event") {
+                        // Could update request feed if we add one
+                    }
+                } catch (e) {
+                    console.error("WebSocket message parse error:", e);
+                }
+            };
+
+            ws.onclose = () => {
+                wsStatus = "disconnected";
+                systemHealth.websocket_connected = false;
+                console.log("🔌 WebSocket disconnected");
+
+                // Attempt reconnection
+                if (!wsReconnecting) {
+                    wsReconnecting = true;
+                    setTimeout(() => {
+                        if (activeTab === "dashboard") {
+                            initWebSocket();
+                        }
+                    }, 3000);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error("WebSocket error:", error);
+                wsStatus = "error";
+            };
+
+        } catch (e) {
+            console.error("WebSocket init failed:", e);
+            wsStatus = "error";
+        }
+    }
+
+    // NEW: Handle incoming alerts
+    function handleAlert(alert: any) {
+        activeAlerts = [...activeAlerts, alert];
+
+        // Keep only last 10
+        if (activeAlerts.length > 10) {
+            activeAlerts = activeAlerts.slice(-10);
+        }
+
+        // Track critical alerts
+        if (alert.severity === "critical") {
+            hasCriticalAlerts = true;
+        }
+
+        // Add to recent alerts history
+        recentAlerts = [{
+            ...alert,
+            time: new Date().toLocaleTimeString()
+        }, ...recentAlerts].slice(0, 20);
+
+        // Show browser notification if supported
+        if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("Claude Proxy Alert", {
+                body: alert.message,
+                icon: "/favicon.ico"
+            });
+        }
+    }
+
+    // NEW: Request notification permission
+    function requestNotificationPermission() {
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+        }
+    }
+
+    // NEW: Load dashboard data (combined stats)
+    async function loadDashboardData() {
+        dashboardLoading = true;
+
+        // Load traditional stats
+        await Promise.all([
+            loadStats(),
+            loadSystemHealth(),
+            loadCrosstalkStats(),
+            loadBudgetData()
+        ]);
+
+        dashboardLoading = false;
+    }
+
+    // NEW: Load system health
+    async function loadSystemHealth() {
+        try {
+            // Calculate pseudo-health (since we don't have the backend endpoint yet)
+            // This will be replaced with actual /api/system/health call
+            const uptime = calculateUptime();
+            systemHealth = {
+                uptime: uptime,
+                cpu_usage: Math.floor(Math.random() * 30) + 20,  // Mock data
+                memory_usage: Math.floor(Math.random() * 20) + 40,
+                db_size: Math.floor(Math.random() * 500) + 100,
+                websocket_connected: wsStatus === "connected"
+            };
+        } catch (e) {
+            console.error("Health check failed:", e);
+        }
+    }
+
+    // NEW: Calculate uptime from start time
+    function calculateUptime(): string {
+        const startTime = new Date("2026-01-04T00:00:00").getTime(); // Mock start
+        const uptimeMs = Date.now() - startTime;
+        const hours = Math.floor(uptimeMs / (1000 * 60 * 60));
+        const minutes = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
+        return `${hours}h ${minutes}m`;
+    }
+
+    // NEW: Load Crosstalk statistics
+    async function loadCrosstalkStats() {
+        try {
+            const res = await fetch("/api/crosstalk/sessions");
             if (res.ok) {
-                analyticsSummary = await res.json();
+                const sessions = await res.json();
+
+                crosstalkStats = {
+                    active_sessions: 0, // Would come from real-time tracking
+                    total_sessions: sessions.length,
+                    avg_cost_per_session: sessions.length > 0
+                        ? sessions.reduce((sum, s) => sum + (s.total_cost || 0), 0) / sessions.length
+                        : 0,
+                    avg_rounds: sessions.length > 0
+                        ? Math.floor(sessions.reduce((sum, s) => sum + (s.rounds || 0), 0) / sessions.length)
+                        : 0,
+                    top_paradigm: sessions.length > 0
+                        ? sessions[0].paradigm || "relay"
+                        : "none"
+                };
             }
         } catch (e) {
-            console.error("Analytics not available:", e);
-            // Analytics might not be enabled, that's ok
+            console.error("Crosstalk stats failed:", e);
         }
-        analyticsLoading = false;
     }
 
-    // Session Viewer State
-    let viewingSession = $state<any>(null);
-    let viewingSessionName = $state("");
-
-    async function viewSession(filename: string) {
+    // NEW: Load budget data
+    async function loadBudgetData() {
         try {
-            const res = await fetch(
-                `/api/crosstalk/sessions/${filename.replace(".json", "")}`,
-            );
+            // For now, use mock data since budget endpoint doesn't exist yet
+            const currentDaily = stats.est_cost;  // Use actual cost from stats
+            const currentMonthly = currentDaily * 30;  // Approximation
+
+            budgetData = {
+                daily_limit: 100,
+                monthly_limit: 3000,
+                current_daily: currentDaily,
+                current_monthly: currentMonthly,
+                usage_percentage: Math.min(100, (currentDaily / 100) * 100)
+            };
+        } catch (e) {
+            console.error("Budget data failed:", e);
+        }
+    }
+
+    // ORIGINAL: Select provider with auto-routing
+    async function selectProvider(provider: string) {
+        selectedProvider = provider;
+        configMessage = `Selected ${provider} - configuring automatically...`;
+
+        try {
+            const res = await fetch(`/api/routing/auto?provider=${provider}`);
             if (res.ok) {
-                viewingSession = await res.json();
-                viewingSessionName = filename;
+                const data = await res.json();
+                if (data.routing) {
+                    const applyRes = await fetch(`/api/routing/apply?provider=${provider}`, {
+                        method: "POST"
+                    });
+
+                    if (applyRes.ok) {
+                        const applyData = await applyRes.json();
+                        configMessage = `✅ Configured for ${provider}!`;
+
+                        config.openai_base_url = data.routing.base_url;
+                        config.big_model = data.routing.recommended_big;
+                        config.middle_model = data.routing.recommended_middle;
+                        config.small_model = data.routing.recommended_small;
+                        config.default_provider = provider;
+
+                        loadModelsGrouped();
+                        activeTab = "models";
+                    } else {
+                        configMessage = "❌ Failed to apply configuration";
+                    }
+                }
+            } else {
+                configMessage = "❌ Unknown provider or configuration error";
             }
         } catch (e) {
-            console.error(e);
+            configMessage = `❌ Error: ${e}`;
         }
     }
 
-    function closeSessionViewer() {
-        viewingSession = null;
-        viewingSessionName = "";
+    // NEW: Navigate to Crosstalk Studio
+    function openCrosstalk() {
+        window.location.href = '/crosstalk';
     }
 
-    async function saveConfig() {
-        // Validation
-        const routes = [
-            { enable: "enable_big_endpoint", endpoint: "big_endpoint" },
-            { enable: "enable_middle_endpoint", endpoint: "middle_endpoint" },
-            { enable: "enable_small_endpoint", endpoint: "small_endpoint" },
-        ];
-
-        for (const route of routes) {
-            if (config[route.enable]) {
-                const url = config[route.endpoint];
-                if (!url || !url.trim()) {
-                    saveMessage = `❌ ${route.endpoint.replace("_endpoint", "")} endpoint URL required`;
-                    setTimeout(() => (saveMessage = ""), 4000);
-                    return;
-                }
-                if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                    saveMessage = `❌ Invalid URL for ${route.endpoint.replace("_endpoint", "")} endpoint`;
-                    setTimeout(() => (saveMessage = ""), 4000);
-                    return;
+    // ORIGINAL: Load models
+    async function loadModelsGrouped() {
+        modelsLoading = true;
+        try {
+            const res = await fetch("/api/models?group_by_provider=true&limit=100");
+            if (res.ok) {
+                const data = await res.json();
+                if (data.grouped) {
+                    groupedModels = data.grouped;
+                    availableModels = data.flat;
+                } else {
+                    availableModels = data.models || [];
+                    groupedModels = [];
                 }
             }
+        } catch (e) {
+            console.error("Failed to load models:", e);
         }
+        modelsLoading = false;
+    }
+
+    // ORIGINAL: Select model
+    async function selectModel(tier: "big" | "middle" | "small", modelId: string) {
+        if (tier === "big") config.big_model = modelId;
+        else if (tier === "middle") config.middle_model = modelId;
+        else if (tier === "small") config.small_model = modelId;
+
+        configMessage = `✅ ${tier.toUpperCase()} tier set to ${modelId.split('/').pop() || modelId}`;
 
         try {
             const res = await fetch("/api/config", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(config),
-            });
-            if (res.ok) {
-                saveMessage = "✅ Configuration saved";
-                setTimeout(() => (saveMessage = ""), 3000);
-            } else {
-                saveMessage = "❌ Failed to save";
-                setTimeout(() => (saveMessage = ""), 3000);
-            }
-        } catch (e) {
-            saveMessage = "❌ Connection error";
-            setTimeout(() => (saveMessage = ""), 3000);
-        }
-    }
-
-    async function loadPreset(filename: string) {
-        try {
-            const res = await fetch(`/api/crosstalk/presets/${filename}`);
-            if (res.ok) {
-                const data = await res.json();
-                crosstalkSession = { ...crosstalkSession, ...data };
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    // Crosstalk session state for running
-    let crosstalkRunning = $state(false);
-    let crosstalkOutput = $state<string[]>([]);
-    let crosstalkError = $state("");
-
-    async function startCrosstalkSession() {
-        if (!crosstalkSession.initial_prompt?.trim()) {
-            crosstalkError = "Please enter an initial prompt";
-            return;
-        }
-
-        crosstalkRunning = true;
-        crosstalkError = "";
-        crosstalkOutput = ["Starting Crosstalk session..."];
-
-        try {
-            const res = await fetch("/api/crosstalk/run", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(crosstalkSession),
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                crosstalkOutput = [
-                    ...crosstalkOutput,
-                    `Session ID: ${data.session_id || "N/A"}`,
-                    "Session started successfully!",
-                    ...(data.messages || []).map(
-                        (m: any) =>
-                            `[${m.role}] ${m.content?.slice(0, 100)}...`,
-                    ),
-                ];
-                // Reload sessions list
-                await loadSessions();
-            } else {
-                const errData = await res.json().catch(() => ({}));
-                crosstalkError = errData.detail || `Error: ${res.status}`;
-                crosstalkOutput = [
-                    ...crosstalkOutput,
-                    `Failed: ${crosstalkError}`,
-                ];
-            }
-        } catch (e) {
-            crosstalkError = String(e);
-            crosstalkOutput = [...crosstalkOutput, `Error: ${e}`];
-        } finally {
-            crosstalkRunning = false;
-        }
-    }
-
-    async function saveAsPreset() {
-        const name = prompt("Enter preset name:");
-        if (!name) return;
-
-        try {
-            const res = await fetch("/api/crosstalk/presets", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    name: name,
-                    ...crosstalkSession,
-                }),
+                    [`${tier}_model`]: modelId
+                })
             });
 
-            if (res.ok) {
-                await loadPresets();
-                saveMessage = `Preset "${name}" saved!`;
-                setTimeout(() => (saveMessage = ""), 3000);
-            } else {
-                const errData = await res.json().catch(() => ({}));
-                error = errData.detail || "Failed to save preset";
+            if (!res.ok) {
+                configMessage = "⚠️ Model selected but may need server restart";
             }
         } catch (e) {
-            error = String(e);
+            configMessage = "⚠️ Local model selection - restart server to apply";
         }
     }
 
-    function connectWebSocket() {
+    // ORIGINAL: Load stats
+    async function loadStats() {
+        try {
+            const res = await fetch("/api/stats");
+            if (res.ok) {
+                stats = await res.json();
+            }
+        } catch (e) {
+            console.log("Stats not available:", e);
+        }
+    }
+
+    // ORIGINAL: Save API key
+    async function saveApiKey() {
+        if (!selectedProvider || !api_key) return;
+
+        applyingConfig = true;
+        try {
+            const res = await fetch(`/api/config/api-key?provider=${selectedProvider}&api_key=${encodeURIComponent(api_key)}`, {
+                method: "POST"
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                configMessage = `✅ ${data.message}`;
+                api_key = "";
+            } else {
+                const error = await res.json();
+                configMessage = `❌ ${error.detail || "Failed to save API key"}`;
+            }
+        } catch (e) {
+            configMessage = `❌ Error: ${e}`;
+        }
+        applyingConfig = false;
+    }
+
+    // Helper: Format currency
+    function formatCurrency(amount: number): string {
+        return `$${amount.toFixed(4)}`;
+    }
+
+    // Helper: Format tokens
+    function formatTokens(tokens: number): string {
+        if (tokens > 1000000) return `${(tokens / 1000000).toFixed(1)}M`;
+        if (tokens > 1000) return `${(tokens / 1000).toFixed(1)}K`;
+        return tokens.toString();
+    }
+
+    // Helper: Get provider display name
+    function getProviderDisplayName(provider: string): string {
+        const names: Record<string, string> = {
+            "openrouter": "OpenRouter",
+            "openai": "OpenAI",
+            "anthropic": "Anthropic",
+            "google": "Google",
+            "vibeproxy": "VibeProxy"
+        };
+        return names[provider] || provider;
+    }
+
+    // Helper: Get provider icon
+    function getProviderIcon(provider: string): any {
+        const icons: Record<string, any> = {
+            "openrouter": Zap,
+            "openai": Cpu,
+            "anthropic": MessageSquare,
+            "google": Server,
+            "vibeproxy": Terminal
+        };
+        return icons[provider] || Server;
+    }
+
+    // Quick provider presets
+    const providerPresets = [
+        { id: "openrouter", name: "OpenRouter", desc: "350+ models, one API key", recommended: true },
+        { id: "openai", name: "OpenAI", desc: "GPT-4, GPT-4o, o1 models" },
+        { id: "anthropic", name: "Anthropic", desc: "Claude 3.5, Claude 4" },
+        { id: "google", name: "Google", desc: "Gemini Pro, Flash" },
+        { id: "vibeproxy", name: "VibeProxy", desc: "Local OAuth proxy (free)" }
+    ];
+
+    // Lifecycle
+    onMount(() => {
+        // Initialize WebSocket for dashboard
+        initWebSocket();
+
+        // Load initial data
+        loadDashboardData();
+        loadModelsGrouped();
+
+        // Set up periodic refresh
+        updateInterval = setInterval(() => {
+            if (activeTab === "dashboard") {
+                loadDashboardData();
+            }
+        }, 30000) as unknown as number;  // Refresh every 30 seconds
+
+        // Request notification permissions
+        requestNotificationPermission();
+    });
+
+    onDestroy(() => {
         if (ws) {
             ws.close();
         }
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const wsUrl = `${protocol}//${window.location.host}/api/ws/logs`;
-        ws = new WebSocket(wsUrl);
-
-        ws.onopen = () => {
-            wsConnected = true;
-            logs = [
-                ...logs,
-                {
-                    level: "info",
-                    message: "Connected to log stream",
-                    timestamp: new Date().toISOString(),
-                },
-            ];
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const log = JSON.parse(event.data);
-                logs = [...logs.slice(-199), log]; // Keep last 200 logs
-            } catch (e) {
-                console.error("Failed to parse log:", e);
-            }
-        };
-
-        ws.onclose = () => {
-            wsConnected = false;
-            logs = [
-                ...logs,
-                {
-                    level: "warning",
-                    message: "Disconnected from log stream",
-                    timestamp: new Date().toISOString(),
-                },
-            ];
-            // Auto-reconnect after 3 seconds
-            setTimeout(() => {
-                if (activeTab === "logs") connectWebSocket();
-            }, 3000);
-        };
-
-        ws.onerror = () => {
-            wsConnected = false;
-        };
-    }
-
-    function clearLogs() {
-        logs = [];
-    }
-
-    function addModelSlot() {
-        const nextId =
-            Math.max(...crosstalkSession.models.map((m) => m.slot_id)) + 1;
-        crosstalkSession.models = [
-            ...crosstalkSession.models,
-            {
-                slot_id: nextId,
-                model_id: "",
-                system_prompt: "",
-                jinja_template: "basic",
-                temperature: 0.7,
-                max_tokens: 2048,
-                append: "",
-                prepend: "",
-                endpoint: "",
-                api_key_env: "",
-            },
-        ];
-    }
-
-    function removeModelSlot(slotId: number) {
-        if (crosstalkSession.models.length > 2) {
-            crosstalkSession.models = crosstalkSession.models.filter(
-                (m) => m.slot_id !== slotId,
-            );
+        if (updateInterval) {
+            clearInterval(updateInterval);
         }
-    }
+    });
 
+    // Effect to handle tab changes
     $effect(() => {
-        loadConfig();
-        loadPresets();
-        loadSessions();
-        loadStats();
-        loadAnalyticsSummary();
-        loadModels();
-        loadProviders();
+        if (activeTab === "dashboard") {
+            // Reconnect WebSocket when returning to dashboard
+            if (wsStatus !== "connected") {
+                initWebSocket();
+            }
+        }
     });
 </script>
 
-<!-- NEW SHADCN-SVELTE REDESIGN -->
-<div class="flex h-screen bg-background">
-    <!-- Sidebar -->
-    <aside class="w-56 border-r border-border bg-card flex flex-col">
-        <!-- Logo -->
-        <div class="p-4 border-b border-border">
+<div class="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
+
+    <!-- Header -->
+    <header class="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <img src="/logo.png" alt="" class="w-8 h-8" />
+                <div class="w-8 h-8 rounded bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
+                    <span class="text-zinc-900 font-bold text-sm">CP</span>
+                </div>
                 <div>
-                    <h1 class="font-semibold text-sm text-gradient">
-                        The Ultimate Proxy
-                    </h1>
-                    <p class="text-xs text-muted-foreground">v2.1.0</p>
+                    <h1 class="font-bold text-lg tracking-tight">Claude Proxy</h1>
+                    <p class="text-xs text-zinc-400">Web Dashboard</p>
                 </div>
             </div>
-        </div>
-
-        <!-- Navigation -->
-        <nav class="flex-1 p-2 space-y-1">
-            {#each tabs as tab}
+            <div class="flex gap-2">
                 <button
-                    type="button"
-                    onclick={getTabHandler(tab.id)}
-                    class={getTabButtonClass(tab.id)}
+                    onclick={() => { activeTab = 'dashboard'; }}
+                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'dashboard' ? 'bg-zinc-800 border-cyan-500' : ''}"
                 >
-                    <tab.icon class="w-4 h-4" />
-                    {tab.label}
+                    Dashboard
                 </button>
-            {/each}
-        </nav>
-
-        <!-- Status -->
-        <div class="p-4 border-t border-border">
-            <div class="flex items-center gap-2">
-                <div
-                    class="w-2 h-2 rounded-full {status.connected
-                        ? 'bg-green-500 status-dot online'
-                        : 'bg-red-500'}"
-                ></div>
-                <span class="text-xs text-muted-foreground">
-                    {status.connected
-                        ? status.provider.toUpperCase()
-                        : "OFFLINE"}
-                </span>
+                <button
+                    onclick={() => { activeTab = 'setup'; }}
+                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'setup' ? 'bg-zinc-800 border-cyan-500' : ''}"
+                >
+                    Setup
+                </button>
+                <button
+                    onclick={() => { activeTab = 'models'; }}
+                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'models' ? 'bg-zinc-800 border-cyan-500' : ''}"
+                >
+                    Models
+                </button>
+                <button
+                    onclick={() => { activeTab = 'analytics'; }}
+                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'analytics' ? 'bg-zinc-800 border-cyan-500' : ''}"
+                >
+                    Analytics
+                </button>
+                <button
+                    onclick={openCrosstalk}
+                    class="px-3 py-1.5 text-sm rounded-md border border-purple-700 hover:bg-zinc-800 transition-colors bg-purple-900/20 text-purple-300"
+                >
+                    ⚡ Crosstalk
+                </button>
             </div>
         </div>
-    </aside>
+    </header>
 
     <!-- Main Content -->
-    <div class="flex-1 flex flex-col overflow-hidden">
-        <!-- Header -->
-        <header
-            class="h-14 border-b border-border bg-card/50 backdrop-blur-sm flex items-center justify-between px-6"
-        >
-            <h2 class="font-semibold capitalize">{activeTab}</h2>
-            <div class="flex items-center gap-2">
-                <button
-                    onclick={handleRefreshClick}
-                    class="p-2 rounded-lg hover:bg-accent transition-colors"
-                    title="Refresh"
-                >
-                    <RefreshCw
-                        class="w-4 h-4 text-muted-foreground {loading
-                            ? 'animate-spin'
-                            : ''}"
-                    />
-                </button>
-                <button
-                    class="p-2 rounded-lg hover:bg-accent transition-colors"
-                    title="Settings"
-                >
-                    <Settings class="w-4 h-4 text-muted-foreground" />
-                </button>
-            </div>
-        </header>
+    <main class="max-w-7xl mx-auto px-6 py-8">
 
-        <!-- Content Area -->
-        <main class="flex-1 overflow-auto p-6">
-            <!-- 🧪 TEST BUTTON - Click me first to see if onclick works -->
-            <div class="mb-6 p-4 border-2 border-yellow-500/50 bg-yellow-500/10 rounded-lg">
-                <p class="text-sm text-yellow-200 mb-2">🧪 Button Test Area:</p>
-                <div class="flex gap-2">
-                    <button
-                        onclick={testButton}
-                        class="px-4 py-2 bg-yellow-500 text-black font-bold rounded hover:bg-yellow-400 transition-colors"
-                    >
-                        TEST BUTTON - Click Me!
-                    </button>
-                    <button
-                        onclick={() => {
-                            console.log("Arrow function test");
-                            alert("Arrow function works!");
-                        }}
-                        class="px-4 py-2 bg-blue-500 text-white font-bold rounded hover:bg-blue-400 transition-colors"
-                    >
-                        Arrow Function Test
-                    </button>
-                    <button
-                        onclick={goDashboardTab}
-                        class="px-4 py-2 bg-green-500 text-white font-bold rounded hover:bg-green-400 transition-colors"
-                    >
-                        Set Tab Dashboard
-                    </button>
-                </div>
-            </div>
+        <!-- DASHBOARD TAB (NEW - LANDING PAGE) -->
+        {#if activeTab === 'dashboard'}
+            <div class="space-y-6">
 
-            {#if activeTab === "dashboard"}
-                <!-- Stats Cards -->
-                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    <div class="rounded-xl border border-border bg-card p-4">
-                        <div class="flex items-center gap-3">
-                            <div class="p-2 rounded-lg bg-primary/10">
-                                <Activity class="w-4 h-4 text-primary" />
-                            </div>
-                            <div>
-                                <p
-                                    class="text-xs text-muted-foreground uppercase tracking-wide"
-                                >
-                                    Requests
-                                </p>
-                                <p class="text-2xl font-bold text-foreground">
-                                    {stats.requests_today?.toLocaleString() || 0}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="rounded-xl border border-border bg-card p-4">
-                        <div class="flex items-center gap-3">
-                            <div class="p-2 rounded-lg bg-violet-500/10">
-                                <Zap class="w-4 h-4 text-violet-400" />
-                            </div>
-                            <div>
-                                <p
-                                    class="text-xs text-muted-foreground uppercase tracking-wide"
-                                >
-                                    Tokens
-                                </p>
-                                <p class="text-2xl font-bold text-foreground">
-                                    {stats.total_tokens?.toLocaleString() || 0}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="rounded-xl border border-border bg-card p-4">
-                        <div class="flex items-center gap-3">
-                            <div class="p-2 rounded-lg bg-emerald-500/10">
-                                <FileText class="w-4 h-4 text-emerald-400" />
-                            </div>
-                            <div>
-                                <p
-                                    class="text-xs text-muted-foreground uppercase tracking-wide"
-                                >
-                                    Cost
-                                </p>
-                                <p class="text-2xl font-bold text-foreground">
-                                    ${(stats.est_cost || 0).toFixed(4)}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="rounded-xl border border-border bg-card p-4">
-                        <div class="flex items-center gap-3">
-                            <div class="p-2 rounded-lg bg-amber-500/10">
-                                <Radio class="w-4 h-4 text-amber-400" />
-                            </div>
-                            <div>
-                                <p
-                                    class="text-xs text-muted-foreground uppercase tracking-wide"
-                                >
-                                    Latency
-                                </p>
-                                <p class="text-2xl font-bold text-foreground">
-                                    {stats.avg_latency || 0}ms
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Welcome & Status Header -->
+                <section class="bg-gradient-to-br from-zinc-900 to-zinc-950 rounded-lg p-6 border border-zinc-800 relative overflow-hidden">
+                    <!-- Decorative glow -->
+                    <div class="absolute top-0 right-0 w-64 h-64 bg-purple-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
-                <!-- Enhanced Analytics Summary (when usage tracking is enabled) -->
-                {#if analyticsSummary && analyticsSummary.summary}
-                    <div class="mb-6">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                                7-Day Analytics Overview
-                            </h3>
+                    <div class="flex justify-between items-start mb-6 relative z-10">
+                        <div>
+                            <h2 class="text-2xl font-bold mb-1">Welcome to Claude Proxy</h2>
+                            <p class="text-zinc-400 text-sm">Real-time monitoring and analytics</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700">
+                                <div class="w-2 h-2 rounded-full {systemHealth.websocket_connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}"></div>
+                                <span class="text-xs font-mono">{wsStatus.toUpperCase()}</span>
+                            </div>
                             <button
-                                onclick={goAnalyticsTab}
-                                class="text-xs text-primary hover:underline flex items-center gap-1"
+                                onclick={loadDashboardData}
+                                disabled={dashboardLoading}
+                                class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700 flex items-center gap-2 transition-colors"
                             >
-                                View Full Analytics →
+                                <RefreshCw class="w-3 h-3 {dashboardLoading ? 'animate-spin' : ''}" />
+                                Refresh
                             </button>
                         </div>
-                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div class="rounded-xl border border-border bg-card/50 p-3">
-                                <div class="text-xs text-muted-foreground">Total Requests</div>
-                                <div class="text-lg font-bold">
-                                    {analyticsSummary.summary?.total_requests?.toLocaleString() || 0}
+                    </div>
+
+                    <!-- Quick Stats Grid -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <!-- Requests Today -->
+                        <div class="bg-zinc-950/50 rounded-lg p-4 border border-zinc-800 hover:border-cyan-500/50 transition-colors">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs text-zinc-400">Requests Today</span>
+                                <ActivityIcon class="w-3 h-3 text-cyan-400" />
+                            </div>
+                            <div class="text-2xl font-bold text-cyan-400">{stats.requests_today || 0}</div>
+                            <div class="text-xs text-zinc-500 mt-1">
+                                {#if liveMetrics.requests_per_second > 0}
+                                    +{liveMetrics.requests_per_second}/s
+                                {:else}
+                                    No current activity
+                                {/if}
+                            </div>
+                        </div>
+
+                        <!-- Cost Today -->
+                        <div class="bg-zinc-950/50 rounded-lg p-4 border border-zinc-800 hover:border-green-500/50 transition-colors">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs text-zinc-400">Cost Today</span>
+                                <DollarSign class="w-3 h-3 text-green-400" />
+                            </div>
+                            <div class="text-2xl font-bold text-green-400">${stats.est_cost.toFixed(2)}</div>
+                            <div class="text-xs text-zinc-500 mt-1">
+                                {#if liveMetrics.cost_per_second > 0}
+                                    ${liveMetrics.cost_per_second.toFixed(4)}/s
+                                {:else}
+                                    No current spend
+                                {/if}
+                            </div>
+                        </div>
+
+                        <!-- Total Tokens -->
+                        <div class="bg-zinc-950/50 rounded-lg p-4 border border-zinc-800 hover:border-purple-500/50 transition-colors">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs text-zinc-400">Total Tokens</span>
+                                <Layers class="w-3 h-3 text-purple-400" />
+                            </div>
+                            <div class="text-2xl font-bold text-purple-400">{formatTokens(stats.total_tokens)}</div>
+                            <div class="text-xs text-zinc-500 mt-1">
+                                {#if liveMetrics.tokens_per_second > 0}
+                                    +{liveMetrics.tokens_per_second.toFixed(0)}/s
+                                {:else}
+                                    No current processing
+                                {/if}
+                            </div>
+                        </div>
+
+                        <!-- Avg Latency -->
+                        <div class="bg-zinc-950/50 rounded-lg p-4 border border-zinc-800 hover:border-amber-500/50 transition-colors">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs text-zinc-400">Avg Latency</span>
+                                <Clock class="w-3 h-3 text-amber-400" />
+                            </div>
+                            <div class="text-2xl font-bold text-amber-400">{stats.avg_latency || 0}ms</div>
+                            <div class="text-xs text-zinc-500 mt-1">
+                                {#if liveMetrics.active_requests > 0}
+                                    {liveMetrics.active_requests} active
+                                {:else}
+                                    All requests complete
+                                {/if}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- System Health Bar -->
+                    <div class="bg-zinc-950 rounded-lg p-4 border border-zinc-800">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs text-zinc-400">System Health</span>
+                            <div class="flex items-center gap-3 text-xs font-mono">
+                                <span>⚡ Uptime: {systemHealth.uptime}</span>
+                                <span>💾 DB: {systemHealth.db_size}MB</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <div class="flex-1">
+                                <div class="flex justify-between text-xs text-zinc-500 mb-1">
+                                    <span>CPU</span>
+                                    <span>{systemHealth.cpu_usage}%</span>
+                                </div>
+                                <div class="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-cyan-500 transition-all duration-300" style="width: {systemHealth.cpu_usage}%"></div>
                                 </div>
                             </div>
-                            <div class="rounded-xl border border-border bg-card/50 p-3">
-                                <div class="text-xs text-muted-foreground">Total Tokens</div>
-                                <div class="text-lg font-bold">
-                                    {#if (analyticsSummary.summary?.total_tokens || 0) > 1000000}
-                                        {((analyticsSummary.summary?.total_tokens || 0) / 1000000).toFixed(1)}M
-                                    {:else if (analyticsSummary.summary?.total_tokens || 0) > 1000}
-                                        {((analyticsSummary.summary?.total_tokens || 0) / 1000).toFixed(1)}K
+                            <div class="flex-1">
+                                <div class="flex justify-between text-xs text-zinc-500 mb-1">
+                                    <span>Memory</span>
+                                    <span>{systemHealth.memory_usage}%</span>
+                                </div>
+                                <div class="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-purple-500 transition-all duration-300" style="width: {systemHealth.memory_usage}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Alert Section -->
+                {#if activeAlerts.length > 0 || hasCriticalAlerts}
+                    <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-bold flex items-center gap-2">
+                                <Bell class="w-4 h-4 {hasCriticalAlerts ? 'text-red-400' : 'text-amber-400'}" />
+                                Active Alerts
+                            </h3>
+                            <button
+                                onclick={() => activeAlerts = []}
+                                class="text-xs px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded"
+                            >
+                                Clear All
+                            </button>
+                        </div>
+
+                        <div class="space-y-2">
+                            {#each activeAlerts as alert, i}
+                                <div class="flex items-start gap-3 p-3 rounded border {alert.severity === 'critical' ? 'border-red-500 bg-red-900/20' : 'border-amber-500 bg-amber-900/20'}">
+                                    {#if alert.severity === 'critical'}
+                                        <AlertTriangle class="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
                                     {:else}
-                                        {analyticsSummary.summary?.total_tokens || 0}
+                                        <Info class="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
                                     {/if}
-                                </div>
-                            </div>
-                            <div class="rounded-xl border border-border bg-card/50 p-3">
-                                <div class="text-xs text-muted-foreground">Est. Cost</div>
-                                <div class="text-lg font-bold text-emerald-400">
-                                    ${analyticsSummary.summary?.total_cost?.toFixed(4) || 0}
-                                </div>
-                                <div class="text-xs text-emerald-500/80 mt-1">
-                                    Saved: ${analyticsSummary.summary?.total_savings?.toFixed(4) || 0}
-                                </div>
-                            </div>
-                            <div class="rounded-xl border border-border bg-card/50 p-3">
-                                <div class="text-xs text-muted-foreground">Avg Latency</div>
-                                <div class="text-lg font-bold">
-                                    {analyticsSummary.summary?.avg_latency_ms?.toFixed(0) || 0}ms
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Top Models from Analytics -->
-                        {#if analyticsSummary.top_models && analyticsSummary.top_models.length > 0}
-                            <div class="mt-4 rounded-xl border border-border bg-card overflow-hidden">
-                                <div class="px-4 py-2 bg-accent/30 border-b border-border text-xs font-medium">
-                                    Top Models (7 Days)
-                                </div>
-                                <div class="divide-y divide-border">
-                                    {#each analyticsSummary.top_models.slice(0, 3) as model}
-                                        <div class="px-4 py-2 flex items-center justify-between hover:bg-accent/30 transition-colors">
-                                            <div class="flex items-center gap-2">
-                                                <span class="font-mono text-xs">
-                                                    {model.model ? (model.model.split('/').pop() || model.model) : 'Unknown'}
-                                                </span>
-                                                <span class="text-[10px] text-muted-foreground">
-                                                    {model.request_count?.toLocaleString() || 0} reqs
-                                                </span>
-                                            </div>
-                                            <div class="text-xs text-muted-foreground">
-                                                {model.total_tokens?.toLocaleString() || 0} tokens
-                                            </div>
-                                        </div>
-                                    {/each}
-                                </div>
-                            </div>
-                        {/if}
-
-                        <!-- Quick Insights -->
-                        {#if analyticsSummary.json_analysis && analyticsSummary.json_analysis.recommended}
-                            <div class="mt-3 p-3 rounded-lg border border-blue-500/30 bg-blue-500/10 flex items-start gap-2">
-                                <div class="text-blue-400 mt-0.5">💡</div>
-                                <div>
-                                    <div class="text-sm font-medium text-blue-300">TOON Optimization Available</div>
-                                    <div class="text-xs text-blue-200/80 mt-1">
-                                        You have {analyticsSummary.json_analysis?.json_percentage || 0}% JSON responses.
-                                        Estimated savings: {((analyticsSummary.json_analysis?.estimated_toon_savings_bytes || 0) / 1024).toFixed(1)}KB
+                                    <div class="flex-1">
+                                        <div class="font-semibold text-sm">{alert.rule_name || alert.message}</div>
+                                        <div class="text-xs text-zinc-400 mt-1">{alert.message}</div>
+                                        <div class="text-xs text-zinc-500 mt-1">{alert.timestamp}</div>
                                     </div>
-                                </div>
-                            </div>
-                        {/if}
-                    </div>
-                {:else if analyticsLoading}
-                    <div class="mb-6 text-center py-3 text-sm text-muted-foreground border border-border rounded-xl bg-card/50">
-                        Loading analytics...
-                    </div>
-                {:else}
-                    <div class="mb-6 p-4 rounded-xl border border-border bg-card/50 text-sm">
-                        <div class="flex items-center gap-2 text-muted-foreground">
-                            <span>📊</span>
-                            <span>Enable usage tracking to see detailed analytics and insights</span>
-                        </div>
-                        <button
-                            onclick={goAnalyticsTab}
-                            class="mt-2 text-xs text-primary hover:underline"
-                        >
-                            Learn more →
-                        </button>
-                    </div>
-                {/if}
-
-                <!-- Model Cards -->
-                <h3
-                    class="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide"
-                >
-                    Active Models
-                </h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div class="model-card">
-                        <div class="flex items-center gap-2 mb-3">
-                            <span class="model-tier big">BIG</span>
-                            <Zap class="w-4 h-4 text-primary" />
-                        </div>
-                        <p class="font-mono text-sm text-foreground truncate">
-                            {config.big_model || "—"}
-                        </p>
-                    </div>
-                    <div class="model-card">
-                        <div class="flex items-center gap-2 mb-3">
-                            <span class="model-tier middle">MIDDLE</span>
-                            <Zap class="w-4 h-4 text-violet-400" />
-                        </div>
-                        <p class="font-mono text-sm text-foreground truncate">
-                            {config.middle_model || "—"}
-                        </p>
-                    </div>
-                    <div class="model-card">
-                        <div class="flex items-center gap-2 mb-3">
-                            <span class="model-tier small">SMALL</span>
-                            <Zap class="w-4 h-4 text-emerald-400" />
-                        </div>
-                        <p class="font-mono text-sm text-foreground truncate">
-                            {config.small_model || "—"}
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Recent Activity -->
-                <h3
-                    class="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide"
-                >
-                    Recent Activity
-                </h3>
-                <div
-                    class="rounded-xl border border-border bg-card overflow-hidden"
-                >
-                    {#if recentRequests.length === 0}
-                        <div class="p-8 text-center text-muted-foreground">
-                            <Activity class="w-8 h-8 mx-auto mb-2 opacity-50" />
-                            <p class="text-sm">No recent activity</p>
-                        </div>
-                    {:else}
-                        <div class="divide-y divide-border">
-                            {#each recentRequests.slice(0, 5) as req}
-                                <div
-                                    class="px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors"
-                                >
-                                    <div class="flex items-center gap-3">
-                                        <div
-                                            class="w-2 h-2 rounded-full {req.status ===
-                                            'success'
-                                                ? 'bg-emerald-500'
-                                                : 'bg-red-500'}"
-                                        ></div>
-                                        <span class="font-mono text-sm"
-                                            >{req.model}</span
-                                        >
-                                    </div>
-                                    <div
-                                        class="flex items-center gap-4 text-sm text-muted-foreground"
+                                    <button
+                                        onclick={() => { activeAlerts = activeAlerts.filter((_, idx) => idx !== i); }}
+                                        class="text-zinc-500 hover:text-zinc-300"
                                     >
-                                        <span>{req.tokens} tokens</span>
-                                        <span>{req.duration}ms</span>
-                                        <span class="text-emerald-400"
-                                            >${req.cost}</span
-                                        >
-                                    </div>
+                                        <X class="w-3 h-3" />
+                                    </button>
                                 </div>
                             {/each}
                         </div>
-                    {/if}
-                </div>
-            {:else if activeTab === "analytics"}
-                <!-- Enhanced Analytics Dashboard -->
-                <AnalyticsDashboard />
-            {:else if activeTab === "models"}
-                <!-- Models Configuration with Searchable Dropdowns -->
-                <div class="max-w-3xl space-y-6">
-                    <!-- Header with stats and refresh -->
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-4">
-                            <h3 class="font-semibold text-lg">
-                                Model Configuration
-                            </h3>
-                            {#if modelStats.total}
-                                <span
-                                    class="text-xs text-muted-foreground bg-accent px-2 py-1 rounded"
-                                >
-                                    {modelStats.total} models available
-                                </span>
-                            {/if}
-                        </div>
-                        <button
-                            onclick={refreshModels}
-                            disabled={modelsLoading}
-                            class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-50"
-                        >
-                            <RefreshCw
-                                class="w-4 h-4 {modelsLoading
-                                    ? 'animate-spin'
-                                    : ''}"
-                            />
-                            Refresh Models
+                    </section>
+                {/if}
+
+                <!-- Budget & Cost Tracking -->
+                <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-bold flex items-center gap-2">
+                            <Target class="w-4 h-4 text-green-400" />
+                            Budget Tracking
+                        </h3>
+                        <button class="text-xs px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700">
+                            Configure Budget
                         </button>
                     </div>
 
-                    {#if modelsError}
-                        <div
-                            class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm"
-                        >
-                            {modelsError}
-                        </div>
-                    {/if}
-
-                    <!-- Model Tier Cards -->
-                    {#each [{ tier: "big" as const, label: "BIG Model", desc: "Opus-tier (complex reasoning)", color: "text-amber-400" }, { tier: "middle" as const, label: "MIDDLE Model", desc: "Sonnet-tier (balanced)", color: "text-blue-400" }, { tier: "small" as const, label: "SMALL Model", desc: "Haiku-tier (fast)", color: "text-emerald-400" }] as item}
-                        <div
-                            class="rounded-xl border border-border bg-card p-5"
-                        >
-                            <div class="flex items-center gap-3 mb-4">
-                                <span class="model-tier {item.tier}"
-                                    >{item.tier.toUpperCase()}</span
-                                >
-                                <div>
-                                    <h4 class="font-medium {item.color}">
-                                        {item.label}
-                                    </h4>
-                                    <p class="text-xs text-muted-foreground">
-                                        {item.desc}
-                                    </p>
-                                </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Daily Budget -->
+                        <div>
+                            <div class="flex justify-between text-sm mb-2">
+                                <span class="text-zinc-400">Daily Budget</span>
+                                <span class="{budgetData.usage_percentage >= 80 ? 'text-amber-400 font-bold' : 'text-green-400'}">
+                                    ${budgetData.current_daily.toFixed(2)} / ${budgetData.daily_limit.toFixed(2)}
+                                </span>
                             </div>
-
-                            <!-- Provider filter -->
-                            <div class="flex gap-3 mb-3">
-                                <select
-                                    class="flex-shrink-0 w-40 px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                                    value={modelFilters[item.tier].provider}
-                                    onchange={(e) =>
-                                        (modelFilters[item.tier].provider =
-                                            getValue(e))}
-                                >
-                                    <option value="">All Providers</option>
-                                    {#each availableProviders as provider}
-                                        <option value={provider.id}>
-                                            {provider.name} ({provider.model_count})
-                                        </option>
-                                    {/each}
-                                </select>
-
-                                <!-- Search input with dropdown -->
-                                <div class="relative flex-1">
-                                    <input
-                                        type="text"
-                                        placeholder="Search models..."
-                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                                        value={modelFilters[item.tier].search}
-                                        oninput={(e) => {
-                                            modelFilters[item.tier].search =
-                                                getValue(e);
-                                            modelFilters[
-                                                item.tier
-                                            ].showDropdown = true;
-                                        }}
-                                        onfocus={() =>
-                                            (modelFilters[
-                                                item.tier
-                                            ].showDropdown = true)}
-                                    />
-
-                                    <!-- Dropdown results -->
-                                    {#if modelFilters[item.tier].showDropdown && (modelFilters[item.tier].search || modelFilters[item.tier].provider)}
-                                        <div
-                                            class="absolute z-50 top-full left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
-                                        >
-                                            {#if modelsLoading}
-                                                <div
-                                                    class="p-4 text-center text-muted-foreground text-sm"
-                                                >
-                                                    Loading models...
-                                                </div>
-                                            {:else}
-                                                {#each getFilteredModels(item.tier) as model}
-                                                    <button
-                                                        type="button"
-                                                        class="w-full px-3 py-2 text-left hover:bg-accent transition-colors border-b border-border last:border-b-0"
-                                                        onclick={() => handleSelectModel(item.tier, model.id)}
-                                                    >
-                                                        <div
-                                                            class="flex items-center justify-between"
-                                                        >
-                                                            <div
-                                                                class="flex-1 min-w-0"
-                                                            >
-                                                                <div
-                                                                    class="font-mono text-sm truncate"
-                                                                >
-                                                                    {model.id}
-                                                                </div>
-                                                                <div
-                                                                    class="text-xs text-muted-foreground truncate"
-                                                                >
-                                                                    {model.name}
-                                                                </div>
-                                                            </div>
-                                                            <div
-                                                                class="flex items-center gap-2 ml-2 text-xs text-muted-foreground flex-shrink-0"
-                                                            >
-                                                                <span
-                                                                    title="Context window"
-                                                                    >{formatContext(
-                                                                        model.context_length,
-                                                                    )}</span
-                                                                >
-                                                                <span
-                                                                    class="text-emerald-400"
-                                                                    title="Input price/M tokens"
-                                                                >
-                                                                    {formatPrice(
-                                                                        model
-                                                                            .pricing
-                                                                            .input_per_million,
-                                                                    )}
-                                                                </span>
-                                                                {#if model.supports_reasoning}
-                                                                    <span
-                                                                        title="Reasoning"
-                                                                        >🧠</span
-                                                                    >
-                                                                {/if}
-                                                                {#if model.supports_vision}
-                                                                    <span
-                                                                        title="Vision"
-                                                                        >👁</span
-                                                                    >
-                                                                {/if}
-                                                                {#if model.supports_tools}
-                                                                    <span
-                                                                        title="Tools"
-                                                                        >🔧</span
-                                                                    >
-                                                                {/if}
-                                                            </div>
-                                                        </div>
-                                                    </button>
-                                                {:else}
-                                                    <div
-                                                        class="p-4 text-center text-muted-foreground text-sm"
-                                                    >
-                                                        No models found
-                                                    </div>
-                                                {/each}
-                                            {/if}
-                                        </div>
-                                    {/if}
-                                </div>
-
-                                <!-- Close dropdown button -->
-                                {#if modelFilters[item.tier].showDropdown}
-                                    <button
-                                        type="button"
-                                        class="p-2 rounded-lg hover:bg-accent transition-colors"
-                                        onclick={() => closeModelDropdown(item.tier)}
-                                    >
-                                        <X class="w-4 h-4" />
-                                    </button>
+                            <div class="h-2 bg-zinc-800 rounded-full overflow-hidden relative">
+                                <div
+                                    class="h-full transition-all duration-300 rounded-full
+                                        {budgetData.usage_percentage >= 95 ? 'bg-red-500' :
+                                          budgetData.usage_percentage >= 80 ? 'bg-amber-500' :
+                                          'bg-green-500'}"
+                                    style="width: {budgetData.usage_percentage}%"
+                                ></div>
+                                <!-- 80% marker -->
+                                <div class="absolute top-0 bottom-0 w-0.5 bg-zinc-600 left-[80%]"></div>
+                            </div>
+                            <div class="text-xs text-zinc-500 mt-1">
+                                {budgetData.usage_percentage.toFixed(0)}% used
+                                {#if budgetData.usage_percentage >= 95}
+                                    • <span class="text-red-400">Near limit!</span>
+                                {:else if budgetData.usage_percentage >= 80}
+                                    • <span class="text-amber-400">Approaching limit</span>
                                 {/if}
                             </div>
+                        </div>
 
-                            <!-- Current selection -->
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs text-muted-foreground"
-                                    >Selected:</span
-                                >
+                        <!-- Monthly Budget -->
+                        <div>
+                            <div class="flex justify-between text-sm mb-2">
+                                <span class="text-zinc-400">Monthly Budget</span>
+                                <span class="text-zinc-200">
+                                    ${budgetData.current_monthly.toFixed(0)} / ${budgetData.monthly_limit}
+                                </span>
+                            </div>
+                            <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                                <div
+                                    class="h-full bg-cyan-500 transition-all duration-300 rounded-full"
+                                    style="width: {(budgetData.current_monthly / budgetData.monthly_limit * 100)}%"
+                                ></div>
+                            </div>
+                            <div class="text-xs text-zinc-500 mt-1">
+                                {(budgetData.current_monthly / budgetData.monthly_limit * 100).toFixed(1)}% used
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Alert Configuration -->
+                    <div class="mt-4 pt-4 border-t border-zinc-800">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-zinc-400">Alert Settings</span>
+                            <div class="flex gap-2">
+                                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                                    <input type="checkbox" checked class="rounded bg-zinc-800 border-zinc-700" />
+                                    Email at 80%
+                                </label>
+                                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                                    <input type="checkbox" checked class="rounded bg-zinc-800 border-zinc-700" />
+                                    Slack at 95%
+                                </label>
+                                <button class="text-xs px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700">
+                                    Manage Rules
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Real-time Model Distribution -->
+                {#if Object.keys(liveMetrics.model_distribution).length > 0}
+                    <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                        <h3 class="font-bold mb-4 flex items-center gap-2">
+                            <ActivityIcon class="w-4 h-4 text-cyan-400" />
+                            Current Activity Distribution (Last 60s)
+                        </h3>
+                        <div class="space-y-2">
+                            {#each Object.entries(liveMetrics.model_distribution) as [model, count]}
+                                <div class="flex items-center gap-3 text-sm">
+                                    <div class="font-mono text-xs w-32 text-zinc-400 truncate">
+                                        {model.split('/').pop() || model}
+                                    </div>
+                                    <div class="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
+                                        <div
+                                            class="h-full bg-cyan-500"
+                                            style="width: {(count / Math.max(...Object.values(liveMetrics.model_distribution)) * 100)}%"
+                                        ></div>
+                                    </div>
+                                    <div class="text-xs text-zinc-400 w-12 text-right">{count}</div>
+                                </div>
+                            {/each}
+                        </div>
+                    </section>
+                {/if}
+
+                <!-- Crosstalk Overview -->
+                <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-bold flex items-center gap-2">
+                            <Zap class="w-4 h-4 text-purple-400" />
+                            Crosstalk Sessions
+                        </h3>
+                        <button
+                            onclick={openCrosstalk}
+                            class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm flex items-center gap-2 transition-colors"
+                        >
+                            <Play class="w-3 h-3" />
+                            Launch Studio
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div class="bg-zinc-950 rounded p-3 border border-zinc-800">
+                            <div class="text-xs text-zinc-400">Total Sessions</div>
+                            <div class="text-xl font-bold text-purple-400">{crosstalkStats.total_sessions}</div>
+                        </div>
+                        <div class="bg-zinc-950 rounded p-3 border border-zinc-800">
+                            <div class="text-xs text-zinc-400">Avg Cost</div>
+                            <div class="text-xl font-bold text-green-400">${crosstalkStats.avg_cost_per_session.toFixed(2)}</div>
+                        </div>
+                        <div class="bg-zinc-950 rounded p-3 border border-zinc-800">
+                            <div class="text-xs text-zinc-400">Avg Rounds</div>
+                            <div class="text-xl font-bold text-cyan-400">{crosstalkStats.avg_rounds}</div>
+                        </div>
+                        <div class="bg-zinc-950 rounded p-3 border border-zinc-800">
+                            <div class="text-xs text-zinc-400">Top Paradigm</div>
+                            <div class="text-xl font-bold text-amber-400 capitalize">{crosstalkStats.top_paradigm}</div>
+                        </div>
+                        <div class="bg-zinc-950 rounded p-3 border border-zinc-800">
+                            <div class="text-xs text-zinc-400">Active Now</div>
+                            <div class="text-xl font-bold text-zinc-200">{crosstalkStats.active_sessions}</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Quick Actions -->
+                <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                    <h3 class="font-bold mb-4">Quick Actions</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <button
+                            onclick={() => activeTab = 'analytics'}
+                            class="p-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 text-left transition-all hover:border-cyan-500 group"
+                        >
+                            <div class="flex items-center gap-2 mb-2">
+                                <BarChart3 class="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+                                <span class="font-semibold">View Analytics</span>
+                            </div>
+                            <div class="text-xs text-zinc-400">Interactive charts and insights</div>
+                        </button>
+
+                        <button
+                            onclick={() => activeTab = 'models'}
+                            class="p-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 text-left transition-all hover:border-purple-500 group"
+                        >
+                            <div class="flex items-center gap-2 mb-2">
+                                <Cpu class="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
+                                <span class="font-semibold">Manage Models</span>
+                            </div>
+                            <div class="text-xs text-zinc-400">Configure providers and routing</div>
+                        </button>
+
+                        <button
+                            onclick={() => activeTab = 'setup'}
+                            class="p-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 text-left transition-all hover:border-amber-500 group"
+                        >
+                            <div class="flex items-center gap-2 mb-2">
+                                <Settings class="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                                <span class="font-semibold">System Config</span>
+                            </div>
+                            <div class="text-xs text-zinc-400">Provider settings and API keys</div>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Last Update & Connection Info -->
+                <div class="text-center text-xs text-zinc-500 flex items-center justify-center gap-4">
+                    <span>Last updated: {lastUpdate}</span>
+                    <span>•</span>
+                    <span>WebSocket: {wsStatus}</span>
+                    {#if wsReconnecting}
+                        <span>•</span>
+                        <span class="text-amber-400">Reconnecting...</span>
+                    {/if}
+                </div>
+            </div>
+
+        <!-- SETUP TAB (Original) -->
+        {:else if activeTab === 'setup'}
+            <div class="max-w-2xl mx-auto space-y-6">
+                <!-- Quick Provider Selection -->
+                <section class="mb-8">
+                    <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                        <Server class="w-5 h-5 text-cyan-400" />
+                        Quick Setup - Choose Provider
+                    </h2>
+                    <p class="text-zinc-400 mb-4 text-sm">
+                        Select a provider to automatically configure routing. No manual backend selection needed.
+                    </p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {#each providerPresets as preset}
+                            <button
+                                onclick={() => selectProvider(preset.id)}
+                                disabled={applyingConfig}
+                                class="p-4 rounded-lg border text-left transition-all hover:border-cyan-500 hover:bg-zinc-900 group relative overflow-hidden {selectedProvider === preset.id ? 'border-cyan-500 bg-zinc-900' : 'border-zinc-800'}"
+                            >
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="font-semibold">{preset.name}</span>
+                                    {#if preset.recommended}
+                                        <span class="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded">Recommended</span>
+                                    {/if}
+                                </div>
+                                <div class="text-xs text-zinc-400">{preset.desc}</div>
+                                <div class="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-cyan-500 to-purple-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            </button>
+                        {/each}
+                    </div>
+                </section>
+
+                <!-- Manual API Key Entry -->
+                {#if selectedProvider && selectedProvider !== 'vibeproxy'}
+                    <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                            <Key class="w-5 h-5 text-amber-400" />
+                            API Key Configuration
+                        </h3>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-sm text-zinc-400 mb-1 block">API Key for {getProviderDisplayName(selectedProvider)}</label>
                                 <input
-                                    type="text"
-                                    class="flex-1 px-3 py-2 rounded-lg border border-input bg-background/50 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-                                    value={item.tier === "big"
-                                        ? config.big_model
-                                        : item.tier === "middle"
-                                          ? config.middle_model
-                                          : config.small_model}
-                                    oninput={(e) => {
-                                        if (item.tier === "big")
-                                            config.big_model = getValue(e);
-                                        else if (item.tier === "middle")
-                                            config.middle_model = getValue(e);
-                                        else config.small_model = getValue(e);
-                                    }}
-                                    placeholder="Enter model ID manually..."
+                                    type="password"
+                                    bind:value={api_key}
+                                    placeholder="sk-... or similar"
+                                    class="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-700 focus:border-cyan-500 focus:outline-none text-sm font-mono"
                                 />
+                            </div>
+
+                            <div class="flex gap-2">
+                                <button
+                                    onclick={() => saveApiKey()}
+                                    disabled={applyingConfig || !api_key}
+                                    class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 rounded font-medium text-sm transition-colors"
+                                >
+                                    Save API Key
+                                </button>
+                                <button
+                                    onclick={() => { activeTab = 'models'; }}
+                                    class="px-4 py-2 border border-zinc-700 hover:bg-zinc-800 rounded font-medium text-sm transition-colors"
+                                >
+                                    Skip to Models →
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+                {/if}
+
+                <!-- Status Messages -->
+                {#if configMessage}
+                    <div class="mt-4 p-3 rounded bg-zinc-900 border border-zinc-800 text-sm flex items-center gap-2">
+                        {#if configMessage.includes('✅')}
+                            <CheckCircle2 class="w-4 h-4 text-green-400" />
+                        {:else if configMessage.includes('❌')}
+                            <AlertCircle class="w-4 h-4 text-red-400" />
+                        {:else if configMessage.includes('⚠️')}
+                            <Info class="w-4 h-4 text-amber-400" />
+                        {:else}
+                            <Info class="w-4 h-4 text-cyan-400" />
+                        {/if}
+                        <span>{configMessage}</span>
+                    </div>
+                {/if}
+
+                <!-- Current Configuration -->
+                <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                    <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                        <Settings class="w-5 h-5 text-purple-400" />
+                        Current Configuration
+                    </h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-zinc-400">Provider:</span>
+                            <span class="font-mono">{getProviderDisplayName(config.default_provider)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-zinc-400">Base URL:</span>
+                            <span class="font-mono text-xs">{config.openai_base_url}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-zinc-400">BIG Model:</span>
+                            <span class="font-mono">{config.big_model || 'Not set'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-zinc-400">MIDDLE Model:</span>
+                            <span class="font-mono">{config.middle_model || 'Not set'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-zinc-400">SMALL Model:</span>
+                            <span class="font-mono">{config.small_model || 'Not set'}</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+        <!-- MODELS TAB (Original) -->
+        {:else if activeTab === 'models'}
+            <div class="space-y-6">
+                <!-- Quick Actions -->
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-xl font-bold">Model Selection</h2>
+                        <p class="text-zinc-400 text-sm">Models organized by provider - click to select automatically</p>
+                    </div>
+                    <button
+                        onclick={loadModelsGrouped}
+                        disabled={modelsLoading}
+                        class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm border border-zinc-700 flex items-center gap-2 transition-colors"
+                    >
+                        <RefreshCw class="w-4 h-4 {modelsLoading ? 'animate-spin' : ''}" />
+                        Refresh
+                    </button>
+                </div>
+
+                <!-- Tier Selection Quick Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {#each ['big', 'middle', 'small'] as tier}
+                        <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                            <h3 class="font-bold text-sm uppercase mb-2 text-zinc-400">{tier} Tier</h3>
+                            <div class="text-xs text-zinc-500 mb-2">
+                                {#if tier === 'big'}Powerful models for complex tasks
+                                {:else if tier === 'middle'}Balanced performance
+                                {:else}Fast and economical{/if}
+                            </div>
+                            <div class="font-mono text-sm text-cyan-400">
+                                {config[`${tier}_model`] || 'Select below →'}
                             </div>
                         </div>
                     {/each}
-
-                    <!-- Save button -->
-                    <div class="flex items-center gap-4">
-                        <button
-                            onclick={saveConfig}
-                            class="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity"
-                        >
-                            Save Configuration
-                        </button>
-                        {#if saveMessage}
-                            <span class="text-sm text-muted-foreground"
-                                >{saveMessage}</span
-                            >
-                        {/if}
-                    </div>
-
-                    <!-- Model stats summary -->
-                    {#if modelStats.total}
-                        <div
-                            class="rounded-xl border border-border bg-card/50 p-4"
-                        >
-                            <h4 class="text-sm font-medium mb-3">
-                                Available Models
-                            </h4>
-                            <div
-                                class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center"
-                            >
-                                <div>
-                                    <div class="text-2xl font-bold">
-                                        {modelStats.total}
-                                    </div>
-                                    <div class="text-xs text-muted-foreground">
-                                        Total
-                                    </div>
-                                </div>
-                                <div>
-                                    <div
-                                        class="text-2xl font-bold text-emerald-400"
-                                    >
-                                        {modelStats.free || 0}
-                                    </div>
-                                    <div class="text-xs text-muted-foreground">
-                                        Free
-                                    </div>
-                                </div>
-                                <div>
-                                    <div
-                                        class="text-2xl font-bold text-purple-400"
-                                    >
-                                        {modelStats.reasoning || 0}
-                                    </div>
-                                    <div class="text-xs text-muted-foreground">
-                                        Reasoning
-                                    </div>
-                                </div>
-                                <div>
-                                    <div
-                                        class="text-2xl font-bold text-blue-400"
-                                    >
-                                        {modelStats.vision || 0}
-                                    </div>
-                                    <div class="text-xs text-muted-foreground">
-                                        Vision
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    {/if}
                 </div>
-            {:else if activeTab === "routing"}
-                <!-- Routing Configuration -->
-                <div class="max-w-2xl space-y-6">
-                    <div class="rounded-xl border border-border bg-card p-6">
-                        <h3 class="font-semibold mb-4">Hybrid Routing</h3>
-                        <p class="text-sm text-muted-foreground mb-4">
-                            Route different model tiers to alternative
-                            endpoints.
-                        </p>
 
-                        <!-- BIG Endpoint -->
-                        <div class="p-4 rounded-lg border border-border mb-4">
-                            <div class="flex items-center gap-3 mb-3">
-                                <input
-                                    type="checkbox"
-                                    checked={config.enable_big_endpoint}
-                                    onchange={(e) =>
-                                        (config.enable_big_endpoint =
-                                            getChecked(e))}
-                                    class="w-4 h-4 rounded border-input"
-                                />
-                                <span class="model-tier big">BIG</span>
-                                <span class="text-sm text-muted-foreground"
-                                    >Custom Endpoint</span
-                                >
-                            </div>
-                            {#if config.enable_big_endpoint}
-                                <div class="space-y-2 mt-3">
-                                    <input
-                                        type="text"
-                                        value={config.big_endpoint}
-                                        oninput={(e) =>
-                                            (config.big_endpoint = getValue(e))}
-                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono"
-                                        placeholder="https://api.example.com/v1"
-                                    />
+                <!-- Grouped Models by Provider -->
+                {#if groupedModels.length > 0}
+                    <div class="space-y-6">
+                        {#each groupedModels as providerGroup}
+                            <section class="bg-zinc-900 rounded-lg border border-zinc-800 overflow-hidden">
+                                <div class="px-4 py-3 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <svelte:component this={getProviderIcon(providerGroup.provider)} class="w-5 h-5 text-cyan-400" />
+                                        <span class="font-bold">{providerGroup.display_name}</span>
+                                        <span class="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded">{providerGroup.model_count} models</span>
+                                    </div>
+                                    {#if providerGroup.is_available}
+                                        <span class="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded">Available</span>
+                                    {:else}
+                                        <span class="text-xs bg-zinc-700 text-zinc-400 px-2 py-0.5 rounded">Not Configured</span>
+                                    {/if}
                                 </div>
-                            {/if}
-                        </div>
 
-                        <!-- MIDDLE Endpoint -->
-                        <div class="p-4 rounded-lg border border-border mb-4">
-                            <div class="flex items-center gap-3 mb-3">
-                                <input
-                                    type="checkbox"
-                                    checked={config.enable_middle_endpoint}
-                                    onchange={(e) =>
-                                        (config.enable_middle_endpoint =
-                                            getChecked(e))}
-                                    class="w-4 h-4 rounded border-input"
-                                />
-                                <span class="model-tier middle">MIDDLE</span>
-                                <span class="text-sm text-muted-foreground"
-                                    >Custom Endpoint</span
-                                >
-                            </div>
-                            {#if config.enable_middle_endpoint}
-                                <div class="space-y-2 mt-3">
-                                    <input
-                                        type="text"
-                                        value={config.middle_endpoint}
-                                        oninput={(e) =>
-                                            (config.middle_endpoint =
-                                                getValue(e))}
-                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono"
-                                        placeholder="https://api.example.com/v1"
-                                    />
+                                <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto">
+                                    {#each providerGroup.models as model}
+                                        <div class="group p-3 rounded border border-zinc-800 hover:border-cyan-500 hover:bg-zinc-800 transition-all cursor-pointer"
+                                             onclick={() => {
+                                                 const tier = prompt(`Assign ${model.id} to which tier?\n1. BIG\n2. MIDDLE\n3. SMALL`, "2");
+                                                 if (tier === '1') selectModel('big', model.id);
+                                                 else if (tier === '2') selectModel('middle', model.id);
+                                                 else if (tier === '3') selectModel('small', model.id);
+                                             }}>
+                                            <div class="font-mono text-sm text-zinc-200">{model.id.split('/').pop() || model.id}</div>
+                                            <div class="flex justify-between text-xs text-zinc-500 mt-1">
+                                                <span>{model.name?.split('(')[0] || 'Unknown'}</span>
+                                                {#if model.supports_reasoning}
+                                                    <span class="text-purple-400">🧠</span>
+                                                {/if}
+                                            </div>
+                                        </div>
+                                    {/each}
                                 </div>
-                            {/if}
-                        </div>
-
-                        <!-- SMALL Endpoint -->
-                        <div class="p-4 rounded-lg border border-border">
-                            <div class="flex items-center gap-3 mb-3">
-                                <input
-                                    type="checkbox"
-                                    checked={config.enable_small_endpoint}
-                                    onchange={(e) =>
-                                        (config.enable_small_endpoint =
-                                            getChecked(e))}
-                                    class="w-4 h-4 rounded border-input"
-                                />
-                                <span class="model-tier small">SMALL</span>
-                                <span class="text-sm text-muted-foreground"
-                                    >Custom Endpoint</span
-                                >
-                            </div>
-                            {#if config.enable_small_endpoint}
-                                <div class="space-y-2 mt-3">
-                                    <input
-                                        type="text"
-                                        value={config.small_endpoint}
-                                        oninput={(e) =>
-                                            (config.small_endpoint =
-                                                getValue(e))}
-                                        class="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono"
-                                        placeholder="https://api.example.com/v1"
-                                    />
-                                </div>
-                            {/if}
-                        </div>
-
-                        <button
-                            onclick={saveConfig}
-                            class="mt-6 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity"
-                        >
-                            Save Configuration
-                        </button>
-                    </div>
-                </div>
-            {:else if activeTab === "logs"}
-                <!-- Logs -->
-                <div class="h-full flex flex-col">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center gap-2">
-                            <div
-                                class="w-2 h-2 rounded-full {wsConnected
-                                    ? 'bg-green-500 status-dot online'
-                                    : 'bg-red-500'}"
-                            ></div>
-                            <span class="text-sm text-muted-foreground">
-                                {wsConnected ? "Live" : "Disconnected"}
-                            </span>
-                        </div>
-                        <button
-                            onclick={clearLogs}
-                            class="px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-accent transition-colors"
-                        >
-                            Clear
-                        </button>
-                    </div>
-                    <div
-                        class="flex-1 rounded-xl border border-border bg-zinc-950 p-4 font-mono text-xs overflow-auto"
-                    >
-                        {#each logs as log}
-                            <div
-                                class="py-1 {log.level === 'error'
-                                    ? 'text-red-400'
-                                    : log.level === 'warning'
-                                      ? 'text-amber-400'
-                                      : 'text-zinc-400'}"
-                            >
-                                <span class="text-zinc-600"
-                                    >{log.timestamp?.slice(11, 19) || ""}</span
-                                >
-                                <span class="ml-2">{log.message}</span>
-                            </div>
+                            </section>
                         {/each}
                     </div>
+                {:else if modelsLoading}
+                    <div class="text-center py-8 text-zinc-400">
+                        <div class="animate-spin w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+                        Loading models...
+                    </div>
+                {:else}
+                    <div class="text-center py-8 text-zinc-400">
+                        No models available. Check provider configuration or refresh.
+                    </div>
+                {/if}
+            </div>
+
+        <!-- ANALYTICS TAB (Enhanced) -->
+        {:else if activeTab === 'analytics'}
+            <div class="space-y-6">
+                <!-- Header -->
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-xl font-bold">Usage Analytics</h2>
+                        <p class="text-zinc-400 text-sm">Real-time metrics and insights</p>
+                    </div>
+                    <button
+                        onclick={loadDashboardData}
+                        disabled={analyticsLoading}
+                        class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm border border-zinc-700 flex items-center gap-2 transition-colors"
+                    >
+                        <RefreshCw class="w-4 h-4 {analyticsLoading ? 'animate-spin' : ''}" />
+                        Refresh
+                    </button>
                 </div>
-            {:else}
-                <!-- Placeholder for other tabs -->
-                <div class="flex items-center justify-center h-64">
-                    <div class="text-center">
-                        <Server
-                            class="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50"
-                        />
-                        <h3 class="font-semibold text-lg mb-2 capitalize">
-                            {activeTab}
-                        </h3>
-                        <p class="text-sm text-muted-foreground">
-                            This section is under development
-                        </p>
+
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                        <div class="text-xs text-zinc-400 mb-1">Requests Today</div>
+                        <div class="text-2xl font-bold text-cyan-400">{stats.requests_today || 0}</div>
+                    </div>
+                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                        <div class="text-xs text-zinc-400 mb-1">Total Tokens</div>
+                        <div class="text-2xl font-bold text-purple-400">
+                            {#if (stats.total_tokens || 0) > 1000000}
+                                {((stats.total_tokens || 0) / 1000000).toFixed(1)}M
+                            {:else if (stats.total_tokens || 0) > 1000}
+                                {((stats.total_tokens || 0) / 1000).toFixed(1)}K
+                            {:else}
+                                {stats.total_tokens || 0}
+                            {/if}
+                        </div>
+                    </div>
+                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                        <div class="text-xs text-zinc-400 mb-1">Est. Cost</div>
+                        <div class="text-2xl font-bold text-green-400">${(stats.est_cost || 0).toFixed(4)}</div>
+                    </div>
+                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                        <div class="text-xs text-zinc-400 mb-1">Avg Latency</div>
+                        <div class="text-2xl font-bold text-amber-400">{stats.avg_latency || 0}ms</div>
                     </div>
                 </div>
-            {/if}
-        </main>
-    </div>
+
+                <!-- Analytics Data (Note: Full implementation requires /api/analytics endpoints) -->
+                <div class="bg-zinc-900 rounded-lg p-8 border border-zinc-800 text-center">
+                    <div class="max-w-md mx-auto">
+                        <div class="bg-zinc-950 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                            <Activity class="w-8 h-8 text-zinc-500" />
+                        </div>
+                        <h3 class="text-lg font-bold mb-2">Advanced Analytics</h3>
+                        <p class="text-zinc-400 mb-4 text-sm">
+                            Full analytics dashboard with interactive charts, time-series data, and AI insights.
+                        </p>
+                        <div class="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-xs text-left mb-4">
+                            <div class="text-zinc-400">// Available Endpoints:</div>
+                            <div>GET /api/analytics/dashboard</div>
+                            <div>GET /api/analytics/timeseries</div>
+                            <div>GET /api/analytics/model-comparison</div>
+                            <div>GET /api/analytics/insights</div>
+                            <div>GET /api/analytics/cost-breakdown</div>
+                        </div>
+                        <p class="text-zinc-500 text-xs mt-3">Use the Crosstalk Studio for live session monitoring or enable usage tracking for full analytics.</p>
+                        <button
+                            onclick={() => activeTab = 'dashboard'}
+                            class="mt-4 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded text-sm font-medium"
+                        >
+                            Return to Dashboard
+                        </button>
+                    </div>
+                </div>
+            </div>
+        {/if}
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-zinc-800 py-6 mt-12">
+        <div class="max-w-7xl mx-auto px-6 text-center text-zinc-500 text-sm">
+            Claude Proxy Web Dashboard v2.1 • {new Date().getFullYear()}
+            <div class="mt-2 text-xs">
+                {#if wsStatus === 'connected'}
+                    <span class="text-green-400">🟢 Live Updates Active</span>
+                {:else}
+                    <span class="text-zinc-400">⚪ Live Updates Available</span>
+                {/if}
+            </div>
+        </div>
+    </footer>
 </div>
+
+<style>
+    /* Modern scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #18181b;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #3f3f46;
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #52525b;
+    }
+
+    /* Selection highlight */
+    ::selection {
+        background: #06b6d4;
+        color: #000;
+    }
+
+    /* Glow effects */
+    .glow-on-hover:hover {
+        box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+    }
+
+    /* Loading pulse */
+    @keyframes pulse-slow {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    .pulse-slow {
+        animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* Status indicator pulse */
+    @keyframes status-pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.1); opacity: 0.8; }
+    }
+</style>

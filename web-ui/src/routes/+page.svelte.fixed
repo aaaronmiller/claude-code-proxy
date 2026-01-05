@@ -1,0 +1,676 @@
+<script lang="ts">
+    import {
+        Activity,
+        Settings,
+        Zap,
+        Server,
+        Terminal,
+        FileText,
+        RefreshCw,
+        MessageSquare,
+        Radio,
+        Shield,
+        Play,
+        Plus,
+        Trash2,
+        ChevronDown,
+        Palette,
+        Book,
+        X,
+        TrendingUp,
+        DollarSign,
+        BarChart3,
+        CheckCircle2,
+        AlertCircle,
+        Info,
+        User,
+        Key,
+        Link2,
+        Layers,
+        Cpu
+    } from "lucide-svelte";
+
+    // State management
+    let activeTab = $state("setup");
+
+    // Provider selection state
+    let selectedProvider = $state("");
+    let api_key = $state("");
+    let applyingConfig = $state(false);
+    let configMessage = $state("");
+
+    // Model selection state (NEW: grouped by provider)
+    let availableModels = $state<any[]>([]);
+    let groupedModels = $state<any[]>([]);
+    let modelsLoading = $state(false);
+
+    // Configuration state
+    let config = $state<Record<string, any>>({
+        big_model: "",
+        middle_model: "",
+        small_model: "",
+        openai_base_url: "https://api.openai.com/v1",
+        default_provider: "openrouter"
+    });
+
+    // Stats and analytics state
+    let stats = $state({
+        requests_today: 0,
+        total_tokens: 0,
+        est_cost: 0,
+        avg_latency: 0
+    });
+
+    let analyticsData = $state<any>(null);
+    let analyticsLoading = $state(false);
+
+    // Auto-routing functions
+    async function selectProvider(provider: string) {
+        selectedProvider = provider;
+        configMessage = `Selected ${provider} - configuring automatically...`;
+
+        // Fetch auto-routing configuration
+        try {
+            const res = await fetch(`/api/routing/auto?provider=${provider}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.routing) {
+                    // Apply the configuration
+                    const applyRes = await fetch(`/api/routing/apply?provider=${provider}`, {
+                        method: "POST"
+                    });
+
+                    if (applyRes.ok) {
+                        const applyData = await applyRes.json();
+                        configMessage = `✅ Configured for ${provider}!`;
+
+                        // Update config display
+                        config.openai_base_url = data.routing.base_url;
+                        config.big_model = data.routing.recommended_big;
+                        config.middle_model = data.routing.recommended_middle;
+                        config.small_model = data.routing.recommended_small;
+                        config.default_provider = provider;
+
+                        // Load models for this provider
+                        loadModelsGrouped();
+
+                        // Move to models tab
+                        activeTab = "models";
+                    } else {
+                        configMessage = "❌ Failed to apply configuration";
+                    }
+                }
+            } else {
+                configMessage = "❌ Unknown provider or configuration error";
+            }
+        } catch (e) {
+            configMessage = `❌ Error: ${e}`;
+        }
+    }
+
+    // NEW: Load models organized by provider
+    async function loadModelsGrouped() {
+        modelsLoading = true;
+        try {
+            const res = await fetch("/api/models?group_by_provider=true&limit=100");
+            if (res.ok) {
+                const data = await res.json();
+                if (data.grouped) {
+                    groupedModels = data.grouped;
+                    availableModels = data.flat;
+                } else {
+                    // Fallback to flat list
+                    availableModels = data.models || [];
+                    groupedModels = [];
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load models:", e);
+        }
+        modelsLoading = false;
+    }
+
+    // Direct model selection (automatic routing)
+    async function selectModel(tier: "big" | "middle" | "small", modelId: string) {
+        // Update config immediately
+        if (tier === "big") config.big_model = modelId;
+        else if (tier === "middle") config.middle_model = modelId;
+        else if (tier === "small") config.small_model = modelId;
+
+        // Show success message
+        configMessage = `✅ ${tier.toUpperCase()} tier set to ${modelId.split('/').pop() || modelId}`;
+
+        // Save to server (hot reload)
+        try {
+            const res = await fetch("/api/config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    [`${tier}_model`]: modelId
+                })
+            });
+
+            if (!res.ok) {
+                configMessage = "⚠️ Model selected but may need server restart";
+            }
+        } catch (e) {
+            configMessage = "⚠️ Local model selection - restart server to apply";
+        }
+    }
+
+    // Load stats (when usage tracking is enabled)
+    async function loadStats() {
+        try {
+            const res = await fetch("/api/stats");
+            if (res.ok) {
+                stats = await res.json();
+            }
+        } catch (e) {
+            console.log("Stats not available:", e);
+        }
+    }
+
+    // Load analytics data
+    async function loadAnalytics() {
+        analyticsLoading = true;
+        try {
+            const res = await fetch("/api/analytics/dashboard?days=7");
+            if (res.ok) {
+                analyticsData = await res.json();
+            }
+        } catch (e) {
+            console.log("Analytics not available:", e);
+        }
+        analyticsLoading = false;
+    }
+
+    // Save API key
+    async function saveApiKey() {
+        if (!selectedProvider || !api_key) return;
+
+        applyingConfig = true;
+        try {
+            const res = await fetch(`/api/config/api-key?provider=${selectedProvider}&api_key=${encodeURIComponent(api_key)}`, {
+                method: "POST"
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                configMessage = `✅ ${data.message}`;
+                // Clear the key input
+                api_key = "";
+            } else {
+                const error = await res.json();
+                configMessage = `❌ ${error.detail || "Failed to save API key"}`;
+            }
+        } catch (e) {
+            configMessage = `❌ Error: ${e}`;
+        }
+        applyingConfig = false;
+    }
+
+    // Load initial data
+    $effect(() => {
+        loadModelsGrouped();
+        loadStats();
+        loadAnalytics();
+    });
+
+    // Helper functions
+    function getProviderDisplayName(provider: string): string {
+        const names: Record<string, string> = {
+            "openrouter": "OpenRouter",
+            "openai": "OpenAI",
+            "anthropic": "Anthropic",
+            "google": "Google",
+            "vibeproxy": "VibeProxy"
+        };
+        return names[provider] || provider;
+    }
+
+    function getProviderIcon(provider: string): any {
+        const icons: Record<string, any> = {
+            "openrouter": Zap,
+            "openai": Cpu,
+            "anthropic": MessageSquare,
+            "google": Server,
+            "vibeproxy": Terminal
+        };
+        return icons[provider] || Server;
+    }
+
+    // Quick provider presets for easy setup
+    const providerPresets = [
+        { id: "openrouter", name: "OpenRouter", desc: "350+ models, one API key", recommended: true },
+        { id: "openai", name: "OpenAI", desc: "GPT-4, GPT-4o, o1 models" },
+        { id: "anthropic", name: "Anthropic", desc: "Claude 3.5, Claude 4" },
+        { id: "google", name: "Google", desc: "Gemini Pro, Flash" },
+        { id: "vibeproxy", name: "VibeProxy", desc: "Local OAuth proxy (free)" }
+    ];
+</script>
+
+<div class="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
+
+    <!-- Header -->
+    <header class="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
+                    <span class="text-zinc-900 font-bold text-sm">CP</span>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg tracking-tight">Claude Proxy</h1>
+                    <p class="text-xs text-zinc-400">Web Dashboard</p>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button
+                    onclick={() => { activeTab = 'setup'; }}
+                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'setup' ? 'bg-zinc-800 border-cyan-500' : ''}"
+                >
+                    Setup
+                </button>
+                <button
+                    onclick={() => { activeTab = 'models'; }}
+                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'models' ? 'bg-zinc-800 border-cyan-500' : ''}"
+                >
+                    Models
+                </button>
+                <button
+                    onclick={() => { activeTab = 'analytics'; }}
+                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'analytics' ? 'bg-zinc-800 border-cyan-500' : ''}"
+                >
+                    Analytics
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-6 py-8">
+
+        <!-- Setup Tab -->
+        {#if activeTab === 'setup'}
+            <div class="max-w-2xl mx-auto">
+
+                <!-- Quick Provider Selection -->
+                <section class="mb-8">
+                    <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                        <Server class="w-5 h-5 text-cyan-400" />
+                        Quick Setup - Choose Provider
+                    </h2>
+                    <p class="text-zinc-400 mb-4 text-sm">
+                        Select a provider to automatically configure routing. No manual backend selection needed.
+                    </p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {#each providerPresets as preset}
+                            <button
+                                onclick={() => selectProvider(preset.id)}
+                                disabled={applyingConfig}
+                                class="p-4 rounded-lg border text-left transition-all hover:border-cyan-500 hover:bg-zinc-900 group relative overflow-hidden {selectedProvider === preset.id ? 'border-cyan-500 bg-zinc-900' : 'border-zinc-800'}"
+                            >
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="font-semibold">{preset.name}</span>
+                                    {#if preset.recommended}
+                                        <span class="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded">Recommended</span>
+                                    {/if}
+                                </div>
+                                <div class="text-xs text-zinc-400">{preset.desc}</div>
+                                <div class="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-cyan-500 to-purple-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            </button>
+                        {/each}
+                    </div>
+                </section>
+
+                <!-- Manual API Key Entry (for providers that need it) -->
+                {#if selectedProvider && selectedProvider !== 'vibeproxy'}
+                    <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                            <Key class="w-5 h-5 text-amber-400" />
+                            API Key Configuration
+                        </h3>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-sm text-zinc-400 mb-1 block">API Key for {getProviderDisplayName(selectedProvider)}</label>
+                                <input
+                                    type="password"
+                                    bind:value={api_key}
+                                    placeholder="sk-... or similar"
+                                    class="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-700 focus:border-cyan-500 focus:outline-none text-sm font-mono"
+                                />
+                            </div>
+
+                            <div class="flex gap-2">
+                                <button
+                                    onclick={() => saveApiKey()}
+                                    disabled={applyingConfig || !api_key}
+                                    class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 rounded font-medium text-sm transition-colors"
+                                >
+                                    Save API Key
+                                </button>
+                                <button
+                                    onclick={() => { activeTab = 'models'; }}
+                                    class="px-4 py-2 border border-zinc-700 hover:bg-zinc-800 rounded font-medium text-sm transition-colors"
+                                >
+                                    Skip to Models →
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+                {/if}
+
+                <!-- Status Messages -->
+                {#if configMessage}
+                    <div class="mt-4 p-3 rounded bg-zinc-900 border border-zinc-800 text-sm flex items-center gap-2">
+                        {#if configMessage.includes('✅')}
+                            <CheckCircle2 class="w-4 h-4 text-green-400" />
+                        {:else if configMessage.includes('❌')}
+                            <AlertCircle class="w-4 h-4 text-red-400" />
+                        {:else if configMessage.includes('⚠️')}
+                            <Info class="w-4 h-4 text-amber-400" />
+                        {:else}
+                            <Info class="w-4 h-4 text-cyan-400" />
+                        {/if}
+                        <span>{configMessage}</span>
+                    </div>
+                {/if}
+
+                <!-- Current Configuration -->
+                <section class="mt-8 bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                    <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                        <Settings class="w-5 h-5 text-purple-400" />
+                        Current Configuration
+                    </h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-zinc-400">Provider:</span>
+                            <span class="font-mono">{getProviderDisplayName(config.default_provider)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-zinc-400">Base URL:</span>
+                            <span class="font-mono text-xs">{config.openai_base_url}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-zinc-400">BIG Model:</span>
+                            <span class="font-mono">{config.big_model || 'Not set'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-zinc-400">MIDDLE Model:</span>
+                            <span class="font-mono">{config.middle_model || 'Not set'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-zinc-400">SMALL Model:</span>
+                            <span class="font-mono">{config.small_model || 'Not set'}</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+        <!-- Models Tab (NEW: Grouped by Provider) -->
+        {:else if activeTab === 'models'}
+            <div class="space-y-6">
+
+                <!-- Quick Actions -->
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-xl font-bold">Model Selection</h2>
+                        <p class="text-zinc-400 text-sm">Models organized by provider - click to select automatically</p>
+                    </div>
+                    <button
+                        onclick={loadModelsGrouped}
+                        disabled={modelsLoading}
+                        class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm border border-zinc-700 flex items-center gap-2 transition-colors"
+                    >
+                        <RefreshCw class="w-4 h-4 {modelsLoading ? 'animate-spin' : ''}" />
+                        Refresh
+                    </button>
+                </div>
+
+                <!-- Tier Selection Quick Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {#each ['big', 'middle', 'small'] as tier}
+                        <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                            <h3 class="font-bold text-sm uppercase mb-2 text-zinc-400">{tier} Tier</h3>
+                            <div class="text-xs text-zinc-500 mb-2">
+                                {#if tier === 'big'}Powerful models for complex tasks
+                                {:else if tier === 'middle'}Balanced performance
+                                {:else}Fast and economical{/if}
+                            </div>
+                            <div class="font-mono text-sm text-cyan-400">
+                                {config[`${tier}_model`] || 'Select below →'}
+                            </div>
+                        </div>
+                    {/each}
+                </div>
+
+                <!-- Grouped Models by Provider -->
+                {#if groupedModels.length > 0}
+                    <div class="space-y-6">
+                        {#each groupedModels as providerGroup}
+                            <section class="bg-zinc-900 rounded-lg border border-zinc-800 overflow-hidden">
+                                <div class="px-4 py-3 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <svelte:component this={getProviderIcon(providerGroup.provider)} class="w-5 h-5 text-cyan-400" />
+                                        <span class="font-bold">{providerGroup.display_name}</span>
+                                        <span class="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded">{providerGroup.model_count} models</span>
+                                    </div>
+                                    {#if providerGroup.is_available}
+                                        <span class="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded">Available</span>
+                                    {:else}
+                                        <span class="text-xs bg-zinc-700 text-zinc-400 px-2 py-0.5 rounded">Not Configured</span>
+                                    {/if}
+                                </div>
+
+                                <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto">
+                                    {#each providerGroup.models as model}
+                                        <div class="group p-3 rounded border border-zinc-800 hover:border-cyan-500 hover:bg-zinc-800 transition-all cursor-pointer"
+                                             onclick={() => {
+                                                 const tier = prompt(`Assign ${model.id} to which tier?\n1. BIG\n2. MIDDLE\n3. SMALL`, "2");
+                                                 if (tier === '1') selectModel('big', model.id);
+                                                 else if (tier === '2') selectModel('middle', model.id);
+                                                 else if (tier === '3') selectModel('small', model.id);
+                                             }}>
+                                            <div class="font-mono text-sm text-zinc-200">{model.id.split('/').pop() || model.id}</div>
+                                            <div class="flex justify-between text-xs text-zinc-500 mt-1">
+                                                <span>{model.name?.split('(')[0] || 'Unknown'}</span>
+                                                {#if model.supports_reasoning}
+                                                    <span class="text-purple-400">🧠</span>
+                                                {/if}
+                                            </div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </section>
+                        {/each}
+                    </div>
+                {:else if modelsLoading}
+                    <div class="text-center py-8 text-zinc-400">
+                        <div class="animate-spin w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+                        Loading models...
+                    </div>
+                {:else}
+                    <div class="text-center py-8 text-zinc-400">
+                        No models available. Check provider configuration or refresh.
+                    </div>
+                {/if}
+            </div>
+
+        <!-- Analytics Tab -->
+        {:else if activeTab === 'analytics'}
+            <div class="space-y-6">
+
+                <!-- Header -->
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-xl font-bold">Usage Analytics</h2>
+                        <p class="text-zinc-400 text-sm">Real-time metrics and insights</p>
+                    </div>
+                    <button
+                        onclick={loadAnalytics}
+                        disabled={analyticsLoading}
+                        class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm border border-zinc-700 flex items-center gap-2 transition-colors"
+                    >
+                        <RefreshCw class="w-4 h-4 {analyticsLoading ? 'animate-spin' : ''}" />
+                        Refresh
+                    </button>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                        <div class="text-xs text-zinc-400 mb-1">Requests Today</div>
+                        <div class="text-2xl font-bold text-cyan-400">{stats.requests_today || 0}</div>
+                    </div>
+                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                        <div class="text-xs text-zinc-400 mb-1">Total Tokens</div>
+                        <div class="text-2xl font-bold text-purple-400">
+                            {#if (stats.total_tokens || 0) > 1000000}
+                                {((stats.total_tokens || 0) / 1000000).toFixed(1)}M
+                            {:else if (stats.total_tokens || 0) > 1000}
+                                {((stats.total_tokens || 0) / 1000).toFixed(1)}K
+                            {:else}
+                                {stats.total_tokens || 0}
+                            {/if}
+                        </div>
+                    </div>
+                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                        <div class="text-xs text-zinc-400 mb-1">Est. Cost</div>
+                        <div class="text-2xl font-bold text-green-400">${(stats.est_cost || 0).toFixed(4)}</div>
+                    </div>
+                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                        <div class="text-xs text-zinc-400 mb-1">Avg Latency</div>
+                        <div class="text-2xl font-bold text-amber-400">{stats.avg_latency || 0}ms</div>
+                    </div>
+                </div>
+
+                <!-- Analytics Data -->
+                {#if analyticsData}
+                    {#if !analyticsData.enabled}
+                        <div class="bg-zinc-900 rounded-lg p-8 border border-zinc-800 text-center">
+                            <div class="max-w-md mx-auto">
+                                <div class="bg-zinc-950 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                                    <Activity class="w-8 h-8 text-zinc-500" />
+                                </div>
+                                <h3 class="text-lg font-bold mb-2">Usage Tracking Disabled</h3>
+                                <p class="text-zinc-400 mb-4 text-sm">
+                                    Analytics require usage tracking to be enabled.
+                                </p>
+                                <div class="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-xs text-left">
+                                    TRACK_USAGE=true
+                                </div>
+                                <p class="text-zinc-500 text-xs mt-3">Add this to your .env file and restart the proxy.</p>
+                            </div>
+                        </div>
+                    {:else if !analyticsData.data || analyticsData.data.summary?.total_requests === 0}
+                        <div class="bg-zinc-900 rounded-lg p-8 border border-zinc-800 text-center">
+                            <div class="text-zinc-400">No usage data available yet. Make some API requests first!</div>
+                        </div>
+                    {:else}
+                        <!-- Real Analytics Data -->
+                        <div class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                            <h3 class="font-bold mb-4">Usage Overview</h3>
+                            <div class="space-y-3">
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-zinc-400">Total Requests:</span>
+                                    <span class="font-bold">{analyticsData.data.summary.total_requests.toLocaleString()}</span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-zinc-400">Total Cost:</span>
+                                    <span class="font-bold text-green-400">${analyticsData.data.summary.total_cost.toFixed(4)}</span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-zinc-400">Total Savings:</span>
+                                    <span class="font-bold text-cyan-400">${analyticsData.data.summary.total_savings?.toFixed(4) || 0}</span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-zinc-400">Avg Latency:</span>
+                                    <span class="font-bold">{analyticsData.data.summary.avg_duration_ms?.toFixed(0) || 0}ms</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Top Models -->
+                        {#if analyticsData.data.top_models && analyticsData.data.top_models.length > 0}
+                            <div class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                                <h3 class="font-bold mb-4">Top Models (7 Days)</h3>
+                                <div class="space-y-2">
+                                    {#each analyticsData.data.top_models.slice(0, 5) as model}
+                                        <div class="flex justify-between items-center text-sm py-2 border-b border-zinc-800 border-dashed last:border-0">
+                                            <span class="font-mono text-xs">{model.model?.split('/').pop() || model.model}</span>
+                                            <div class="flex gap-4 text-zinc-400">
+                                                <span>{model.request_count} reqs</span>
+                                                <span>{model.total_tokens?.toLocaleString()} tokens</span>
+                                            </div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                        {/if}
+
+                        <!-- Savings Analysis -->
+                        {#if analyticsData.data.savings && analyticsData.data.savings.length > 0}
+                            <div class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                                <h3 class="font-bold mb-4 text-green-400">💰 Smart Routing Savings</h3>
+                                <div class="space-y-2">
+                                    {#each analyticsData.data.savings.slice(0, 3) as saving}
+                                        <div class="text-sm flex justify-between items-center py-2 border-b border-zinc-800 border-dashed">
+                                            <div>
+                                                <span class="text-zinc-400">{saving.original_model?.split('/').pop() || saving.original_model} → </span>
+                                                <span class="font-bold text-cyan-400">{saving.routed_model?.split('/').pop() || saving.routed_model}</span>
+                                            </div>
+                                            <div class="font-bold text-green-400">
+                                                -{saving.avg_savings_percent?.toFixed(1)}% (${saving.total_savings?.toFixed(4)})
+                                            </div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                        {/if}
+                    {/if}
+                {:else}
+                    <div class="text-center py-8 text-zinc-400">
+                        Click refresh to load analytics data...
+                    </div>
+                {/if}
+            </div>
+        {/if}
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-zinc-800 py-6 mt-12">
+        <div class="max-w-7xl mx-auto px-6 text-center text-zinc-500 text-sm">
+            Claude Proxy Web Dashboard v2.1 • <a href="https://github.com" class="text-zinc-400 hover:text-cyan-400">Documentation</a>
+        </div>
+    </footer>
+</div>
+
+<style>
+    /* Modern scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #18181b;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #3f3f46;
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #52525b;
+    }
+
+    /* Selection highlight */
+    ::selection {
+        background: #06b6d4;
+        color: #000;
+    }
+
+    /* Subtle glow effects */
+    .glow-cyan:hover {
+        box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+    }
+</style>
