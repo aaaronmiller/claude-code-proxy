@@ -42,6 +42,7 @@ MAIN_MENU = [
     ("terminal", "🖥️  Terminal Output", "Colors, metrics, display mode"),
     ("dashboard", "📊 Dashboard Layout", "Arrange the 10-slot grid"),
     ("prompts", "💉 Prompt Configuration", "Stats injected into Claude's context"),
+    ("analytics", "📈 Analytics", "Usage tracking and insights"),
     ("advanced", "⚙️  Advanced", "Reasoning, Server, Crosstalk"),
     ("exit", "🚪 Exit", "Return to command line"),
 ]
@@ -196,6 +197,18 @@ class UnifiedSettings:
             console.print(f"[red]Error: {e}[/red]")
             input("\nPress Enter to continue...")
 
+    def launch_analytics(self):
+        """Launch analytics configurator and viewer."""
+        console.clear()
+        console.print("[bold cyan]Launching Analytics...[/bold cyan]\n")
+        try:
+            from src.cli.analytics_tui import AnalyticsConfigurator
+            configurator = AnalyticsConfigurator()
+            configurator.run()
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            input("\nPress Enter to continue...")
+
     def run(self):
         """Main loop."""
         while self.running:
@@ -212,6 +225,8 @@ class UnifiedSettings:
                 self.launch_dashboard()
             elif selection == "prompts":
                 self.launch_prompts()
+            elif selection == "analytics":
+                self.launch_analytics()
             elif selection == "advanced":
                 self.launch_advanced()
             elif selection == "exit":

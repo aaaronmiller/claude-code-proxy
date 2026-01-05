@@ -16,6 +16,57 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def sanitize_content_for_logging(content: Optional[str]) -> Optional[str]:
+    """
+    Sanitize content to remove token-wasting placeholder strings.
+
+    Filters out:
+    - "(no content)" placeholders from Claude CLI
+    - Empty or whitespace-only content
+    - Excessively long content that would waste log tokens
+
+    Args:
+        content: The content string to sanitize
+
+    Returns:
+        Sanitized content string, or None if content should be excluded entirely
+    """
+    if content is None:
+        return None
+
+    # Check for empty or whitespace-only content
+    stripped = content.strip()
+    if not stripped:
+        return None
+
+    # Filter out "(no content)" and similar placeholders
+    no_content_patterns = [
+        "(no content)",
+        "no content",
+        "claude: (no content)",
+        "claude: no content",
+    ]
+
+    # Check if content is just a placeholder
+    content_lower = stripped.lower()
+    for pattern in no_content_patterns:
+        if content_lower == pattern:
+            return None
+        # Also filter if the content is dominated by these patterns
+        if pattern in content_lower:
+            # Remove the pattern and check what's left
+            remaining = content_lower.replace(pattern, "").strip()
+            # If nothing meaningful left after removing placeholders, skip
+            if not remaining or remaining in [".", "..."]:
+                return None
+
+    # For content that passes filters, limit length to prevent token waste in logs
+    if len(stripped) > 500:
+        return stripped[:500] + "..."
+
+    return stripped
+
+
 class UsageTracker:
     """
     Track actual API usage for analytics and cost optimization.
@@ -306,9 +357,9 @@ class UsageTracker:
             total_tokens = input_tokens + output_tokens + thinking_tokens
             tokens_per_second = output_tokens / (duration_ms / 1000) if duration_ms > 0 and output_tokens > 0 else 0.0
 
-            # Conditionally store content if enabled
-            req_content = request_content if self.log_full_content else None
-            resp_content = response_content if self.log_full_content else None
+            # Conditionally store content if enabled, with sanitization to prevent token waste
+            req_content = sanitize_content_for_logging(request_content) if self.log_full_content and request_content else None
+            resp_content = sanitize_content_for_logging(response_content) if self.log_full_content and response_content else None
 
             # Insert request
             cursor.execute("""

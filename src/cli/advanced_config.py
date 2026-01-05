@@ -229,6 +229,86 @@ def configure_api_keys():
             input("\nPress Enter to continue...")
 
 
+def configure_analytics():
+    """Configure Analytics & Usage Tracking settings."""
+    while True:
+        console.clear()
+        console.print(Panel(
+            "[bold magenta]📈 Analytics Configuration[/]\n"
+            "[dim]Usage tracking and data collection settings[/]",
+            border_style="magenta"
+        ))
+
+        # Current values
+        track_usage = os.getenv("TRACK_USAGE", "false")
+        log_content = os.getenv("LOG_FULL_CONTENT", "false")
+        db_path = os.getenv("USAGE_DB_PATH", "usage_tracking.db")
+
+        console.print(f"\n[bold yellow]Current Settings:[/]")
+        console.print(f"  1. Track Usage:      [cyan]{track_usage}[/]")
+        console.print(f"  2. Log Full Content: [cyan]{log_content}[/] (WARNING: stores request/response data)")
+        console.print(f"  3. Database Path:    [cyan]{db_path}[/]")
+
+        console.print("\n[bold cyan]Options:[/]")
+        console.print("  1-3 - Edit setting")
+        console.print("  [4] Launch Analytics Viewer")
+        console.print("  [5] Export Data")
+        console.print("  [6] Reset/Clear Analytics Data")
+        console.print("  [0] Back")
+
+        choice = Prompt.ask("\nSelect option", choices=["1", "2", "3", "4", "5", "6", "0"], default="0")
+        updates = {}
+
+        if choice == "0":
+            return
+        elif choice == "1":
+            new_val = "true" if track_usage.lower() != "true" else "false"
+            updates["TRACK_USAGE"] = new_val
+        elif choice == "2":
+            new_val = "true" if log_content.lower() != "true" else "false"
+            updates["LOG_FULL_CONTENT"] = new_val
+        elif choice == "3":
+            updates["USAGE_DB_PATH"] = Prompt.ask("Enter database path", default="usage_tracking.db")
+        elif choice == "4":
+            # Launch analytics viewer
+            console.clear()
+            console.print("[bold cyan]Launching Analytics Viewer...[/bold cyan]\n")
+            try:
+                from src.cli.analytics import main as analytics_main
+                analytics_main()
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+                input("\nPress Enter to continue...")
+            continue
+        elif choice == "5":
+            # Export
+            from src.cli.analytics import export_to_csv
+            export_to_csv()
+            continue
+        elif choice == "6":
+            if Confirm.ask("[red]Delete all analytics data? This cannot be undone![/red]"):
+                try:
+                    import sqlite3
+                    db_path_resolved = os.getenv("USAGE_DB_PATH", "usage_tracking.db")
+                    if os.path.exists(db_path_resolved):
+                        os.remove(db_path_resolved)
+                        console.print("\n[green]✓ Analytics database deleted.[/green]")
+                        console.print("[yellow]Note: Tracking must be re-enabled to create new data.[/yellow]")
+                    else:
+                        console.print("\n[dim]No database file found to delete.[/dim]")
+                except Exception as e:
+                    console.print(f"\n[red]Error deleting database: {e}[/red]")
+                input("\nPress Enter to continue...")
+            continue
+
+        if updates:
+            update_env_file(updates)
+            for k, v in updates.items():
+                if v is None: os.environ.pop(k, None)
+                else: os.environ[k] = v
+            input("\nPress Enter to continue...")
+
+
 def configure_hybrid_mode():
     """Configure Hybrid Mode (per-model routing)."""
     while True:
@@ -238,7 +318,7 @@ def configure_hybrid_mode():
             "[dim]Route different model tiers to different providers[/]",
             border_style="red"
         ))
-        
+
         # Current values
         big_enabled = os.getenv("ENABLE_BIG_ENDPOINT", "false")
         big_endpoint = os.getenv("BIG_ENDPOINT", "not set")
@@ -246,22 +326,22 @@ def configure_hybrid_mode():
         middle_endpoint = os.getenv("MIDDLE_ENDPOINT", "not set")
         small_enabled = os.getenv("ENABLE_SMALL_ENDPOINT", "false")
         small_endpoint = os.getenv("SMALL_ENDPOINT", "not set")
-        
+
         console.print(f"\n[bold yellow]Current Settings:[/]")
         console.print(f"  [bold]BIG[/]    Enabled: [cyan]{big_enabled}[/]  Endpoint: [cyan]{big_endpoint}[/]")
         console.print(f"  [bold]MIDDLE[/] Enabled: [cyan]{middle_enabled}[/]  Endpoint: [cyan]{middle_endpoint}[/]")
         console.print(f"  [bold]SMALL[/]  Enabled: [cyan]{small_enabled}[/]  Endpoint: [cyan]{small_endpoint}[/]")
-        
+
         console.print("\n[bold cyan]Options:[/]")
         console.print("  [1] Configure BIG endpoint")
         console.print("  [2] Configure MIDDLE endpoint")
         console.print("  [3] Configure SMALL endpoint")
         console.print("  [4] Disable all hybrid routing")
         console.print("  [0] Back")
-        
+
         choice = Prompt.ask("\nSelect option", choices=["1", "2", "3", "4", "0"], default="0")
         updates = {}
-        
+
         if choice == "0":
             return
         elif choice in ["1", "2", "3"]:
@@ -442,10 +522,11 @@ def main():
         console.print("  [6] 📝 Custom Prompts        [dim](System prompt overrides)[/]")
         console.print("  [7] 💬 Crosstalk             [dim](Model-to-model chat)[/]")
         console.print("  [8] 🚩 Feature Flags         [dim](Toggles & Options)[/]")
+        console.print("  [9] 📈 Analytics Settings    [dim](Usage tracking config)[/]")
         console.print("  [0] 🔙 Back to Main Menu")
-        
-        choice = Prompt.ask("\nSelect category", choices=["1", "2", "3", "4", "5", "6", "7", "8", "0"], default="0")
-        
+
+        choice = Prompt.ask("\nSelect category", choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"], default="0")
+
         if choice == "0":
             return
         elif choice == "1":
@@ -464,6 +545,8 @@ def main():
             configure_crosstalk()
         elif choice == "8":
             configure_features()
+        elif choice == "9":
+            configure_analytics()
 
 if __name__ == "__main__":
     try:

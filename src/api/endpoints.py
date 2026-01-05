@@ -176,10 +176,12 @@ async def log_request_body(request: Request):
         # Log body (truncated if too large)
         try:
             body_str = body.decode('utf-8')
-            if len(body_str) > 50000:
-                traffic_logger.info(f"Body (Truncated): {body_str[:1000]}... [Total {len(body_str)} bytes]")
+            # Filter out (no content) placeholders to reduce token waste in debug logs
+            body_str_filtered = body_str.replace("(no content)", "[empty]").replace("no content", "[empty]")
+            if len(body_str_filtered) > 50000:
+                traffic_logger.info(f"Body (Truncated): {body_str_filtered[:1000]}... [Total {len(body_str_filtered)} bytes]")
             else:
-                traffic_logger.info(f"Body: {body_str}")
+                traffic_logger.info(f"Body: {body_str_filtered}")
         except:
             traffic_logger.info(f"Body (Binary): {len(body)} bytes")
             

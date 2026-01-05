@@ -377,133 +377,24 @@ def streaming_transform_partial(
     partial_args: str, tool_name: str, provider: str = "gemini"
 ) -> str:
     """
-    Apply provider-aware string transformations for streaming tool call arguments.
+    Return partial args as-is to prevent content corruption.
 
-    This is the streaming equivalent of normalize_tool_arguments - it operates on
-    partial JSON strings rather than parsed objects.
+    CRITICAL BUG FIX: The original implementation used naive string replacement
+    (e.g., transformed.replace('"text":', '"content":')) which could corrupt
+    user-generated content that happens to contain these patterns.
 
-    Args:
-        partial_args: Partial JSON string from streaming response
-        tool_name: Name of the tool being called
-        provider: Provider type (gemini, openrouter, openai, etc.)
+    Example corruption scenario:
+    - User asks: "Write a script that creates a file with {'text': 'hello'}"
+    - Old code would replace "text" in the file content itself
+    - Result: Corrupted file with {'content': 'hello'} instead
+
+    The proper normalization happens in normalize_tool_arguments() which parses
+    the complete JSON and only transforms keys, not content.
 
     Returns:
-        Transformed partial JSON string
+        Unmodified partial_args string
     """
-    from src.services.providers.provider_detector import (
-        NormalizationLevel,
-        get_normalization_level,
-    )
-
-    normalization_level = get_normalization_level(provider)
-
-    # Skip transformation entirely for providers that don't need it
-    if normalization_level == NormalizationLevel.NONE.value:
-        return partial_args
-
-    tool_name_lower = tool_name.lower() if tool_name else ""
-    transformed = partial_args
-
-    # Light transformation for OpenRouter/openai_compatible
-    if normalization_level == NormalizationLevel.LIGHT.value:
-        if tool_name_lower in ["bash", "repl"]:
-            transformed = transformed.replace('"prompt":', '"command":')
-        elif tool_name_lower == "read":
-            transformed = transformed.replace('"path":', '"file_path":')
-        return transformed
-
-    # Full transformation for Gemini (FULL level)
-    # TIER 1: Core File Operations
-    if tool_name_lower in ["bash", "repl"]:
-        transformed = transformed.replace('"prompt":', '"command":')
-        transformed = transformed.replace('"code":', '"command":')
-
-    elif tool_name_lower == "read":
-        transformed = transformed.replace('"path":', '"file_path":')
-        transformed = transformed.replace('"filename":', '"file_path":')
-        transformed = transformed.replace('"file":', '"file_path":')
-
-    elif tool_name_lower == "write":
-        transformed = transformed.replace('"path":', '"file_path":')
-        transformed = transformed.replace('"filePath":', '"file_path":')
-        transformed = transformed.replace('"filename":', '"file_path":')
-        transformed = transformed.replace('"file":', '"file_path":')
-        transformed = transformed.replace('"text":', '"content":')
-        transformed = transformed.replace('"contents":', '"content":')
-        transformed = transformed.replace('"data":', '"content":')
-
-    elif tool_name_lower == "edit":
-        transformed = transformed.replace('"path":', '"file_path":')
-        transformed = transformed.replace('"file":', '"file_path":')
-        transformed = transformed.replace('"original":', '"old_text":')
-        transformed = transformed.replace('"before":', '"old_text":')
-        transformed = transformed.replace('"replacement":', '"new_text":')
-        transformed = transformed.replace('"after":', '"new_text":')
-
-    elif tool_name_lower == "multiedit":
-        transformed = transformed.replace('"path":', '"file_path":')
-        transformed = transformed.replace('"file":', '"file_path":')
-        transformed = transformed.replace('"changes":', '"edits":')
-        transformed = transformed.replace('"modifications":', '"edits":')
-
-    # TIER 2: Search & Navigation
-    elif tool_name_lower == "glob":
-        transformed = transformed.replace('"glob":', '"pattern":')
-        transformed = transformed.replace('"glob_pattern":', '"pattern":')
-
-    elif tool_name_lower == "grep":
-        transformed = transformed.replace('"query":', '"pattern":')
-        transformed = transformed.replace('"search":', '"pattern":')
-        transformed = transformed.replace('"regex":', '"pattern":')
-        transformed = transformed.replace('"directory":', '"path":')
-        transformed = transformed.replace('"dir":', '"path":')
-
-    elif tool_name_lower == "ls":
-        transformed = transformed.replace('"directory":', '"path":')
-        transformed = transformed.replace('"dir":', '"path":')
-        transformed = transformed.replace('"folder":', '"path":')
-
-    # TIER 3: Task & Agent
-    elif tool_name_lower == "task":
-        transformed = transformed.replace('"agent_type":', '"subagent_type":')
-        transformed = transformed.replace('"type":', '"subagent_type":')
-
-    elif tool_name_lower == "agentdispatch":
-        transformed = transformed.replace('"id":', '"agent_id":')
-        transformed = transformed.replace('"prompt":', '"task":')
-        transformed = transformed.replace('"instruction":', '"task":')
-
-    # TIER 4: Todo Management
-    elif tool_name_lower == "todowrite":
-        transformed = transformed.replace('"tasks":', '"todos":')
-        transformed = transformed.replace('"items":', '"todos":')
-
-    # TIER 5: Web & Browser
-    elif tool_name_lower == "webfetch":
-        transformed = transformed.replace('"link":', '"url":')
-        transformed = transformed.replace('"href":', '"url":')
-        transformed = transformed.replace('"address":', '"url":')
-
-    elif tool_name_lower == "websearch":
-        transformed = transformed.replace('"search":', '"query":')
-        transformed = transformed.replace('"q":', '"query":')
-        transformed = transformed.replace('"term":', '"query":')
-
-    elif tool_name_lower == "browser":
-        transformed = transformed.replace('"link":', '"url":')
-        transformed = transformed.replace('"address":', '"url":')
-        transformed = transformed.replace('"command":', '"action":')
-        transformed = transformed.replace('"operation":', '"action":')
-
-    # TIER 6: Notebook Operations
-    elif tool_name_lower in ["notebookedit", "notebookread"]:
-        transformed = transformed.replace('"path":', '"notebook_path":')
-        transformed = transformed.replace('"file":', '"notebook_path":')
-        if tool_name_lower == "notebookedit":
-            transformed = transformed.replace('"cell":', '"cell_id":')
-            transformed = transformed.replace('"index":', '"cell_id":')
-
-    return transformed
+    return partial_args
 
 
 def convert_openai_to_claude_response(
@@ -771,6 +662,33 @@ async def convert_openai_streaming_to_claude(
                             final_stop_reason = Constants.STOP_MAX_TOKENS
                         elif finish_reason in ["tool_calls", "function_call"]:
                             final_stop_reason = Constants.STOP_TOOL_USE
+
+                            # Process completed tool calls - normalize accumulated arguments
+                            # This ensures arguments are properly transformed even though streaming uses raw partials
+                            if DEBUG_SSE:
+                                sse_logger.info(f"Processing {len(current_tool_calls)} completed tool calls")
+
+                            for tc_index, tool_call in current_tool_calls.items():
+                                if tool_call["started"] and tool_call["name"]:
+                                    try:
+                                        # Parse the accumulated args_buffer
+                                        if tool_call["args_buffer"]:
+                                            complete_args = json.loads(tool_call["args_buffer"])
+                                            normalized_args = normalize_tool_arguments(
+                                                tool_call["name"], complete_args, provider
+                                            )
+                                            if DEBUG_SSE:
+                                                sse_logger.info(
+                                                    f"Normalized args for '{tool_call['name']}': {normalized_args}"
+                                                )
+                                            # Store normalized args back in the tool call for potential use
+                                            tool_call["normalized_args"] = normalized_args
+                                    except json.JSONDecodeError as e:
+                                        if DEBUG_SSE:
+                                            sse_logger.warning(
+                                                f"Failed to parse args_buffer for '{tool_call['name']}': {e}"
+                                            )
+
                         elif finish_reason == "stop":
                             final_stop_reason = Constants.STOP_END_TURN
                         else:
@@ -926,7 +844,8 @@ async def convert_openai_streaming_to_claude_with_cancellation(
 
                     # Handle standard text content
                     text_content = delta.get("content")
-                    if text_content is not None:
+                    # Only process if content is non-empty (skip null/empty during tool calls)
+                    if text_content:
                         # Switch to text block if not already
                         if current_block_type != "text":
                             if current_block_index >= 0:
@@ -937,9 +856,11 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                             yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"
 
                         yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': text_content}}, ensure_ascii=False)}\n\n"
-                        logger.debug(
-                            f"STREAM: text delta idx={current_block_index}, text='{text_content[:30] if len(text_content) > 30 else text_content}'"
-                        )
+                        # Only log non-empty text content to avoid spam
+                        if text_content.strip():
+                            logger.debug(
+                                f"STREAM: text delta idx={current_block_index}, text='{text_content[:30]}'"
+                            )
 
                     # Handle tool call deltas - ID-BASED DEDUPLICATION LOGIC
                     if "tool_calls" in delta and delta["tool_calls"]:
@@ -1131,6 +1052,33 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                             final_stop_reason = Constants.STOP_MAX_TOKENS
                         elif finish_reason in ["tool_calls", "function_call"]:
                             final_stop_reason = Constants.STOP_TOOL_USE
+
+                            # Process completed tool calls - normalize accumulated arguments
+                            # This ensures arguments are properly transformed even though streaming uses raw partials
+                            if DEBUG_SSE:
+                                sse_logger.info(f"Processing {len(current_tool_calls)} completed tool calls (cancel version)")
+
+                            for tc_index, tool_call in current_tool_calls.items():
+                                if tool_call.get("name"):
+                                    try:
+                                        # Parse the accumulated args_buffer
+                                        if tool_call["args_buffer"]:
+                                            complete_args = json.loads(tool_call["args_buffer"])
+                                            normalized_args = normalize_tool_arguments(
+                                                tool_call["name"], complete_args, provider
+                                            )
+                                            if DEBUG_SSE:
+                                                sse_logger.info(
+                                                    f"Normalized args for '{tool_call['name']}': {normalized_args}"
+                                                )
+                                            # Store normalized args back in the tool call
+                                            tool_call["normalized_args"] = normalized_args
+                                    except json.JSONDecodeError as e:
+                                        if DEBUG_SSE:
+                                            sse_logger.warning(
+                                                f"Failed to parse args_buffer for '{tool_call['name']}': {e}"
+                                            )
+
                         elif finish_reason == "stop":
                             final_stop_reason = Constants.STOP_END_TURN
                         else:

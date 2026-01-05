@@ -66,26 +66,31 @@
 
     // Formatting helpers
     function formatCurrency(value: number): string {
+        if (value === undefined || value === null || isNaN(value)) return "$0.00";
         if (value === 0) return "$0.00";
         if (value < 0.01) return `$${value.toFixed(5)}`;
         return `$${value.toFixed(4)}`;
     }
 
     function formatNumber(value: number): string {
+        if (value === undefined || value === null || isNaN(value)) return "0";
         return value.toLocaleString();
     }
 
     function formatPercent(value: number): string {
+        if (value === undefined || value === null || isNaN(value)) return "0.0%";
         return `${value.toFixed(1)}%`;
     }
 
     function formatTokens(value: number): string {
+        if (value === undefined || value === null || isNaN(value)) return "0";
         if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
         if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
         return value.toString();
     }
 
     function formatTime(value: number): string {
+        if (value === undefined || value === null || isNaN(value)) return "0ms";
         if (value >= 1000) return `${(value / 1000).toFixed(1)}s`;
         return `${value.toFixed(0)}ms`;
     }
@@ -173,6 +178,7 @@
 
     // Download export
     async function downloadExport(format: 'csv' | 'json') {
+        console.log(`🔥🔥🔥 downloadExport CALLED - format: ${format}, timeRange: ${timeRange}`);
         try {
             const res = await fetch(`/api/analytics/export?days=${timeRange}&format=${format}`);
             if (res.ok) {
@@ -183,14 +189,34 @@
                 a.download = `analytics_export_${timeRange}days.${format}`;
                 a.click();
                 window.URL.revokeObjectURL(url);
+                console.log(`✅ Export ${format} downloaded successfully`);
+            } else {
+                console.log(`❌ Export ${format} failed - status:`, res.status);
             }
         } catch (e) {
-            console.error("Download failed:", e);
+            console.error("🔥🔥🔥 Download failed:", e);
         }
+    }
+
+    // Test function for AnalyticsDashboard buttons
+    function testAnalyticsButton() {
+        console.log("🐛🐛🐛 Analytics TEST BUTTON - onclick works in AnalyticsDashboard!");
+        alert("Analytics test button works! Check console.");
     }
 </script>
 
 <div class="space-y-6">
+    <!-- 🧪 Analytics Test Button -->
+    <div class="p-3 border-2 border-purple-500/50 bg-purple-500/10 rounded-lg">
+        <p class="text-xs text-purple-200 mb-1">🧪 Analytics Test:</p>
+        <button
+            onclick={testAnalyticsButton}
+            class="px-3 py-1 bg-purple-500 text-white font-bold rounded text-sm hover:bg-purple-400"
+        >
+            Test Analytics Button
+        </button>
+    </div>
+
     <!-- Controls -->
     <div class="flex items-center justify-between flex-wrap gap-3">
         <div class="flex items-center gap-2">
@@ -247,7 +273,7 @@
                 </CardHeader>
                 <CardContent>
                     <div class="text-2xl font-bold">
-                        {formatNumber(analyticsData.summary.total_requests || 0)}
+                        {formatNumber(analyticsData.summary?.total_requests || 0)}
                     </div>
                 </CardContent>
             </Card>
@@ -260,7 +286,7 @@
                 </CardHeader>
                 <CardContent>
                     <div class="text-2xl font-bold">
-                        {formatTokens(analyticsData.summary.total_tokens || 0)}
+                        {formatTokens(analyticsData.summary?.total_tokens || 0)}
                     </div>
                 </CardContent>
             </Card>
@@ -273,10 +299,10 @@
                 </CardHeader>
                 <CardContent>
                     <div class="text-2xl font-bold text-emerald-400">
-                        {formatCurrency(analyticsData.summary.total_cost || 0)}
+                        {formatCurrency(analyticsData.summary?.total_cost || 0)}
                     </div>
                     <div class="text-xs text-emerald-500/80 mt-1">
-                        Saved: {formatCurrency(analyticsData.summary.total_savings || 0)}
+                        Saved: {formatCurrency(analyticsData.summary?.total_savings || 0)}
                     </div>
                 </CardContent>
             </Card>
@@ -289,7 +315,7 @@
                 </CardHeader>
                 <CardContent>
                     <div class="text-2xl font-bold">
-                        {formatTime(analyticsData.summary.avg_latency_ms || 0)}
+                        {formatTime(analyticsData.summary?.avg_latency_ms || 0)}
                     </div>
                 </CardContent>
             </Card>
@@ -339,31 +365,31 @@
                                         )}
                                     </div>
                                     <div class="text-center text-xs text-muted-foreground">
-                                        Total: {formatCurrency(analyticsData.summary.total_cost || 0)}
+                                        Total: {formatCurrency(analyticsData.summary?.total_cost || 0)}
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Token Breakdown Chart -->
-                            {#if analyticsData.time_series.token_breakdown}
+                            {#if analyticsData.time_series?.token_breakdown}
                                 <div class="space-y-2 mt-4">
                                     <div class="text-sm font-medium text-muted-foreground">Token Breakdown</div>
                                     <div class="grid grid-cols-3 gap-2 text-xs">
                                         <div class="text-center">
                                             <div class="h-20 border border-border rounded bg-blue-500/20 flex items-end justify-center pb-1">
-                                                {analyticsData.time_series.token_breakdown.input.reduce((a,b)=>a+b,0)}
+                                                {analyticsData.time_series.token_breakdown.input?.reduce((a: number, b: number)=>(a||0)+(b||0),0) || 0}
                                             </div>
                                             <div class="mt-1">Input</div>
                                         </div>
                                         <div class="text-center">
                                             <div class="h-20 border border-border rounded bg-purple-500/20 flex items-end justify-center pb-1">
-                                                {analyticsData.time_series.token_breakdown.output.reduce((a,b)=>a+b,0)}
+                                                {analyticsData.time_series.token_breakdown.output?.reduce((a: number, b: number)=>(a||0)+(b||0),0) || 0}
                                             </div>
                                             <div class="mt-1">Output</div>
                                         </div>
                                         <div class="text-center">
                                             <div class="h-20 border border-border rounded bg-orange-500/20 flex items-end justify-center pb-1">
-                                                {analyticsData.time_series.token_breakdown.thinking.reduce((a,b)=>a+b,0)}
+                                                {analyticsData.time_series.token_breakdown.thinking?.reduce((a: number, b: number)=>(a||0)+(b||0),0) || 0}
                                             </div>
                                             <div class="mt-1">Thinking</div>
                                         </div>
@@ -385,23 +411,25 @@
                         <CardDescription>Detailed token type breakdown</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {#if analyticsData.token_breakdown && Object.keys(analyticsData.token_breakdown.breakdown).length > 0}
+                        {#if analyticsData.token_breakdown && Object.keys(analyticsData.token_breakdown.breakdown || {}).length > 0}
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {#each ['prompt', 'completion', 'reasoning', 'cached', 'tool_use', 'audio'] as type}
                                     {#if analyticsData.token_breakdown.breakdown[type]?.absolute > 0}
                                         <div class="border border-border rounded-lg p-3">
                                             <div class="flex items-center justify-between mb-2">
                                                 <span class="text-sm font-medium capitalize">{type.replace('_', ' ')}</span>
-                                                <span class="text-sm font-bold">{analyticsData.token_breakdown.breakdown[type].percentage}%</span>
+                                                <span class="text-sm font-bold">
+                                                    {analyticsData.token_breakdown.breakdown[type]?.percentage || 0}%
+                                                </span>
                                             </div>
                                             <div class="w-full bg-accent/30 rounded-full h-2">
                                                 <div
                                                     class="h-2 rounded-full bg-primary transition-all"
-                                                    style="width: {analyticsData.token_breakdown.breakdown[type].percentage}%"
+                                                    style="width: {analyticsData.token_breakdown.breakdown[type]?.percentage || 0}%"
                                                 ></div>
                                             </div>
                                             <div class="text-xs text-muted-foreground mt-1">
-                                                {formatNumber(analyticsData.token_breakdown.breakdown[type].absolute)} tokens
+                                                {formatNumber(analyticsData.token_breakdown.breakdown[type]?.absolute)} tokens
                                             </div>
                                         </div>
                                     {/if}
@@ -440,15 +468,15 @@
                                         {#each analyticsData.models.slice(0, 10) as model}
                                             <tr class="border-b border-border/50 hover:bg-accent/50">
                                                 <td class="py-2 px-2 font-mono text-xs">
-                                                    {model.model.split('/').pop() || model.model}
-                                                    <div class="text-[10px] text-muted-foreground">{model.provider}</div>
+                                                    {model.model ? (model.model.split('/').pop() || model.model) : 'Unknown'}
+                                                    <div class="text-[10px] text-muted-foreground">{model.provider || 'N/A'}</div>
                                                 </td>
-                                                <td class="py-2 px-2 text-right">{formatNumber(model.total_requests)}</td>
-                                                <td class="py-2 px-2 text-right">{formatNumber(model.avg_tokens_per_request)}</td>
-                                                <td class="py-2 px-2 text-right ${model.avg_cost_per_1k_tokens > 5 ? 'text-amber-400' : 'text-emerald-400'}">
-                                                    ${model.avg_cost_per_1k_tokens.toFixed(2)}
+                                                <td class="py-2 px-2 text-right">{formatNumber(model.total_requests || 0)}</td>
+                                                <td class="py-2 px-2 text-right">{formatNumber(model.avg_tokens_per_request || 0)}</td>
+                                                <td class="py-2 px-2 text-right ${(model.avg_cost_per_1k_tokens || 0) > 5 ? 'text-amber-400' : 'text-emerald-400'}">
+                                                    ${model.avg_cost_per_1k_tokens ? model.avg_cost_per_1k_tokens.toFixed(2) : '0.00'}
                                                 </td>
-                                                <td class="py-2 px-2 text-right">{formatTime(model.avg_duration_ms)}</td>
+                                                <td class="py-2 px-2 text-right">{formatTime(model.avg_duration_ms || 0)}</td>
                                             </tr>
                                         {/each}
                                     </tbody>
@@ -477,9 +505,13 @@
                                     <div class="border border-border rounded-lg p-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
                                         <div class="flex-1">
                                             <div class="flex items-center gap-2 text-sm">
-                                                <span class="font-mono">{saving.original_model.split('/').pop()}</span>
+                                                <span class="font-mono">
+                                                    {saving.original_model ? (saving.original_model.split('/').pop() || saving.original_model) : 'Unknown'}
+                                                </span>
                                                 <span class="text-muted-foreground">→</span>
-                                                <span class="font-mono font-bold text-emerald-400">{saving.routed_model.split('/').pop()}</span>
+                                                <span class="font-mono font-bold text-emerald-400">
+                                                    {saving.routed_model ? (saving.routed_model.split('/').pop() || saving.routed_model) : 'Unknown'}
+                                                </span>
                                             </div>
                                             <div class="text-xs text-muted-foreground mt-1">
                                                 {formatNumber(saving.request_count)} requests
@@ -499,7 +531,7 @@
                             <div class="mt-4 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
                                 <div class="flex items-center gap-2 text-emerald-400 font-bold mb-1">
                                     <CheckCircle2 class="w-4 h-4" />
-                                    Total Savings: {formatCurrency(analyticsData.summary.total_savings || 0)}
+                                    Total Savings: {formatCurrency(analyticsData.summary?.total_savings || 0)}
                                 </div>
                                 <div class="text-xs text-emerald-500/80">
                                     Smart routing has saved you significant costs this period.
@@ -526,13 +558,13 @@
                                     <div class="border border-border rounded-lg p-3">
                                         <div class="flex items-center justify-between mb-2">
                                             <span class="font-medium">{provider.provider}</span>
-                                            <span class="text-emerald-400 font-bold">{formatCurrency(provider.total_cost)}</span>
+                                            <span class="text-emerald-400 font-bold">{formatCurrency(provider.total_cost || 0)}</span>
                                         </div>
                                         <div class="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                                            <div>Reqs: {formatNumber(provider.total_requests)}</div>
-                                            <div>Tokens: {formatTokens(provider.total_tokens)}</div>
-                                            <div>Latency: {formatTime(provider.avg_duration_ms)}</div>
-                                            <div>Tools: {formatNumber(provider.tool_requests)}</div>
+                                            <div>Reqs: {formatNumber(provider.total_requests || 0)}</div>
+                                            <div>Tokens: {formatTokens(provider.total_tokens || 0)}</div>
+                                            <div>Latency: {formatTime(provider.avg_duration_ms || 0)}</div>
+                                            <div>Tools: {formatNumber(provider.tool_requests || 0)}</div>
                                         </div>
                                     </div>
                                 {/each}
@@ -598,16 +630,5 @@
 </div>
 
 <style>
-    .model-tier {
-        @apply text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border;
-    }
-    .model-tier.big {
-        @apply border-amber-500/30 text-amber-400 bg-amber-500/10;
-    }
-    .model-tier.middle {
-        @apply border-blue-500/30 text-blue-400 bg-blue-500/10;
-    }
-    .model-tier.small {
-        @apply border-emerald-500/30 text-emerald-400 bg-emerald-500/10;
-    }
+    /* Note: .model-tier CSS classes are defined in app.css and used in +page.svelte */
 </style>

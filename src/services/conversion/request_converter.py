@@ -336,7 +336,11 @@ def convert_claude_to_openai(
             role = msg.get("role", "?")
             content = str(msg.get("content", ""))[:80]
             tool_calls = "YES" if msg.get("tool_calls") else "NO"
-            logger.debug(f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content={content}...")
+            # Skip logging if content is empty or just placeholders to avoid token waste
+            if content.strip() and "(no content)" not in content.lower():
+                logger.debug(f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content={content}...")
+            else:
+                logger.debug(f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content=[empty/placeholder]")
 
     # Newer OpenAI models models (o1, o3, o4, gpt-5) require max_completion_tokens instead of max_tokens
     if is_newer_model:

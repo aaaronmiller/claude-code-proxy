@@ -42,27 +42,6 @@
         }
     });
 
-    // Debug: Global click listener for troubleshooting
-    $effect(() => {
-        const handler = (e: Event) => {
-            const target = e.target as HTMLElement;
-            if (target.tagName === 'BUTTON' || target.closest('button')) {
-                const btn = target.tagName === 'BUTTON' ? target : target.closest('button');
-                console.log('[UI DEBUG] Button clicked:', {
-                    text: btn?.textContent?.trim(),
-                    classes: btn?.className,
-                    id: btn?.id,
-                    type: btn?.getAttribute('type'),
-                    hasClick: btn?.hasAttribute('onclick'),
-                    hasClickHandler: !!(btn as any)?.onclick,
-                    eventTarget: target.tagName
-                });
-            }
-        };
-
-        document.addEventListener('click', handler, { capture: true });
-        return () => document.removeEventListener('click', handler, { capture: true });
-    });
 
     // Type-safe event helpers
     function getChecked(e: Event): boolean {
@@ -79,6 +58,102 @@
     function setActiveTab(tabId: string) {
         console.log("[setActiveTab] Setting to:", tabId);
         activeTab = tabId;
+    }
+
+    // Helper to get tab button class - extracted to avoid template literal issues
+    function getTabButtonClass(tabId: string): string {
+        return `w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${activeTab === tabId ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`;
+    }
+
+    // Direct onclick handlers to avoid arrow function issues in Svelte 5
+    function goDashboardTab() {
+        console.log("🔥🔥🔥 goDashboardTab CALLED");
+        activeTab = "dashboard";
+    }
+
+    function goAnalyticsTab() {
+        console.log("🔥🔥🔥 goAnalyticsTab CALLED - navigate to analytics tab");
+        activeTab = "analytics";
+    }
+
+    function goModelsTab() {
+        console.log("🔥🔥🔥 goModelsTab CALLED");
+        activeTab = "models";
+    }
+
+    function goCascadeTab() {
+        console.log("🔥🔥🔥 goCascadeTab CALLED");
+        activeTab = "cascade";
+    }
+
+    function goRoutingTab() {
+        console.log("🔥🔥🔥 goRoutingTab CALLED");
+        activeTab = "routing";
+    }
+
+    function goCrosstalkTab() {
+        console.log("🔥🔥🔥 goCrosstalkTab CALLED");
+        activeTab = "crosstalk";
+    }
+
+    function goTerminalTab() {
+        console.log("🔥🔥🔥 goTerminalTab CALLED");
+        activeTab = "terminal";
+    }
+
+    function goPlaygroundTab() {
+        console.log("🔥🔥🔥 goPlaygroundTab CALLED");
+        activeTab = "playground";
+    }
+
+    function goLogsTab() {
+        console.log("🔥🔥🔥 goLogsTab CALLED");
+        activeTab = "logs";
+    }
+
+    function goDocsTab() {
+        console.log("🔥🔥🔥 goDocsTab CALLED");
+        activeTab = "docs";
+    }
+
+    // Map tab IDs to their handler functions (to avoid arrow function issues in loops)
+    function getTabHandler(tabId: string) {
+        const handlers: Record<string, () => void> = {
+            "dashboard": goDashboardTab,
+            "analytics": goAnalyticsTab,
+            "models": goModelsTab,
+            "cascade": goCascadeTab,
+            "routing": goRoutingTab,
+            "crosstalk": goCrosstalkTab,
+            "terminal": goTerminalTab,
+            "playground": goPlaygroundTab,
+            "logs": goLogsTab,
+            "docs": goDocsTab,
+        };
+        return handlers[tabId] || goDashboardTab;
+    }
+
+    function handleRefreshClick() {
+        console.log("🔥🔥🔥 handleRefreshClick CALLED - refreshing data");
+        loadConfig();
+        loadStats();
+        loadAnalyticsSummary();
+    }
+
+    function handleSelectModel(tier: "big" | "middle" | "small", modelId: string) {
+        console.log(`🔥🔥🔥 handleSelectModel CALLED - model: ${modelId}, tier: ${tier}`);
+        selectModel(tier, modelId);
+    }
+
+    function closeModelDropdown(tier: "big" | "middle" | "small") {
+        console.log(`🔥🔥🔥 closeModelDropdown CALLED - tier: ${tier}`);
+        modelFilters[tier].showDropdown = false;
+    }
+
+    // Test function for basic button functionality
+    function testButton() {
+        console.log("🐛🐛🐛 TEST BUTTON CLICKED - if you see this, onclick handlers work!");
+        alert("Button click detected! See console for details.");
     }
 
     let config = $state<Record<string, any>>({
@@ -817,8 +892,8 @@
             {#each tabs as tab}
                 <button
                     type="button"
-                    onclick={() => setActiveTab(tab.id)}
-                    class={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${activeTab === tab.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+                    onclick={getTabHandler(tab.id)}
+                    class={getTabButtonClass(tab.id)}
                 >
                     <tab.icon class="w-4 h-4" />
                     {tab.label}
@@ -852,11 +927,7 @@
             <h2 class="font-semibold capitalize">{activeTab}</h2>
             <div class="flex items-center gap-2">
                 <button
-                    onclick={() => {
-                        loadConfig();
-                        loadStats();
-                        loadAnalyticsSummary();
-                    }}
+                    onclick={handleRefreshClick}
                     class="p-2 rounded-lg hover:bg-accent transition-colors"
                     title="Refresh"
                 >
@@ -877,6 +948,34 @@
 
         <!-- Content Area -->
         <main class="flex-1 overflow-auto p-6">
+            <!-- 🧪 TEST BUTTON - Click me first to see if onclick works -->
+            <div class="mb-6 p-4 border-2 border-yellow-500/50 bg-yellow-500/10 rounded-lg">
+                <p class="text-sm text-yellow-200 mb-2">🧪 Button Test Area:</p>
+                <div class="flex gap-2">
+                    <button
+                        onclick={testButton}
+                        class="px-4 py-2 bg-yellow-500 text-black font-bold rounded hover:bg-yellow-400 transition-colors"
+                    >
+                        TEST BUTTON - Click Me!
+                    </button>
+                    <button
+                        onclick={() => {
+                            console.log("Arrow function test");
+                            alert("Arrow function works!");
+                        }}
+                        class="px-4 py-2 bg-blue-500 text-white font-bold rounded hover:bg-blue-400 transition-colors"
+                    >
+                        Arrow Function Test
+                    </button>
+                    <button
+                        onclick={goDashboardTab}
+                        class="px-4 py-2 bg-green-500 text-white font-bold rounded hover:bg-green-400 transition-colors"
+                    >
+                        Set Tab Dashboard
+                    </button>
+                </div>
+            </div>
+
             {#if activeTab === "dashboard"}
                 <!-- Stats Cards -->
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -892,7 +991,7 @@
                                     Requests
                                 </p>
                                 <p class="text-2xl font-bold text-foreground">
-                                    {stats.requests_today}
+                                    {stats.requests_today?.toLocaleString() || 0}
                                 </p>
                             </div>
                         </div>
@@ -909,7 +1008,7 @@
                                     Tokens
                                 </p>
                                 <p class="text-2xl font-bold text-foreground">
-                                    {stats.total_tokens.toLocaleString()}
+                                    {stats.total_tokens?.toLocaleString() || 0}
                                 </p>
                             </div>
                         </div>
@@ -926,7 +1025,7 @@
                                     Cost
                                 </p>
                                 <p class="text-2xl font-bold text-foreground">
-                                    ${stats.est_cost.toFixed(4)}
+                                    ${(stats.est_cost || 0).toFixed(4)}
                                 </p>
                             </div>
                         </div>
@@ -943,7 +1042,7 @@
                                     Latency
                                 </p>
                                 <p class="text-2xl font-bold text-foreground">
-                                    {stats.avg_latency}ms
+                                    {stats.avg_latency || 0}ms
                                 </p>
                             </div>
                         </div>
@@ -958,7 +1057,7 @@
                                 7-Day Analytics Overview
                             </h3>
                             <button
-                                onclick={() => activeTab = "analytics"}
+                                onclick={goAnalyticsTab}
                                 class="text-xs text-primary hover:underline flex items-center gap-1"
                             >
                                 View Full Analytics →
@@ -968,31 +1067,34 @@
                             <div class="rounded-xl border border-border bg-card/50 p-3">
                                 <div class="text-xs text-muted-foreground">Total Requests</div>
                                 <div class="text-lg font-bold">
-                                    {analyticsSummary.summary.total_requests?.toLocaleString() || 0}
+                                    {analyticsSummary.summary?.total_requests?.toLocaleString() || 0}
                                 </div>
                             </div>
                             <div class="rounded-xl border border-border bg-card/50 p-3">
                                 <div class="text-xs text-muted-foreground">Total Tokens</div>
                                 <div class="text-lg font-bold">
-                                    {#if analyticsSummary.summary.total_tokens > 1000000}
-                                        {(analyticsSummary.summary.total_tokens / 1000000).toFixed(1)}M
-                                    {:else if analyticsSummary.summary.total_tokens > 1000}
-                                        {(analyticsSummary.summary.total_tokens / 1000).toFixed(1)}K
+                                    {#if (analyticsSummary.summary?.total_tokens || 0) > 1000000}
+                                        {((analyticsSummary.summary?.total_tokens || 0) / 1000000).toFixed(1)}M
+                                    {:else if (analyticsSummary.summary?.total_tokens || 0) > 1000}
+                                        {((analyticsSummary.summary?.total_tokens || 0) / 1000).toFixed(1)}K
                                     {:else}
-                                        {analyticsSummary.summary.total_tokens}
+                                        {analyticsSummary.summary?.total_tokens || 0}
                                     {/if}
                                 </div>
                             </div>
                             <div class="rounded-xl border border-border bg-card/50 p-3">
                                 <div class="text-xs text-muted-foreground">Est. Cost</div>
                                 <div class="text-lg font-bold text-emerald-400">
-                                    ${analyticsSummary.summary.total_cost?.toFixed(4) || 0}
+                                    ${analyticsSummary.summary?.total_cost?.toFixed(4) || 0}
+                                </div>
+                                <div class="text-xs text-emerald-500/80 mt-1">
+                                    Saved: ${analyticsSummary.summary?.total_savings?.toFixed(4) || 0}
                                 </div>
                             </div>
                             <div class="rounded-xl border border-border bg-card/50 p-3">
                                 <div class="text-xs text-muted-foreground">Avg Latency</div>
                                 <div class="text-lg font-bold">
-                                    {analyticsSummary.summary.avg_latency_ms?.toFixed(0) || 0}ms
+                                    {analyticsSummary.summary?.avg_latency_ms?.toFixed(0) || 0}ms
                                 </div>
                             </div>
                         </div>
@@ -1007,11 +1109,15 @@
                                     {#each analyticsSummary.top_models.slice(0, 3) as model}
                                         <div class="px-4 py-2 flex items-center justify-between hover:bg-accent/30 transition-colors">
                                             <div class="flex items-center gap-2">
-                                                <span class="font-mono text-xs">{model.model.split('/').pop() || model.model}</span>
-                                                <span class="text-[10px] text-muted-foreground">{model.request_count} reqs</span>
+                                                <span class="font-mono text-xs">
+                                                    {model.model ? (model.model.split('/').pop() || model.model) : 'Unknown'}
+                                                </span>
+                                                <span class="text-[10px] text-muted-foreground">
+                                                    {model.request_count?.toLocaleString() || 0} reqs
+                                                </span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
-                                                {model.total_tokens.toLocaleString()} tokens
+                                                {model.total_tokens?.toLocaleString() || 0} tokens
                                             </div>
                                         </div>
                                     {/each}
@@ -1026,8 +1132,8 @@
                                 <div>
                                     <div class="text-sm font-medium text-blue-300">TOON Optimization Available</div>
                                     <div class="text-xs text-blue-200/80 mt-1">
-                                        You have {analyticsSummary.json_analysis.json_percentage}% JSON responses.
-                                        Estimated savings: {(analyticsSummary.json_analysis.estimated_toon_savings_bytes / 1024).toFixed(1)}KB
+                                        You have {analyticsSummary.json_analysis?.json_percentage || 0}% JSON responses.
+                                        Estimated savings: {((analyticsSummary.json_analysis?.estimated_toon_savings_bytes || 0) / 1024).toFixed(1)}KB
                                     </div>
                                 </div>
                             </div>
@@ -1044,7 +1150,7 @@
                             <span>Enable usage tracking to see detailed analytics and insights</span>
                         </div>
                         <button
-                            onclick={() => activeTab = "analytics"}
+                            onclick={goAnalyticsTab}
                             class="mt-2 text-xs text-primary hover:underline"
                         >
                             Learn more →
@@ -1247,11 +1353,7 @@
                                                     <button
                                                         type="button"
                                                         class="w-full px-3 py-2 text-left hover:bg-accent transition-colors border-b border-border last:border-b-0"
-                                                        onclick={() =>
-                                                            selectModel(
-                                                                item.tier,
-                                                                model.id,
-                                                            )}
+                                                        onclick={() => handleSelectModel(item.tier, model.id)}
                                                     >
                                                         <div
                                                             class="flex items-center justify-between"
@@ -1327,10 +1429,7 @@
                                     <button
                                         type="button"
                                         class="p-2 rounded-lg hover:bg-accent transition-colors"
-                                        onclick={() =>
-                                            (modelFilters[
-                                                item.tier
-                                            ].showDropdown = false)}
+                                        onclick={() => closeModelDropdown(item.tier)}
                                     >
                                         <X class="w-4 h-4" />
                                     </button>
