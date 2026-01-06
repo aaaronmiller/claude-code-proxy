@@ -1,12 +1,12 @@
 {
-  "fetched_at": "2026-01-04T15:07:02.135001",
+  "fetched_at": "2026-01-05T18:00:28.483930",
   "source": "https://openrouter.ai/api/v1/models",
   "stats": {
-    "total": 353,
-    "free": 35,
-    "reasoning": 143,
-    "vision": 127,
-    "tools": 235,
+    "total": 350,
+    "free": 32,
+    "reasoning": 140,
+    "vision": 126,
+    "tools": 233,
     "by_provider": {
       "bytedance-seed": 2,
       "minimax": 4,
@@ -26,18 +26,18 @@
       "deepseek": 16,
       "prime-intellect": 1,
       "tngtech": 6,
-      "anthropic": 13,
+      "anthropic": 12,
       "x-ai": 8,
       "deepcogito": 4,
-      "kwaipilot": 1,
+      "kwaipilot": 2,
       "moonshotai": 6,
-      "perplexity": 6,
+      "perplexity": 5,
       "qwen": 42,
       "liquid": 2,
       "ibm-granite": 1,
       "baidu": 5,
       "thedrummer": 4,
-      "alibaba": 2,
+      "alibaba": 1,
       "opengvlab": 1,
       "meituan": 1,
       "stepfun-ai": 1,
@@ -54,7 +54,6 @@
       "meta-llama": 19,
       "eleutherai": 1,
       "alfredpros": 1,
-      "arliai": 1,
       "cohere": 4,
       "aion-labs": 3,
       "sao10k": 5,
@@ -354,54 +353,6 @@
       "created": 1758210804
     },
     {
-      "id": "alibaba/tongyi-deepresearch-30b-a3b:free",
-      "name": "Tongyi DeepResearch 30B A3B (free)",
-      "provider": "alibaba",
-      "canonical_slug": "alibaba/tongyi-deepresearch-30b-a3b",
-      "hugging_face_id": "Alibaba-NLP/Tongyi-DeepResearch-30B-A3B",
-      "description": "Tongyi DeepResearch is an agentic large language model developed by Tongyi Lab, with 30 billion total parameters activating only 3 billion per token. It's optimized for long-horizon, deep information-seeking tasks and delivers state-of-the-art performance on benchmarks like Humanity's Last Exam, BrowserComp, BrowserComp-ZH, WebWalkerQA, GAIA, xbench-DeepSearch, and FRAMES. This makes it superior for complex agentic search, reasoning, and multi-step problem-solving compared to prior models.\n\nThe model includes a fully automated synthetic data pipeline for scalable pre-training, fine-tuning, and reinforcement learning. It uses large-scale continual pre-training on diverse agentic data to boost reasoning and stay fresh. It also features end-to-end on-policy RL with a customized Group Relative Policy Optimization, including token-level gradients and negative sample filtering for stable training. The model supports ReAct for core ability checks and an IterResearch-based 'Heavy' mode for max performance through test-time scaling. It's ideal for advanced research agents, tool use, and heavy inference workflows.",
-      "context_length": 131072,
-      "max_completion_tokens": 131072,
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Other",
-      "supports_reasoning": true,
-      "supports_tools": true,
-      "supports_vision": false,
-      "supports_audio": false,
-      "supports_files": false,
-      "supports_structured_output": true,
-      "pricing": {
-        "input_per_million": 0.0,
-        "output_per_million": 0.0,
-        "is_free": true
-      },
-      "is_moderated": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "max_tokens",
-        "presence_penalty",
-        "reasoning",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_p"
-      ],
-      "created": 1758210804
-    },
-    {
       "id": "allenai/olmo-2-0325-32b-instruct",
       "name": "AllenAI: Olmo 2 32B Instruct",
       "provider": "allenai",
@@ -434,8 +385,8 @@
       "created": 1741988556
     },
     {
-      "id": "allenai/olmo-3-32b-think:free",
-      "name": "AllenAI: Olmo 3 32B Think (free)",
+      "id": "allenai/olmo-3-32b-think",
+      "name": "AllenAI: Olmo 3 32B Think",
       "provider": "allenai",
       "canonical_slug": "allenai/olmo-3-32b-think-20251121",
       "hugging_face_id": "allenai/Olmo-3-32B-Think",
@@ -457,9 +408,9 @@
       "supports_files": false,
       "supports_structured_output": true,
       "pricing": {
-        "input_per_million": 0.0,
-        "output_per_million": 0.0,
-        "is_free": true
+        "input_per_million": 0.15,
+        "output_per_million": 0.5,
+        "is_free": false
       },
       "is_moderated": false,
       "supported_parameters": [
@@ -578,8 +529,8 @@
       "created": 1763758270
     },
     {
-      "id": "allenai/olmo-3.1-32b-think:free",
-      "name": "AllenAI: Olmo 3.1 32B Think (free)",
+      "id": "allenai/olmo-3.1-32b-think",
+      "name": "AllenAI: Olmo 3.1 32B Think",
       "provider": "allenai",
       "canonical_slug": "allenai/olmo-3.1-32b-think-20251215",
       "hugging_face_id": "allenai/Olmo-3.1-32B-Think",
@@ -601,9 +552,9 @@
       "supports_files": false,
       "supports_structured_output": true,
       "pricing": {
-        "input_per_million": 0.0,
-        "output_per_million": 0.0,
-        "is_free": true
+        "input_per_million": 0.15,
+        "output_per_million": 0.5,
+        "is_free": false
       },
       "is_moderated": false,
       "supported_parameters": [
@@ -965,47 +916,6 @@
         "top_p"
       ],
       "created": 1710288000
-    },
-    {
-      "id": "anthropic/claude-3-opus",
-      "name": "Anthropic: Claude 3 Opus",
-      "provider": "anthropic",
-      "canonical_slug": "anthropic/claude-3-opus",
-      "hugging_face_id": null,
-      "description": "Claude 3 Opus is Anthropic's most powerful model for highly complex tasks. It boasts top-level performance, intelligence, fluency, and understanding.\n\nSee the launch announcement and benchmark results [here](https://www.anthropic.com/news/claude-3-family)\n\n#multimodal",
-      "context_length": 200000,
-      "max_completion_tokens": 4096,
-      "modality": "text+image->text",
-      "input_modalities": [
-        "text",
-        "image"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Claude",
-      "supports_reasoning": false,
-      "supports_tools": true,
-      "supports_vision": true,
-      "supports_audio": false,
-      "supports_files": false,
-      "supports_structured_output": false,
-      "pricing": {
-        "input_per_million": 15.0,
-        "output_per_million": 75.0,
-        "is_free": false
-      },
-      "is_moderated": true,
-      "supported_parameters": [
-        "max_tokens",
-        "stop",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_p"
-      ],
-      "created": 1709596800
     },
     {
       "id": "anthropic/claude-3.5-haiku",
@@ -1754,52 +1664,6 @@
         "top_p"
       ],
       "created": 1746478885
-    },
-    {
-      "id": "arliai/qwq-32b-arliai-rpr-v1",
-      "name": "ArliAI: QwQ 32B RpR v1",
-      "provider": "arliai",
-      "canonical_slug": "arliai/qwq-32b-arliai-rpr-v1",
-      "hugging_face_id": "ArliAI/QwQ-32B-ArliAI-RpR-v1",
-      "description": "QwQ-32B-ArliAI-RpR-v1 is a 32B parameter model fine-tuned from Qwen/QwQ-32B using a curated creative writing and roleplay dataset originally developed for the RPMax series. It is designed to maintain coherence and reasoning across long multi-turn conversations by introducing explicit reasoning steps per dialogue turn, generated and refined using the base model itself.\n\nThe model was trained using RS-QLORA+ on 8K sequence lengths and supports up to 128K context windows (with practical performance around 32K). It is optimized for creative roleplay and dialogue generation, with an emphasis on minimizing cross-context repetition while preserving stylistic diversity.",
-      "context_length": 32768,
-      "max_completion_tokens": 32768,
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Other",
-      "supports_reasoning": true,
-      "supports_tools": false,
-      "supports_vision": false,
-      "supports_audio": false,
-      "supports_files": false,
-      "supports_structured_output": true,
-      "pricing": {
-        "input_per_million": 0.03,
-        "output_per_million": 0.11,
-        "is_free": false
-      },
-      "is_moderated": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "max_tokens",
-        "presence_penalty",
-        "reasoning",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "top_k",
-        "top_p"
-      ],
-      "created": 1744555982
     },
     {
       "id": "baidu/ernie-4.5-21b-a3b",
@@ -2714,7 +2578,7 @@
       "hugging_face_id": "deepseek-ai/DeepSeek-V3-0324",
       "description": "DeepSeek V3, a 685B-parameter, mixture-of-experts model, is the latest iteration of the flagship chat model family from the DeepSeek team.\n\nIt succeeds the [DeepSeek V3](/deepseek/deepseek-chat-v3) model and performs really well on a variety of tasks.",
       "context_length": 163840,
-      "max_completion_tokens": 0,
+      "max_completion_tokens": 65536,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -2730,8 +2594,8 @@
       "supports_files": false,
       "supports_structured_output": true,
       "pricing": {
-        "input_per_million": 0.2,
-        "output_per_million": 0.88,
+        "input_per_million": 0.19,
+        "output_per_million": 0.87,
         "is_free": false
       },
       "is_moderated": false,
@@ -3064,7 +2928,7 @@
       "hugging_face_id": "deepseek-ai/DeepSeek-R1",
       "description": "DeepSeek R1 is here: Performance on par with [OpenAI o1](/openai/o1), but open-sourced and with fully open reasoning tokens. It's 671B parameters in size, with 37B active in an inference pass.\n\nFully open-source model & [technical report](https://api-docs.deepseek.com/news/news250120).\n\nMIT licensed: Distill & commercialize freely!",
       "context_length": 163840,
-      "max_completion_tokens": 0,
+      "max_completion_tokens": 163840,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -3078,10 +2942,10 @@
       "supports_vision": false,
       "supports_audio": false,
       "supports_files": false,
-      "supports_structured_output": true,
+      "supports_structured_output": false,
       "pricing": {
-        "input_per_million": 0.3,
-        "output_per_million": 1.2,
+        "input_per_million": 0.7,
+        "output_per_million": 2.4,
         "is_free": false
       },
       "is_moderated": false,
@@ -3096,7 +2960,6 @@
         "response_format",
         "seed",
         "stop",
-        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
@@ -4843,6 +4706,52 @@
       "created": 1728604800
     },
     {
+      "id": "kwaipilot/kat-coder-pro",
+      "name": "Kwaipilot: KAT-Coder-Pro V1",
+      "provider": "kwaipilot",
+      "canonical_slug": "kwaipilot/kat-coder-pro-v1",
+      "hugging_face_id": "",
+      "description": "KAT-Coder-Pro V1 is KwaiKAT's most advanced agentic coding model in the KAT-Coder series. Designed specifically for agentic coding tasks, it excels in real-world software engineering scenarios, achieving 73.4% solve rate on the SWE-Bench Verified benchmark. \n\nThe model has been optimized for tool-use capability, multi-turn interaction, instruction following, generalization, and comprehensive capabilities through a multi-stage training process, including mid-training, supervised fine-tuning (SFT), reinforcement fine-tuning (RFT), and scalable agentic RL.",
+      "context_length": 256000,
+      "max_completion_tokens": 128000,
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "supports_reasoning": false,
+      "supports_tools": true,
+      "supports_vision": false,
+      "supports_audio": false,
+      "supports_files": false,
+      "supports_structured_output": true,
+      "pricing": {
+        "input_per_million": 0.207,
+        "output_per_million": 0.828,
+        "is_free": false
+      },
+      "is_moderated": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ],
+      "created": 1762745912
+    },
+    {
       "id": "kwaipilot/kat-coder-pro:free",
       "name": "Kwaipilot: KAT-Coder-Pro V1 (free)",
       "provider": "kwaipilot",
@@ -4850,7 +4759,7 @@
       "hugging_face_id": "",
       "description": "KAT-Coder-Pro V1 is KwaiKAT's most advanced agentic coding model in the KAT-Coder series. Designed specifically for agentic coding tasks, it excels in real-world software engineering scenarios, achieving 73.4% solve rate on the SWE-Bench Verified benchmark. \n\nThe model has been optimized for tool-use capability, multi-turn interaction, instruction following, generalization, and comprehensive capabilities through a multi-stage training process, including mid-training, supervised fine-tuning (SFT), reinforcement fine-tuning (RFT), and scalable agentic RL.",
       "context_length": 256000,
-      "max_completion_tokens": 32768,
+      "max_completion_tokens": 128000,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -5381,7 +5290,7 @@
       "canonical_slug": "meta-llama/llama-3.1-8b-instruct",
       "hugging_face_id": "meta-llama/Meta-Llama-3.1-8B-Instruct",
       "description": "Meta's latest class of model (Llama 3.1) launched with a variety of sizes & flavors. This 8B instruct-tuned version is fast and efficient.\n\nIt has demonstrated strong performance compared to leading closed-source models in human evaluations.\n\nTo read more about the model release, [click here](https://ai.meta.com/blog/meta-llama-3-1/). Usage of this model is subject to [Meta's Acceptable Use Policy](https://llama.meta.com/llama3/use-policy/).",
-      "context_length": 131072,
+      "context_length": 16384,
       "max_completion_tokens": 16384,
       "modality": "text->text",
       "input_modalities": [
@@ -5399,7 +5308,7 @@
       "supports_structured_output": true,
       "pricing": {
         "input_per_million": 0.02,
-        "output_per_million": 0.03,
+        "output_per_million": 0.05,
         "is_free": false
       },
       "is_moderated": false,
@@ -8022,7 +7931,7 @@
       "hugging_face_id": "moonshotai/Kimi-K2-Instruct",
       "description": "Kimi K2 Instruct is a large-scale Mixture-of-Experts (MoE) language model developed by Moonshot AI, featuring 1 trillion total parameters with 32 billion active per forward pass. It is optimized for agentic capabilities, including advanced tool use, reasoning, and code synthesis. Kimi K2 excels across a broad range of benchmarks, particularly in coding (LiveCodeBench, SWE-bench), reasoning (ZebraLogic, GPQA), and tool-use (Tau2, AceBench) tasks. It supports long-context inference up to 128K tokens and is designed with a novel training stack that includes the MuonClip optimizer for stable large-scale MoE training.",
       "context_length": 131072,
-      "max_completion_tokens": 131072,
+      "max_completion_tokens": 0,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -8038,8 +7947,8 @@
       "supports_files": false,
       "supports_structured_output": true,
       "pricing": {
-        "input_per_million": 0.456,
-        "output_per_million": 1.84,
+        "input_per_million": 0.5,
+        "output_per_million": 2.4,
         "is_free": false
       },
       "is_moderated": false,
@@ -8202,7 +8111,7 @@
       "hugging_face_id": "moonshotai/Kimi-K2-Thinking",
       "description": "Kimi K2 Thinking is Moonshot AI’s most advanced open reasoning model to date, extending the K2 series into agentic, long-horizon reasoning. Built on the trillion-parameter Mixture-of-Experts (MoE) architecture introduced in Kimi K2, it activates 32 billion parameters per forward pass and supports 256 k-token context windows. The model is optimized for persistent step-by-step thought, dynamic tool invocation, and complex reasoning workflows that span hundreds of turns. It interleaves step-by-step reasoning with tool use, enabling autonomous research, coding, and writing that can persist for hundreds of sequential actions without drift.\n\nIt sets new open-source benchmarks on HLE, BrowseComp, SWE-Multilingual, and LiveCodeBench, while maintaining stable multi-agent behavior through 200–300 tool calls. Built on a large-scale MoE architecture with MuonClip optimization, it combines strong reasoning depth with high inference efficiency for demanding agentic and analytical tasks.",
       "context_length": 262144,
-      "max_completion_tokens": 65535,
+      "max_completion_tokens": 0,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -8218,8 +8127,8 @@
       "supports_files": false,
       "supports_structured_output": true,
       "pricing": {
-        "input_per_million": 0.4,
-        "output_per_million": 1.75,
+        "input_per_million": 0.32,
+        "output_per_million": 0.48,
         "is_free": false
       },
       "is_moderated": false,
@@ -8634,7 +8543,7 @@
       "hugging_face_id": "NousResearch/Hermes-4-405B",
       "description": "Hermes 4 is a large-scale reasoning model built on Meta-Llama-3.1-405B and released by Nous Research. It introduces a hybrid reasoning mode, where the model can choose to deliberate internally with <think>...</think> traces or respond directly, offering flexibility between speed and depth. Users can control the reasoning behaviour with the `reasoning` `enabled` boolean. [Learn more in our docs](https://openrouter.ai/docs/use-cases/reasoning-tokens#enable-reasoning-with-default-config)\n\nThe model is instruction-tuned with an expanded post-training corpus (~60B tokens) emphasizing reasoning traces, improving performance in math, code, STEM, and logical reasoning, while retaining broad assistant utility. It also supports structured outputs, including JSON mode, schema adherence, function calling, and tool use. Hermes 4 is trained for steerability, lower refusal rates, and alignment toward neutral, user-directed behavior.",
       "context_length": 131072,
-      "max_completion_tokens": 131072,
+      "max_completion_tokens": 0,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -8644,14 +8553,14 @@
       ],
       "tokenizer": "Other",
       "supports_reasoning": true,
-      "supports_tools": true,
+      "supports_tools": false,
       "supports_vision": false,
       "supports_audio": false,
       "supports_files": false,
-      "supports_structured_output": true,
+      "supports_structured_output": false,
       "pricing": {
-        "input_per_million": 0.3,
-        "output_per_million": 1.2,
+        "input_per_million": 1.0,
+        "output_per_million": 3.0,
         "is_free": false
       },
       "is_moderated": false,
@@ -8663,12 +8572,7 @@
         "reasoning",
         "repetition_penalty",
         "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
         "temperature",
-        "tool_choice",
-        "tools",
         "top_k",
         "top_p"
       ],
@@ -11184,7 +11088,7 @@
       "hugging_face_id": "openai/gpt-oss-20b",
       "description": "gpt-oss-20b is an open-weight 21B parameter model released by OpenAI under the Apache 2.0 license. It uses a Mixture-of-Experts (MoE) architecture with 3.6B active parameters per forward pass, optimized for lower-latency inference and deployability on consumer or single-GPU hardware. The model is trained in OpenAI’s Harmony response format and supports reasoning level configuration, fine-tuning, and agentic capabilities including function calling, tool use, and structured outputs.",
       "context_length": 131072,
-      "max_completion_tokens": 131072,
+      "max_completion_tokens": 0,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -11198,29 +11102,22 @@
       "supports_vision": false,
       "supports_audio": false,
       "supports_files": false,
-      "supports_structured_output": true,
+      "supports_structured_output": false,
       "pricing": {
         "input_per_million": 0.0,
         "output_per_million": 0.0,
         "is_free": true
       },
-      "is_moderated": false,
+      "is_moderated": true,
       "supported_parameters": [
-        "frequency_penalty",
         "include_reasoning",
         "max_tokens",
-        "presence_penalty",
         "reasoning",
-        "repetition_penalty",
-        "response_format",
         "seed",
         "stop",
-        "structured_outputs",
         "temperature",
         "tool_choice",
-        "tools",
-        "top_k",
-        "top_p"
+        "tools"
       ],
       "created": 1754414229
     },
@@ -11981,48 +11878,6 @@
       "created": 1761854366
     },
     {
-      "id": "perplexity/sonar-reasoning",
-      "name": "Perplexity: Sonar Reasoning",
-      "provider": "perplexity",
-      "canonical_slug": "perplexity/sonar-reasoning",
-      "hugging_face_id": "",
-      "description": "Sonar Reasoning is a reasoning model provided by Perplexity based on [DeepSeek R1](/deepseek/deepseek-r1).\n\nIt allows developers to utilize long chain of thought with built-in web search. Sonar Reasoning is uncensored and hosted in US datacenters. ",
-      "context_length": 127000,
-      "max_completion_tokens": 0,
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Other",
-      "supports_reasoning": true,
-      "supports_tools": false,
-      "supports_vision": false,
-      "supports_audio": false,
-      "supports_files": false,
-      "supports_structured_output": false,
-      "pricing": {
-        "input_per_million": 1.0,
-        "output_per_million": 5.0,
-        "is_free": false
-      },
-      "is_moderated": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "max_tokens",
-        "presence_penalty",
-        "reasoning",
-        "temperature",
-        "top_k",
-        "top_p",
-        "web_search_options"
-      ],
-      "created": 1738131107
-    },
-    {
       "id": "perplexity/sonar-reasoning-pro",
       "name": "Perplexity: Sonar Reasoning Pro",
       "provider": "perplexity",
@@ -12710,8 +12565,8 @@
       "supports_files": false,
       "supports_structured_output": true,
       "pricing": {
-        "input_per_million": 0.07,
-        "output_per_million": 0.26,
+        "input_per_million": 0.15,
+        "output_per_million": 0.6,
         "is_free": false
       },
       "is_moderated": false,
@@ -13487,7 +13342,6 @@
         "frequency_penalty",
         "max_tokens",
         "presence_penalty",
-        "repetition_penalty",
         "seed",
         "stop",
         "temperature",
@@ -13703,7 +13557,6 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
-        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -13717,7 +13570,6 @@
         "tool_choice",
         "tools",
         "top_k",
-        "top_logprobs",
         "top_p"
       ],
       "created": 1757612284
@@ -13747,8 +13599,8 @@
       "supports_files": false,
       "supports_structured_output": true,
       "pricing": {
-        "input_per_million": 0.2,
-        "output_per_million": 1.2,
+        "input_per_million": 0.12,
+        "output_per_million": 0.56,
         "is_free": false
       },
       "is_moderated": false,
@@ -13798,8 +13650,8 @@
       "supports_files": false,
       "supports_structured_output": true,
       "pricing": {
-        "input_per_million": 0.3,
-        "output_per_million": 1.2,
+        "input_per_million": 0.45,
+        "output_per_million": 3.5,
         "is_free": false
       },
       "is_moderated": false,
@@ -14963,7 +14815,7 @@
       "supports_vision": false,
       "supports_audio": false,
       "supports_files": false,
-      "supports_structured_output": true,
+      "supports_structured_output": false,
       "pricing": {
         "input_per_million": 0.25,
         "output_per_million": 0.85,
@@ -14980,7 +14832,6 @@
         "response_format",
         "seed",
         "stop",
-        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
@@ -14997,7 +14848,7 @@
       "hugging_face_id": null,
       "description": "TNG-R1T-Chimera is an experimental LLM with a faible for creative storytelling and character interaction. It is a derivate of the original TNG/DeepSeek-R1T-Chimera released in April 2025 and is available exclusively via Chutes and OpenRouter.\n\nCharacteristics and improvements include:\n\nWe think that it has a creative and pleasant personality.\nIt has a preliminary EQ-Bench3 value of about 1305.\nIt is quite a bit more intelligent than the original, albeit a slightly slower.\nIt is much more think-token consistent, i.e. reasoning and answer blocks are properly delineated.\nTool calling is much improved.\n\nTNG Tech, the model authors, ask that users follow the careful guidelines that Microsoft has created for their \"MAI-DS-R1\" DeepSeek-based model. These guidelines are available on Hugging Face (https://huggingface.co/microsoft/MAI-DS-R1).",
       "context_length": 163840,
-      "max_completion_tokens": 163840,
+      "max_completion_tokens": 65536,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -15591,7 +15442,7 @@
       "hugging_face_id": "zai-org/GLM-4.5-Air",
       "description": "GLM-4.5-Air is the lightweight variant of our latest flagship model family, also purpose-built for agent-centric applications. Like GLM-4.5, it adopts the Mixture-of-Experts (MoE) architecture but with a more compact parameter size. GLM-4.5-Air also supports hybrid inference modes, offering a \"thinking mode\" for advanced reasoning and tool use, and a \"non-thinking mode\" for real-time interaction. Users can control the reasoning behaviour with the `reasoning` `enabled` boolean. [Learn more in our docs](https://openrouter.ai/docs/use-cases/reasoning-tokens#enable-reasoning-with-default-config)",
       "context_length": 131072,
-      "max_completion_tokens": 98304,
+      "max_completion_tokens": 131072,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -15607,8 +15458,8 @@
       "supports_files": false,
       "supports_structured_output": true,
       "pricing": {
-        "input_per_million": 0.13,
-        "output_per_million": 0.85,
+        "input_per_million": 0.05,
+        "output_per_million": 0.22,
         "is_free": false
       },
       "is_moderated": false,
@@ -15639,7 +15490,7 @@
       "hugging_face_id": "zai-org/GLM-4.5-Air",
       "description": "GLM-4.5-Air is the lightweight variant of our latest flagship model family, also purpose-built for agent-centric applications. Like GLM-4.5, it adopts the Mixture-of-Experts (MoE) architecture but with a more compact parameter size. GLM-4.5-Air also supports hybrid inference modes, offering a \"thinking mode\" for advanced reasoning and tool use, and a \"non-thinking mode\" for real-time interaction. Users can control the reasoning behaviour with the `reasoning` `enabled` boolean. [Learn more in our docs](https://openrouter.ai/docs/use-cases/reasoning-tokens#enable-reasoning-with-default-config)",
       "context_length": 131072,
-      "max_completion_tokens": 131072,
+      "max_completion_tokens": 96000,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -15653,7 +15504,7 @@
       "supports_vision": false,
       "supports_audio": false,
       "supports_files": false,
-      "supports_structured_output": true,
+      "supports_structured_output": false,
       "pricing": {
         "input_per_million": 0.0,
         "output_per_million": 0.0,
@@ -15661,20 +15512,12 @@
       },
       "is_moderated": false,
       "supported_parameters": [
-        "frequency_penalty",
         "include_reasoning",
         "max_tokens",
-        "presence_penalty",
         "reasoning",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
-        "top_k",
         "top_p"
       ],
       "created": 1753471258
@@ -15889,7 +15732,7 @@
       "hugging_face_id": "zai-org/GLM-4.7",
       "description": "GLM-4.7 is Z.AI’s latest flagship model, featuring upgrades in two key areas: enhanced programming capabilities and more stable multi-step reasoning/execution. It demonstrates significant improvements in executing complex agent tasks while delivering more natural conversational experiences and superior front-end aesthetics.",
       "context_length": 202752,
-      "max_completion_tokens": 65535,
+      "max_completion_tokens": 0,
       "modality": "text->text",
       "input_modalities": [
         "text"
@@ -15905,8 +15748,8 @@
       "supports_files": false,
       "supports_structured_output": true,
       "pricing": {
-        "input_per_million": 0.4,
-        "output_per_million": 1.5,
+        "input_per_million": 0.16,
+        "output_per_million": 0.8,
         "is_free": false
       },
       "is_moderated": false,

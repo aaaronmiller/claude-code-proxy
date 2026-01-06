@@ -10,6 +10,7 @@ Date: 2026-01-05
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
+from pydantic import BaseModel
 import sqlite3
 import json
 
@@ -18,6 +19,20 @@ from src.services.usage.usage_tracker import usage_tracker
 from src.services.report_generator import report_generator, ReportTemplate
 
 router = APIRouter()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REQUEST MODELS
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ReportConfigRequest(BaseModel):
+    """Request model for report generation"""
+    template_id: str
+    start_date: str
+    end_date: str
+    format: str = "excel"
+    brand_logo: Optional[str] = None
+    brand_color: str = "#3b82f6"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TEMPLATES MANAGEMENT
@@ -135,18 +150,18 @@ async def delete_report_template(template_id: str):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/api/reports/generate")
-async def generate_report(report_config: Dict[str, Any], background_tasks: Optional[BackgroundTasks] = None):
+async def generate_report(report_config: ReportConfigRequest):
     """Generate report in specified format (PDF, Excel, CSV)"""
     try:
         if not usage_tracker.enabled:
             raise HTTPException(status_code=400, detail="Usage tracking disabled")
 
-        template_id = report_config.get("template_id")
-        start_date = report_config.get("start_date")
-        end_date = report_config.get("end_date")
-        format_type = report_config.get("format", "excel")  # pdf, excel, csv
-        brand_logo = report_config.get("brand_logo")
-        brand_color = report_config.get("brand_color", "#3b82f6")
+        template_id = report_config.template_id
+        start_date = report_config.start_date
+        end_date = report_config.end_date
+        format_type = report_config.format
+        brand_logo = report_config.brand_logo
+        brand_color = report_config.brand_color
 
         # Get template
         template = report_generator.get_template(template_id)

@@ -18,6 +18,7 @@ class Provider(str, Enum):
     OPENAI = "openai"           # OpenAI direct
     ANTHROPIC = "anthropic"     # Anthropic direct
     AZURE = "azure"             # Azure OpenAI
+    KIRO = "kiro"               # Kiro provider (Claude API compatible, token-based)
     OPENAI_COMPATIBLE = "openai_compatible"  # Unknown OpenAI-compatible endpoint
 
 
@@ -41,6 +42,7 @@ class AuthType(str, Enum):
     API_KEY = "api_key"         # Standard API key header
     OAUTH = "oauth"             # OAuth token (Gemini/VibeProxy)
     AZURE = "azure"             # Azure-specific auth
+    KIRO_TOKEN = "kiro_token"   # Kiro access/refresh token auth
 
 
 def detect_provider(base_url: str) -> str:
@@ -81,7 +83,12 @@ def detect_provider(base_url: str) -> str:
     # OpenAI direct
     if "api.openai.com" in url_lower:
         return Provider.OPENAI.value
-    
+
+    # Kiro provider - Claude API compatible, typically local proxy
+    # Common patterns: kiro endpoints, kiro2cc proxy, kiro.ai domains
+    if "kiro" in url_lower or "127.0.0.1:8083" in url_lower or "localhost:8083" in url_lower or "kiro.ai" in url_lower:
+        return Provider.KIRO.value
+
     # Default to openai-compatible for unknown endpoints
     return Provider.OPENAI_COMPATIBLE.value
 
@@ -102,6 +109,7 @@ def get_normalization_level(provider: str) -> str:
         Provider.OPENAI.value: NormalizationLevel.NONE.value,
         Provider.ANTHROPIC.value: NormalizationLevel.SCHEMA_CONVERT.value,
         Provider.AZURE.value: NormalizationLevel.NONE.value,
+        Provider.KIRO.value: NormalizationLevel.LIGHT.value,
         Provider.OPENAI_COMPATIBLE.value: NormalizationLevel.LIGHT.value,
     }
     
@@ -121,6 +129,7 @@ def get_auth_type(provider: str) -> str:
     auth_map = {
         Provider.GEMINI.value: AuthType.OAUTH.value,
         Provider.AZURE.value: AuthType.AZURE.value,
+        Provider.KIRO.value: AuthType.KIRO_TOKEN.value,
     }
     
     return auth_map.get(provider, AuthType.API_KEY.value)
@@ -146,15 +155,29 @@ def get_provider_info(base_url: str) -> Tuple[str, str, str]:
 def requires_oauth(base_url: str) -> bool:
     """
     Check if a URL requires OAuth authentication (Gemini/VibeProxy).
-    
+
     Args:
         base_url: The API base URL
-        
+
     Returns:
         True if OAuth is required
     """
     provider = detect_provider(base_url)
     return get_auth_type(provider) == AuthType.OAUTH.value
+
+
+def requires_kiro_token(base_url: str) -> bool:
+    """
+    Check if a URL requires Kiro token authentication.
+
+    Args:
+        base_url: The API base URL
+
+    Returns:
+        True if Kiro token auth is required
+    """
+    provider = detect_provider(base_url)
+    return get_auth_type(provider) == AuthType.KIRO_TOKEN.value
 
 
 def requires_full_normalization(base_url: str) -> bool:
@@ -223,6 +246,14 @@ PROVIDER_CONFIG = {
         "name": "Azure OpenAI",
         "normalization": NormalizationLevel.NONE.value,
         "auth": AuthType.AZURE.value,
+        "supports_streaming": True,
+        "has_ghost_streams": False,
+        "requires_deduplication": False,
+    },
+    Provider.KIRO.value: {
+        "name": "Kiro (Claude API Compatible)",
+        "normalization": NormalizationLevel.LIGHT.value,
+        "auth": AuthType.KIRO_TOKEN.value,
         "supports_streaming": True,
         "has_ghost_streams": False,
         "requires_deduplication": False,

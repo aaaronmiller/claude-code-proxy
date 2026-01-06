@@ -1,22 +1,22 @@
 <!-- Advanced Query Builder Page -->
 <script>
-  import { onMount } from 'svelte';
-  import QueryBuilder from '../../components/query/QueryBuilder.svelte';
-  import { BarChart3, Database, Download, History } from 'lucide-svelte';
+  import { onMount } from "svelte";
+  import QueryBuilder from "../../../components/query/QueryBuilder.svelte";
+  import { BarChart3, Database, Download, History } from "lucide-svelte";
 
-  let activeTab = $state('builder');
+  let activeTab = $state("builder");
   let savedQueries = $state([]);
   let queryResults = $state(null);
 
   // Load saved queries on mount
   onMount(async () => {
     try {
-      const response = await fetch('/api/analytics/queries');
+      const response = await fetch("/api/analytics/queries");
       if (response.ok) {
         savedQueries = await response.json();
       }
     } catch (error) {
-      console.error('Error loading saved queries:', error);
+      console.error("Error loading saved queries:", error);
     }
   });
 
@@ -28,23 +28,23 @@
   // Load saved query
   function loadQuery(queryData) {
     // This would populate the QueryBuilder with saved data
-    alert('Loading query: ' + queryData.name);
+    alert("Loading query: " + queryData.name);
   }
 
   // Delete saved query
   async function deleteQuery(id) {
-    if (!confirm('Delete this query?')) return;
+    if (!confirm("Delete this query?")) return;
 
     try {
       const response = await fetch(`/api/analytics/queries/${id}`, {
-        method: 'DELETE'
+        method: "DELETE",
       });
 
       if (response.ok) {
-        savedQueries = savedQueries.filter(q => q.id !== id);
+        savedQueries = savedQueries.filter((q) => q.id !== id);
       }
     } catch (error) {
-      console.error('Error deleting query:', error);
+      console.error("Error deleting query:", error);
     }
   }
 
@@ -52,16 +52,19 @@
   function exportAllResults() {
     if (!queryResults || !queryResults.data) return;
 
-    const metrics = ['tokens', 'cost', 'requests', 'latency'];
-    const headers = ['Date', ...metrics];
-    const rows = queryResults.data.map(row => {
-      return [row.date || row.timestamp, ...metrics.map(m => row[m] || 0)].join(',');
+    const metrics = ["tokens", "cost", "requests", "latency"];
+    const headers = ["Date", ...metrics];
+    const rows = queryResults.data.map((row) => {
+      return [
+        row.date || row.timestamp,
+        ...metrics.map((m) => row[m] || 0),
+      ].join(",");
     });
 
-    const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `analytics_export_${Date.now()}.csv`;
     a.click();
@@ -78,13 +81,13 @@
     <div class="tabs">
       <button
         class="tab {activeTab === 'builder' ? 'active' : ''}"
-        onclick={() => activeTab = 'builder'}
+        onclick={() => (activeTab = "builder")}
       >
         <Database size={16} /> Query Builder
       </button>
       <button
         class="tab {activeTab === 'saved' ? 'active' : ''}"
-        onclick={() => activeTab = 'saved'}
+        onclick={() => (activeTab = "saved")}
       >
         <History size={16} /> Saved Queries
       </button>
@@ -93,7 +96,7 @@
 
   <!-- Content Area -->
   <div class="content">
-    {#if activeTab === 'builder'}
+    {#if activeTab === "builder"}
       <div class="builder-tab">
         <QueryBuilder on:results={handleResults} />
 
@@ -114,15 +117,27 @@
               {#if queryResults.data && queryResults.data.length > 0}
                 <div class="stat-card">
                   <span class="stat-label">Total Tokens</span>
-                  <span class="stat-value">{queryResults.data.reduce((sum, r) => sum + (r.tokens || 0), 0).toLocaleString()}</span>
+                  <span class="stat-value"
+                    >{queryResults.data
+                      .reduce((sum, r) => sum + (r.tokens || 0), 0)
+                      .toLocaleString()}</span
+                  >
                 </div>
                 <div class="stat-card">
                   <span class="stat-label">Total Cost</span>
-                  <span class="stat-value">${queryResults.data.reduce((sum, r) => sum + (r.cost || 0), 0).toFixed(2)}</span>
+                  <span class="stat-value"
+                    >${queryResults.data
+                      .reduce((sum, r) => sum + (r.cost || 0), 0)
+                      .toFixed(2)}</span
+                  >
                 </div>
                 <div class="stat-card">
                   <span class="stat-label">Total Requests</span>
-                  <span class="stat-value">{queryResults.data.reduce((sum, r) => sum + (r.requests || 0), 0).toLocaleString()}</span>
+                  <span class="stat-value"
+                    >{queryResults.data
+                      .reduce((sum, r) => sum + (r.requests || 0), 0)
+                      .toLocaleString()}</span
+                  >
                 </div>
               {/if}
             </div>
@@ -139,7 +154,9 @@
         {#if savedQueries.length === 0}
           <div class="empty-state">
             <p>No saved queries yet</p>
-            <p class="hint">Create and save queries from the Query Builder tab</p>
+            <p class="hint">
+              Create and save queries from the Query Builder tab
+            </p>
           </div>
         {:else}
           <div class="queries-grid">
@@ -149,15 +166,21 @@
                   <h4>{query.name}</h4>
                   <p class="meta">
                     Created: {new Date(query.created_at).toLocaleDateString()}
-                    • Metrics: {query.query.metrics.join(', ')}
+                    • Metrics: {query.query.metrics.join(", ")}
                   </p>
                   <p class="description">
-                    {query.query.filters.length} filters • Group by: {query.query.groupBy}
+                    {query.query.filters.length} filters • Group by: {query
+                      .query.groupBy}
                   </p>
                 </div>
                 <div class="query-actions">
-                  <button class="btn btn-load" onclick={() => loadQuery(query)}>Load</button>
-                  <button class="btn btn-delete" onclick={() => deleteQuery(query.id)}>Delete</button>
+                  <button class="btn btn-load" onclick={() => loadQuery(query)}
+                    >Load</button
+                  >
+                  <button
+                    class="btn btn-delete"
+                    onclick={() => deleteQuery(query.id)}>Delete</button
+                  >
                 </div>
               </div>
             {/each}

@@ -309,13 +309,10 @@ async def create_message(
         )
         logger.debug(f"Request ID: {request_id}")
 
-        # Convert Claude request to OpenAI format and extract reasoning config
-        openai_request = convert_claude_to_openai(request, model_manager)
-        
         # Parse model to get routing info and reasoning config
         routed_model, reasoning_config = model_manager.parse_and_map_model(request.model)
         
-        # Determine endpoint
+        # Determine endpoint and provider FIRST (before conversion)
         client = openai_client.get_client_for_model(routed_model, config)
         endpoint = config.openai_base_url
         provider = config.default_provider  # Default provider
@@ -348,10 +345,14 @@ async def create_message(
                 )
                 client = openai_client.small_client
                 endpoint = config.small_endpoint
-                provider = config.small_provider
+                provider = config.small_provider  # Update provider to match fallback
                 routed_model = config.small_model
-                # Update the openai_request with the new model
-                openai_request["model"] = routed_model
+
+        # Convert Claude request to OpenAI format with provider-specific transformations
+        openai_request = convert_claude_to_openai(request, model_manager, target_provider=provider)
+        
+        # Update the openai_request with the routed model
+        openai_request["model"] = routed_model
 
         # Log API configuration for debugging (helps diagnose 401 errors)
         logger.debug(f"Request {request_id}: Routing to endpoint: {endpoint}")
@@ -681,14 +682,14 @@ async def create_message(
 
                 # For savings calculation, we need to compare against what would have been used
                 # If this was a routing decision, the original_model tells us what was requested
-                if routed_model != original_model:
-                    try:
-                        from src.services.usage.cost_calculator import calculate_cost, get_model_pricing
+                try:
+                    from src.services.usage.cost_calculator import calculate_cost, get_model_pricing
+                    if routed_model != original_model:
                         original_pricing = get_model_pricing(original_model)
                         if original_pricing:
                             original_cost = calculate_cost(usage, original_model)
-                    except:
-                        pass
+                except Exception:
+                    get_model_pricing = lambda x: None  # Fallback if import fails
 
                 # Determine model tier for comparison stats
                 # Simple tier detection based on model names and pricing
@@ -703,8 +704,11 @@ async def create_message(
                     model_tier = "middle"
 
                 # Check if it's a free model
-                if get_model_pricing(routed_model) == (0.0, 0.0):
-                    model_tier = "free"
+                try:
+                    if get_model_pricing(routed_model) == (0.0, 0.0):
+                        model_tier = "free"
+                except Exception:
+                    pass  # Skip free model detection if pricing lookup fails
 
                 usage_tracker.log_request(
                     request_id=request_id,

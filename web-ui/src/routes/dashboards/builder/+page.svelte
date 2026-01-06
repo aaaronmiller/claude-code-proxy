@@ -1,6 +1,6 @@
 <!-- Custom Dashboard Builder - Phase 4 -->
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
+    import { onMount, onDestroy } from "svelte";
     import {
         LayoutDashboard,
         Plus,
@@ -16,11 +16,11 @@
         Activity,
         AlertCircle,
         TrendingUp,
-        DollarSign
-    } from 'lucide-svelte';
+        DollarSign,
+    } from "lucide-svelte";
 
     // Dashboard state
-    let dashboardName = $state('My Dashboard');
+    let dashboardName = $state("My Dashboard");
     let widgets = $state<Widget[]>([]);
     let availableMetrics = $state<WidgetMetric[]>([]);
     let selectedWidget = $state<Widget | null>(null);
@@ -30,15 +30,20 @@
     interface WidgetMetric {
         id: string;
         name: string;
-        type: 'chart' | 'stat' | 'table';
+        type: "chart" | "stat" | "table";
         icon: any;
         description: string;
+    }
+
+    interface WidgetData {
+        date: string;
+        value: number;
     }
 
     interface Widget {
         id: string;
         metric: string;
-        type: 'chart' | 'stat' | 'table';
+        type: "chart" | "stat" | "table";
         title: string;
         config: {
             metric: string;
@@ -53,31 +58,68 @@
             w: number;
             h: number;
         };
+        data?: WidgetData[];
     }
 
     // Available metrics and visualizations
     const METRICS: WidgetMetric[] = [
-        { id: 'tokens', name: 'Total Tokens', type: 'chart', icon: BarChart3, description: 'Token usage over time' },
-        { id: 'cost', name: 'Cost ($)', type: 'chart', icon: DollarSign, description: 'Cost breakdown' },
-        { id: 'requests', name: 'Requests', type: 'stat', icon: Activity, description: 'Request count' },
-        { id: 'latency', name: 'Latency', type: 'chart', icon: LineChart, description: 'Response times' },
-        { id: 'error_rate', name: 'Error Rate', type: 'stat', icon: AlertCircle, description: 'Error percentage' },
-        { id: 'efficiency', name: 'Efficiency', type: 'stat', icon: TrendingUp, description: 'Tokens per dollar' }
+        {
+            id: "tokens",
+            name: "Total Tokens",
+            type: "chart",
+            icon: BarChart3,
+            description: "Token usage over time",
+        },
+        {
+            id: "cost",
+            name: "Cost ($)",
+            type: "chart",
+            icon: DollarSign,
+            description: "Cost breakdown",
+        },
+        {
+            id: "requests",
+            name: "Requests",
+            type: "stat",
+            icon: Activity,
+            description: "Request count",
+        },
+        {
+            id: "latency",
+            name: "Latency",
+            type: "chart",
+            icon: LineChart,
+            description: "Response times",
+        },
+        {
+            id: "error_rate",
+            name: "Error Rate",
+            type: "stat",
+            icon: AlertCircle,
+            description: "Error percentage",
+        },
+        {
+            id: "efficiency",
+            name: "Efficiency",
+            type: "stat",
+            icon: TrendingUp,
+            description: "Tokens per dollar",
+        },
     ];
 
     const VISUALIZATIONS = [
-        { id: 'line', name: 'Line Chart' },
-        { id: 'bar', name: 'Bar Chart' },
-        { id: 'area', name: 'Area Chart' },
-        { id: 'metric', name: 'Big Number' },
-        { id: 'table', name: 'Table' }
+        { id: "line", name: "Line Chart" },
+        { id: "bar", name: "Bar Chart" },
+        { id: "area", name: "Area Chart" },
+        { id: "metric", name: "Big Number" },
+        { id: "table", name: "Table" },
     ];
 
     const PERIODS = [
-        { id: '24h', name: 'Last 24 Hours' },
-        { id: '7d', name: 'Last 7 Days' },
-        { id: '30d', name: 'Last 30 Days' },
-        { id: '90d', name: 'Last 90 Days' }
+        { id: "24h", name: "Last 24 Hours" },
+        { id: "7d", name: "Last 7 Days" },
+        { id: "30d", name: "Last 30 Days" },
+        { id: "90d", name: "Last 90 Days" },
     ];
 
     // Initialize
@@ -95,17 +137,17 @@
             title: metric.name,
             config: {
                 metric: metric.id,
-                period: '7d',
-                visualization: metric.type === 'chart' ? 'line' : 'metric',
-                color: '#3b82f6',
-                aggregate: 'sum'
+                period: "7d",
+                visualization: metric.type === "chart" ? "line" : "metric",
+                color: "#3b82f6",
+                aggregate: "sum",
             },
             position: {
                 x: (widgets.length % 3) * 4,
                 y: Math.floor(widgets.length / 3) * 3,
                 w: 4,
-                h: metric.type === 'chart' ? 3 : 2
-            }
+                h: metric.type === "chart" ? 3 : 2,
+            },
         };
 
         widgets = [...widgets, newWidget];
@@ -114,7 +156,7 @@
 
     // Remove widget
     function removeWidget(id: string) {
-        widgets = widgets.filter(w => w.id !== id);
+        widgets = widgets.filter((w) => w.id !== id);
         if (selectedWidget?.id === id) {
             selectedWidget = null;
         }
@@ -134,19 +176,25 @@
             ...selectedWidget,
             config: {
                 ...selectedWidget.config,
-                [key]: value
-            }
+                [key]: value,
+            },
         };
 
         // Update in array
-        widgets = widgets.map(w => w.id === selectedWidget.id ? selectedWidget : w);
+        const currentWidget = selectedWidget;
+        widgets = widgets.map((w) =>
+            w.id === currentWidget.id ? currentWidget : w,
+        );
     }
 
     // Update widget title
     function updateWidgetTitle(title: string) {
         if (!selectedWidget) return;
         selectedWidget.title = title;
-        widgets = widgets.map(w => w.id === selectedWidget.id ? selectedWidget : w);
+        const currentWidget = selectedWidget;
+        widgets = widgets.map((w) =>
+            w.id === currentWidget.id ? currentWidget : w,
+        );
     }
 
     // Save dashboard
@@ -155,38 +203,38 @@
             id: `dashboard_${Date.now()}`,
             name: dashboardName,
             widgets: widgets,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
         };
 
         try {
-            const response = await fetch('/api/dashboards', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(dashboard)
+            const response = await fetch("/api/dashboards", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(dashboard),
             });
 
             if (response.ok) {
                 isEditing = false;
-                alert('Dashboard saved successfully!');
+                alert("Dashboard saved successfully!");
             } else {
-                alert('Failed to save dashboard');
+                alert("Failed to save dashboard");
             }
         } catch (error) {
-            console.error('Save error:', error);
-            alert('Error saving dashboard');
+            console.error("Save error:", error);
+            alert("Error saving dashboard");
         }
     }
 
     // Load saved dashboards
     async function loadSavedDashboards() {
         try {
-            const response = await fetch('/api/dashboards');
+            const response = await fetch("/api/dashboards");
             if (response.ok) {
                 const dashboards = await response.json();
                 // Could load one here
             }
         } catch (error) {
-            console.error('Load error:', error);
+            console.error("Load error:", error);
         }
     }
 
@@ -203,12 +251,20 @@
     async function generateWidgetData(widget: Widget) {
         // In production, this would call actual API
         const data = [];
-        const points = widget.config.period === '24h' ? 24 : widget.config.period === '7d' ? 7 : 30;
+        const points =
+            widget.config.period === "24h"
+                ? 24
+                : widget.config.period === "7d"
+                  ? 7
+                  : 30;
 
         for (let i = 0; i < points; i++) {
             data.push({
-                date: new Date(Date.now() - (points - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                value: Math.random() * 1000 * (widget.metric === 'cost' ? 0.1 : 1)
+                date: new Date(Date.now() - (points - i) * 24 * 60 * 60 * 1000)
+                    .toISOString()
+                    .split("T")[0],
+                value:
+                    Math.random() * 1000 * (widget.metric === "cost" ? 0.1 : 1),
             });
         }
 
@@ -217,9 +273,9 @@
 
     // Import dashboard
     async function importDashboard() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json';
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json";
         input.onchange = async (e) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file) {
@@ -238,20 +294,22 @@
         const data = {
             name: dashboardName,
             widgets: widgets,
-            version: '1.0'
+            version: "1.0",
         };
 
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify(data, null, 2)], {
+            type: "application/json",
+        });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
-        a.download = `${dashboardName.replace(/\s+/g, '_')}.json`;
+        a.download = `${dashboardName.replace(/\s+/g, "_")}.json`;
         a.click();
     }
 
     // Reset
     function reset() {
-        if (confirm('Clear all widgets?')) {
+        if (confirm("Clear all widgets?")) {
             widgets = [];
             selectedWidget = null;
             isEditing = true;
@@ -261,7 +319,7 @@
     // Get widget visualization component (simplified for demo)
     function getWidgetComponent(type: string) {
         // In real implementation, this would return actual chart components
-        return type === 'chart' ? 'LineChart' : 'StatCard';
+        return type === "chart" ? "LineChart" : "StatCard";
     }
 </script>
 
@@ -294,7 +352,10 @@
                     <span class="icon"><Save size={16} /></span> Save
                 </button>
             {:else}
-                <button class="btn btn-secondary" onclick={() => isEditing = true}>
+                <button
+                    class="btn btn-secondary"
+                    onclick={() => (isEditing = true)}
+                >
                     <span class="icon"><Edit size={16} /></span> Edit
                 </button>
                 <button class="btn btn-primary" onclick={exportDashboard}>
@@ -311,12 +372,19 @@
                 <h3>Add Widgets</h3>
                 <div class="metrics-grid">
                     {#each METRICS as metric}
-                        <button class="metric-card" onclick={() => addWidget(metric)}>
+                        <button
+                            class="metric-card"
+                            onclick={() => addWidget(metric)}
+                        >
                             <span class="metric-icon">
-                                <svelte:component this={metric.icon} size={20} />
+                                <svelte:component
+                                    this={metric.icon}
+                                    size={20}
+                                />
                             </span>
                             <span class="metric-name">{metric.name}</span>
-                            <span class="metric-desc">{metric.description}</span>
+                            <span class="metric-desc">{metric.description}</span
+                            >
                         </button>
                     {/each}
                 </div>
@@ -326,7 +394,13 @@
                     <div class="widget-settings">
                         <div class="settings-header">
                             <h4>Widget Settings</h4>
-                            <button class="close-btn" onclick={() => { selectedWidget = null; showWidgetMenu = false; }}>
+                            <button
+                                class="close-btn"
+                                onclick={() => {
+                                    selectedWidget = null;
+                                    showWidgetMenu = false;
+                                }}
+                            >
                                 <X size={16} />
                             </button>
                         </div>
@@ -336,25 +410,47 @@
                             <input
                                 type="text"
                                 value={selectedWidget.title}
-                                oninput={(e) => updateWidgetTitle(e.target.value)}
+                                oninput={(e) =>
+                                    updateWidgetTitle(
+                                        (e.target as HTMLInputElement).value,
+                                    )}
                             />
                         </div>
 
                         <div class="setting-group">
                             <label>Period</label>
-                            <select value={selectedWidget.config.period} onchange={(e) => updateWidgetConfig('period', e.target.value)}>
+                            <select
+                                value={selectedWidget.config.period}
+                                onchange={(e) =>
+                                    updateWidgetConfig(
+                                        "period",
+                                        (e.target as HTMLSelectElement).value,
+                                    )}
+                            >
                                 {#each PERIODS as period}
-                                    <option value={period.id}>{period.name}</option>
+                                    <option value={period.id}
+                                        >{period.name}</option
+                                    >
                                 {/each}
                             </select>
                         </div>
 
-                        {#if selectedWidget.type === 'chart'}
+                        {#if selectedWidget.type === "chart"}
                             <div class="setting-group">
                                 <label>Visualization</label>
-                                <select value={selectedWidget.config.visualization} onchange={(e) => updateWidgetConfig('visualization', e.target.value)}>
-                                    {#each VISUALIZATIONS.filter(v => v.id !== 'table' && v.id !== 'metric') as viz}
-                                        <option value={viz.id}>{viz.name}</option>
+                                <select
+                                    value={selectedWidget.config.visualization}
+                                    onchange={(e) =>
+                                        updateWidgetConfig(
+                                            "visualization",
+                                            (e.target as HTMLSelectElement)
+                                                .value,
+                                        )}
+                                >
+                                    {#each VISUALIZATIONS.filter((v) => v.id !== "table" && v.id !== "metric") as viz}
+                                        <option value={viz.id}
+                                            >{viz.name}</option
+                                        >
                                     {/each}
                                 </select>
                             </div>
@@ -364,14 +460,26 @@
                                 <input
                                     type="color"
                                     value={selectedWidget.config.color}
-                                    onchange={(e) => updateWidgetConfig('color', e.target.value)}
+                                    onchange={(e) =>
+                                        updateWidgetConfig(
+                                            "color",
+                                            (e.target as HTMLInputElement)
+                                                .value,
+                                        )}
                                 />
                             </div>
                         {/if}
 
                         <div class="setting-group">
                             <label>Aggregate</label>
-                            <select value={selectedWidget.config.aggregate} onchange={(e) => updateWidgetConfig('aggregate', e.target.value)}>
+                            <select
+                                value={selectedWidget.config.aggregate}
+                                onchange={(e) =>
+                                    updateWidgetConfig(
+                                        "aggregate",
+                                        (e.target as HTMLSelectElement).value,
+                                    )}
+                            >
                                 <option value="sum">Sum</option>
                                 <option value="avg">Average</option>
                                 <option value="max">Max</option>
@@ -379,7 +487,13 @@
                             </select>
                         </div>
 
-                        <button class="btn btn-danger" style="width: 100%; margin-top: 1rem;" onclick={() => removeWidget(selectedWidget.id)}>
+                        <button
+                            class="btn btn-danger"
+                            style="width: 100%; margin-top: 1rem;"
+                            onclick={() =>
+                                selectedWidget &&
+                                removeWidget(selectedWidget.id)}
+                        >
                             <Trash2 size={14} /> Remove Widget
                         </button>
                     </div>
@@ -397,37 +511,65 @@
                     <div class="widget-grid">
                         {#each widgets as widget (widget.id)}
                             <div
-                                class="widget-preview {selectedWidget?.id === widget.id ? 'selected' : ''}"
+                                class="widget-preview {selectedWidget?.id ===
+                                widget.id
+                                    ? 'selected'
+                                    : ''}"
                                 onclick={() => selectWidget(widget)}
                                 style="border-color: {widget.config.color};"
                             >
                                 <div class="widget-header">
                                     <span class="widget-icon">
-                                        {#if widget.metric === 'tokens'}📝{/if}
-                                        {#if widget.metric === 'cost'}💰{/if}
-                                        {#if widget.metric === 'requests'}📨{/if}
-                                        {#if widget.metric === 'latency'}⏱️{/if}
-                                        {#if widget.metric === 'error_rate'}⚠️{/if}
-                                        {#if widget.metric === 'efficiency'}📈{/if}
+                                        {#if widget.metric === "tokens"}📝{/if}
+                                        {#if widget.metric === "cost"}💰{/if}
+                                        {#if widget.metric === "requests"}📨{/if}
+                                        {#if widget.metric === "latency"}⏱️{/if}
+                                        {#if widget.metric === "error_rate"}⚠️{/if}
+                                        {#if widget.metric === "efficiency"}📈{/if}
                                     </span>
-                                    <span class="widget-title">{widget.title}</span>
-                                    <span class="widget-type">{widget.config.visualization}</span>
+                                    <span class="widget-title"
+                                        >{widget.title}</span
+                                    >
+                                    <span class="widget-type"
+                                        >{widget.config.visualization}</span
+                                    >
                                 </div>
                                 <div class="widget-preview-body">
-                                    {#if widget.type === 'chart'}
-                                        <div class="chart-placeholder" style="background-color: {widget.config.color}20;">
-                                            <LineChart size={32} opacity={0.5} />
+                                    {#if widget.type === "chart"}
+                                        <div
+                                            class="chart-placeholder"
+                                            style="background-color: {widget
+                                                .config.color}20;"
+                                        >
+                                            <LineChart
+                                                size={32}
+                                                opacity={0.5}
+                                            />
                                         </div>
                                     {:else}
-                                        <div class="stat-placeholder" style="background-color: {widget.config.color}20;">
-                                            <span style="font-size: 1.5rem; font-weight: 700; color: {widget.config.color};">1,234</span>
-                                            <span style="font-size: 0.875rem; color: #6b7280;">{widget.metric}</span>
+                                        <div
+                                            class="stat-placeholder"
+                                            style="background-color: {widget
+                                                .config.color}20;"
+                                        >
+                                            <span
+                                                style="font-size: 1.5rem; font-weight: 700; color: {widget
+                                                    .config.color};">1,234</span
+                                            >
+                                            <span
+                                                style="font-size: 0.875rem; color: #6b7280;"
+                                                >{widget.metric}</span
+                                            >
                                         </div>
                                     {/if}
                                 </div>
                                 <div class="widget-footer">
-                                    <span class="period-badge">{widget.config.period}</span>
-                                    <span class="aggregate-badge">{widget.config.aggregate}</span>
+                                    <span class="period-badge"
+                                        >{widget.config.period}</span
+                                    >
+                                    <span class="aggregate-badge"
+                                        >{widget.config.aggregate}</span
+                                    >
                                 </div>
                             </div>
                         {/each}
@@ -445,24 +587,44 @@
                 {:else}
                     <div class="dashboard-grid">
                         {#each widgets as widget (widget.id)}
-                            <div class="dashboard-widget" style="border-top: 3px solid {widget.config.color};">
+                            <div
+                                class="dashboard-widget"
+                                style="border-top: 3px solid {widget.config
+                                    .color};"
+                            >
                                 <div class="dashboard-widget-header">
                                     <h4>{widget.title}</h4>
-                                    <span class="period">{widget.config.period}</span>
+                                    <span class="period"
+                                        >{widget.config.period}</span
+                                    >
                                 </div>
                                 <div class="dashboard-widget-body">
                                     <!-- Widget content would be rendered here with real data -->
                                     <div class="preview-content">
-                                        <p style="color: #6b7280; font-style: italic;">
-                                            Preview: {widget.config.visualization} of {widget.metric}
+                                        <p
+                                            style="color: #6b7280; font-style: italic;"
+                                        >
+                                            Preview: {widget.config
+                                                .visualization} of {widget.metric}
                                         </p>
                                         <div class="mock-data">
                                             {#if widget.data}
                                                 {#each widget.data.slice(-5) as point}
                                                     <div class="data-point">
-                                                        <span class="date">{point.date}</span>
-                                                        <span class="value" style="color: {widget.config.color};">
-                                                            {widget.metric === 'cost' ? '$' : ''}{point.value.toFixed(2)}
+                                                        <span class="date"
+                                                            >{point.date}</span
+                                                        >
+                                                        <span
+                                                            class="value"
+                                                            style="color: {widget
+                                                                .config.color};"
+                                                        >
+                                                            {widget.metric ===
+                                                            "cost"
+                                                                ? "$"
+                                                                : ""}{point.value.toFixed(
+                                                                2,
+                                                            )}
                                                         </span>
                                                     </div>
                                                 {/each}

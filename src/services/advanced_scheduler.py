@@ -91,6 +91,9 @@ class AdvancedScheduler:
         self.running = True
         self.logger.info("Advanced scheduler started")
 
+        # Initialize tables if they don't exist
+        self.initialize_tables()
+
         while self.running:
             try:
                 await self.process_due_reports()
@@ -98,6 +101,48 @@ class AdvancedScheduler:
             except Exception as e:
                 self.logger.error(f"Scheduler error: {e}")
                 await asyncio.sleep(self.check_interval)
+
+    def initialize_tables(self):
+        """Create necessary tables if they don't exist"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            # Create scheduled_reports table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS scheduled_reports (
+                    id TEXT PRIMARY KEY,
+                    template_id TEXT,
+                    name TEXT,
+                    frequency TEXT,
+                    recipients TEXT,
+                    timezone TEXT,
+                    is_active INTEGER,
+                    next_run TEXT,
+                    last_run TEXT,
+                    delivery_method TEXT,
+                    config TEXT
+                )""")
+
+            # Create report_templates table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS report_templates (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    description TEXT,
+                    metrics TEXT,
+                    filters TEXT,
+                    chart_config TEXT,
+                    created_at TEXT,
+                    created_by TEXT
+                )""")
+
+            conn.commit()
+            conn.close()
+            logger.info("✅ Tables initialized for advanced scheduler")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize tables: {e}")
 
     async def stop(self):
         """Stop the scheduler"""

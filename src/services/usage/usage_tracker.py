@@ -254,6 +254,7 @@ class UsageTracker:
                 cost_per_1k_tokens REAL DEFAULT 0.0,
                 tokens_per_request REAL DEFAULT 0.0,
                 avg_latency_ms REAL DEFAULT 0.0,
+                request_count INTEGER DEFAULT 0,
                 PRIMARY KEY (date, model_tier, model)
             )
         """)

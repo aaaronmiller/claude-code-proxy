@@ -16,6 +16,7 @@ API_KEY_PATTERNS: Dict[str, re.Pattern] = {
     'gemini': re.compile(r'^AIza[a-zA-Z0-9_-]{35}$'),
     'azure': re.compile(r'^[a-f0-9]{32}$'),
     'vibeproxy': re.compile(r'^ya29\.[a-zA-Z0-9_-]+$'),  # OAuth tokens
+    'kiro': re.compile(r'^[a-zA-Z0-9\-_]{20,}$'),  # Kiro access tokens (flexible)
 }
 
 # Provider status cache (populated on startup)
@@ -285,6 +286,7 @@ class Config:
             "gemini": os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"),
             "azure": os.environ.get("AZURE_API_KEY") or os.environ.get("AZURE_OPENAI_API_KEY"),
             "vibeproxy": self.openai_api_key,  # VibeProxy uses main provider key (Antigravity token)
+            "kiro": os.environ.get("KIRO_ACCESS_TOKEN"),  # Kiro uses access tokens
             "local": "dummy",  # Local endpoints don't need auth
         }
         

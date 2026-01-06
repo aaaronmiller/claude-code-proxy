@@ -76,6 +76,45 @@ class AlertEngine:
         """Start the alert engine (called from main.py lifespan)"""
         logger.info("🚀 Alert Engine Starting...")
         try:
+            # Create the table alert rules if it doesn't exist:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS alert_rules (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    description TEXT,
+                    condition_json TEXT,
+                    condition_logic TEXT,
+                    actions_json TEXT,
+                    cooldown_minutes INTEGER,
+                    priority INTEGER,
+                    time_window INTEGER,
+                    is_active INTEGER,
+                    last_triggered TEXT,
+                    trigger_count INTEGER,
+                    created_at TEXT,
+                    created_by TEXT
+                )""")
+
+            # Create alert_history table if not exists
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS alert_history (
+                    id TEXT PRIMARY KEY,
+                    rule_id TEXT,
+                    rule_name TEXT,
+                    triggered_at TEXT,
+                    severity TEXT,
+                    alert_data_json TEXT,
+                    description TEXT,
+                    resolved INTEGER DEFAULT 0,
+                    acknowledged INTEGER DEFAULT 0
+                )""")
+
+            conn.commit()
+            conn.close()
+
+
             # Load all active rules
             rules = self.get_active_rules()
             logger.info(f"📊 Loaded {len(rules)} active alert rules")
@@ -112,9 +151,28 @@ class AlertEngine:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
 
+        # Select only columns that match the AlertRule dataclass
         cursor = conn.execute("""
-            SELECT * FROM alert_rules
-            WHERE is_active = 1
+            SELECT 
+                id, name, description, condition_json, 
+                COALESCE(condition_logic, '') as condition_logic,
+                actions_json, 
+                COALESCE(cooldown_minutes, 5) as cooldown_minutes,
+                CASE 
+                    WHEN priority = 'critical' THEN 0
+                    WHEN priority = 'high' THEN 1
+                    WHEN priority = 'medium' THEN 2
+                    WHEN priority = 'low' THEN 3
+                    ELSE CAST(COALESCE(priority, 2) AS INTEGER)
+                END as priority,
+                COALESCE(time_window, 5) as time_window,
+                COALESCE(is_active, 1) as is_active,
+                last_triggered,
+                COALESCE(trigger_count, 0) as trigger_count,
+                COALESCE(created_at, '') as created_at,
+                COALESCE(created_by, 'system') as created_by
+            FROM alert_rules
+            WHERE COALESCE(is_active, 1) = 1
             ORDER BY priority ASC
         """)
 

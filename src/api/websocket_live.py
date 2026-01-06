@@ -13,6 +13,7 @@ Date: 2026-01-04
 
 import asyncio
 import json
+import sqlite3
 from datetime import datetime
 from typing import Dict, List, Set
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter

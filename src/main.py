@@ -27,6 +27,8 @@ from src.api.integrations import router as integrations_router
 from src.api.dashboards import router as dashboards_router
 # NEW: User management & RBAC (Phase 4)
 from src.api.users_rbac import router as users_rbac_router
+# NEW: Provider authentication (Kiro, etc.)
+from src.api.providers import router as providers_router
 # NEW: GraphQL API (Phase 4)
 from src.api.graphql_schema import get_graphql_router
 import uvicorn
@@ -39,6 +41,47 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan events for startup and shutdown."""
+
+    # Database Migrations
+    try:
+        import sqlite3
+        conn = sqlite3.connect(config.usage_tracking_db_path)
+        cursor = conn.cursor()
+
+        # Add request_count column if it doesn't exist
+        cursor.execute("""
+            ALTER TABLE api_requests ADD COLUMN request_count INTEGER DEFAULT 1
+        """)
+        conn.commit()
+
+        #Add actions_json column if it doesn't exist
+        cursor.execute("""
+            ALTER TABLE alert_rules ADD COLUMN actions_json TEXT DEFAULT '{"channels": ["in_app"]}'
+        """)
+        conn.commit()
+
+        #Add delivery_method column if it doesnt exist, and defaults to "email"
+        cursor.execute("""
+          ALTER TABLE scheduled_reports ADD COLUMN delivery_method TEXT DEFAULT 'email'
+        """)
+        conn.commit()
+
+
+        cursor.execute("""
+          ALTER TABLE alert_rules ADD COLUMN created_by TEXT
+        """)
+        conn.commit()
+
+
+        cursor.execute("""
+          ALTER TABLE alert_rules ADD COLUMN created_at TEXT
+        """)
+        conn.commit()
+
+        conn.close()
+    except Exception as e:
+    	print(f"❌  Failed to run DB migrations: {e}")
+
     # Startup: Start live metrics system
     try:
         await start_live_metrics()
@@ -142,6 +185,8 @@ app.include_router(integrations_router)  # Datadog, PagerDuty, Slack, etc.
 app.include_router(dashboards_router)  # Custom dashboards
 # NEW: User management & RBAC (Phase 4)
 app.include_router(users_rbac_router)  # Authentication, users, API keys
+# NEW: Provider authentication (Kiro, etc.)
+app.include_router(providers_router)  # Provider tokens and auth
 # NEW: GraphQL API (Phase 4)
 app.include_router(get_graphql_router(), prefix="/graphql")
 

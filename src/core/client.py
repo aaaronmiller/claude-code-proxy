@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from fastapi import HTTPException
 from typing import Optional, AsyncGenerator, Dict, Any, Tuple
 from openai import AsyncOpenAI, AsyncAzureOpenAI
@@ -50,10 +51,31 @@ class OpenAIClient:
         import time
         timestamp = time.strftime("%H:%M:%S")
 
-        # Special handling for VibeProxy (Antigravity's local proxy on port 8317)
-        is_vibeproxy = "127.0.0.1:8317" in base_url or "localhost:8317" in base_url
+        # Detect provider type from URL
+        from src.services.providers.provider_detector import detect_provider, requires_kiro_token
 
-        if is_vibeproxy:
+        provider = detect_provider(base_url)
+        is_vibeproxy = "127.0.0.1:8317" in base_url or "localhost:8317" in base_url
+        is_kiro = requires_kiro_token(base_url)
+
+        # Special handling for Kiro provider
+        if is_kiro:
+            from src.services.providers.kiro_token_manager import get_token_manager
+
+            logger.debug(f"[Kiro {timestamp}] CLIENT CREATION for Kiro provider")
+            kiro_manager = get_token_manager()
+            token = kiro_manager.get_access_token()
+
+            if token:
+                logger.debug(f"[Kiro {timestamp}] Using Kiro access token (first 20 chars): {token[:20]}...")
+                api_key = token
+            else:
+                logger.error(f"[Kiro {timestamp}] No Kiro token found! Authentication will FAIL.")
+                logger.error(f"[Kiro {timestamp}] Please set Kiro tokens via /api/providers/kiro/tokens endpoint")
+                # Proceed anyway - let it fail with clear auth error
+
+        # Special handling for VibeProxy (Antigravity's local proxy on port 8317)
+        elif is_vibeproxy:
             # Check VibeProxy availability BEFORE attempting to use it
             if check_health:
                 from src.services.antigravity import is_vibeproxy_available, check_vibeproxy_health
@@ -79,15 +101,24 @@ class OpenAIClient:
             else:
                 logger.error(f"[VibeProxy {timestamp}] No Antigravity token found! Authentication will FAIL.")
                 logger.error(f"[VibeProxy {timestamp}] Please ensure you're logged into Antigravity IDE.")
-            
-        # Diagnostic logging for VibeProxy authentication
+
+        # Diagnostic logging for special providers
         if is_vibeproxy:
             logger.debug(f"[VibeProxy {timestamp}] Creating NEW OpenAI client instance")
             logger.debug(f"[VibeProxy {timestamp}] Endpoint: {base_url}")
             logger.debug(f"[VibeProxy {timestamp}] Token in use (first 20 chars): {api_key[:20] if api_key else 'None'}...")
-
             logger.debug(f"[VibeProxy {timestamp}] Custom headers: {custom_headers}")
-            
+        elif is_kiro:
+            logger.debug(f"[Kiro {timestamp}] Creating NEW OpenAI client instance for Kiro")
+            logger.debug(f"[Kiro {timestamp}] Endpoint: {base_url}")
+            logger.debug(f"[Kiro {timestamp}] Custom headers: {custom_headers}")
+
+        # For Kiro (Claude API compatible), use empty API key and add Kiro token in headers
+        # Kiro expects Bearer token in Authorization header, not api_key parameter
+        if is_kiro and not api_key:
+            # Fallback: Try to get token from environment
+            api_key = os.environ.get("KIRO_ACCESS_TOKEN", "")
+
         if api_version:
             return AsyncAzureOpenAI(
                 api_key=api_key,

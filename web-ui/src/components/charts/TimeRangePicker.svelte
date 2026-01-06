@@ -1,17 +1,17 @@
 <!-- TimeRangePicker.svelte - Date range selection for analytics -->
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher } from "svelte";
 
   const dispatch = createEventDispatcher();
 
   // Props
-  export let startDate = '';
-  export let endDate = '';
+  export let startDate = "";
+  export let endDate = "";
   export let presets = [
-    { label: 'Last 24 Hours', days: 1 },
-    { label: 'Last 7 Days', days: 7 },
-    { label: 'Last 30 Days', days: 30 },
-    { label: 'Last 90 Days', days: 90 }
+    { label: "Last 24 Hours", days: 1 },
+    { label: "Last 7 Days", days: 7 },
+    { label: "Last 30 Days", days: 30 },
+    { label: "Last 90 Days", days: 90 },
   ];
 
   // Local state
@@ -21,11 +21,11 @@
 
   // Format date for input
   function formatDate(date) {
-    if (!date) return '';
+    if (!date) return "";
     const d = new Date(date);
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   }
 
@@ -36,7 +36,7 @@
     start.setDate(end.getDate() - days);
     return {
       start: formatDate(start),
-      end: formatDate(end)
+      end: formatDate(end),
     };
   }
 
@@ -48,7 +48,7 @@
     tempStart = start;
     tempEnd = end;
     showCustom = false;
-    dispatch('change', { start: startDate, end: endDate });
+    dispatch("change", { start: startDate, end: endDate });
   }
 
   // Handle custom date apply
@@ -59,9 +59,9 @@
         startDate = tempStart;
         endDate = tempEnd;
         showCustom = false;
-        dispatch('change', { start: startDate, end: endDate });
+        dispatch("change", { start: startDate, end: endDate });
       } else {
-        alert('End date must be after start date');
+        alert("End date must be after start date");
       }
     }
   }
@@ -74,7 +74,7 @@
     tempStart = today;
     tempEnd = today;
     showCustom = false;
-    dispatch('change', { start: startDate, end: endDate });
+    dispatch("change", { start: startDate, end: endDate });
   }
 
   // Toggle custom date picker
@@ -96,7 +96,7 @@
     endDate = end;
     tempStart = start;
     tempEnd = end;
-    dispatch('change', { start: startDate, end: endDate });
+    dispatch("change", { start: startDate, end: endDate });
   }
 
   // Initialize with default if not provided
@@ -104,6 +104,17 @@
     const { start, end } = getPresetDate(7);
     startDate = start;
     endDate = end;
+  }
+
+  // Custom slide transition
+  function slide(node, { duration = 300 } = {}) {
+    return {
+      duration,
+      css: (t) => `
+        opacity: ${t};
+        transform: translateY(${(1 - t) * -10}px);
+      `,
+    };
   }
 </script>
 
@@ -113,7 +124,8 @@
     <button
       class="preset-btn"
       on:click={() => resetToToday()}
-      class:active={startDate === formatDate(new Date()) && endDate === formatDate(new Date())}
+      class:active={startDate === formatDate(new Date()) &&
+        endDate === formatDate(new Date())}
     >
       Today
     </button>
@@ -140,7 +152,9 @@
   <div class="current-selection">
     <span class="label">Selected:</span>
     <span class="date-range">
-      {new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()}
+      {new Date(startDate).toLocaleDateString()} - {new Date(
+        endDate,
+      ).toLocaleDateString()}
     </span>
   </div>
 
@@ -170,7 +184,7 @@
       </div>
 
       <div class="actions">
-        <button class="btn btn-secondary" on:click={() => showCustom = false}>
+        <button class="btn btn-secondary" on:click={() => (showCustom = false)}>
           Cancel
         </button>
         <button class="btn btn-primary" on:click={applyCustom}>
@@ -360,16 +374,3 @@
     }
   }
 </style>
-
-<!-- Add slide transition -->
-<script>
-  function slide(node, { duration = 300 } = {}) {
-    return {
-      duration,
-      css: (t) => `
-        opacity: ${t};
-        transform: translateY(${(1 - t) * -10}px);
-      `
-    };
-  }
-</script>

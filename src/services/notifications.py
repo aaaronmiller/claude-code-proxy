@@ -35,6 +35,44 @@ class NotificationService:
         """Initialize aiohttp session"""
         self.session = aiohttp.ClientSession()
 
+        logger.info("🚀Initializing notification channels table if not exists...")
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS notification_channels (
+                    id TEXT PRIMARY KEY,
+                    type TEXT,
+                    name TEXT,
+                    config TEXT,
+                    is_enabled INTEGER,
+                    last_used TEXT
+                )""")
+            conn.commit()
+            conn.close()
+
+        except Exception as e:
+            logger.error(f"Failed to migrate 001 to perform table upgrades. Reason: {e}")
+
+
+        try:
+            # Create the table notification_channels if it doesn't exist:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS notification_channels (
+                    id TEXT PRIMARY KEY,
+                    type TEXT,
+                    name TEXT,
+                    config TEXT,
+                    is_enabled INTEGER,
+                    last_used TEXT
+                )""")
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to initialize notification service: {e}")
+
     async def close(self):
         """Close aiohttp session"""
         if self.session:

@@ -1,72 +1,90 @@
 <!-- QueryBuilder.svelte - Interactive query builder for advanced analytics -->
-<script>
-  import { createEventDispatcher, onMount } from 'svelte';
-  import { Plus, Trash2, Filter, Play, Save, Download, X } from 'lucide-svelte';
+<script lang="ts">
+  import { createEventDispatcher, onMount } from "svelte";
+  import { Plus, Trash2, Filter, Play, Save, Download, X } from "lucide-svelte";
 
   const dispatch = createEventDispatcher();
 
   // Available metrics
   const METRICS = [
-    { value: 'tokens', label: 'Total Tokens', icon: '📝' },
-    { value: 'cost', label: 'Cost ($)', icon: '💰' },
-    { value: 'requests', label: 'Requests', icon: '📨' },
-    { value: 'latency', label: 'Avg Latency (ms)', icon: '⏱️' }
+    { value: "tokens", label: "Total Tokens", icon: "📝" },
+    { value: "cost", label: "Cost ($)", icon: "💰" },
+    { value: "requests", label: "Requests", icon: "📨" },
+    { value: "latency", label: "Avg Latency (ms)", icon: "⏱️" },
   ];
 
   // Available providers (will be populated dynamically)
-  let providers = [];
-  let models = [];
+  let providers: string[] = $state([]);
+  let models: Array<{ value: string; label: string; provider: string }> =
+    $state([]);
 
-  // Query state
-  export let query = {
-    metrics: ['tokens', 'cost'],
-    filters: [],
-    dateRange: {
-      start: '',
-      end: ''
-    },
-    groupBy: 'day',
-    aggregator: 'sum'
-  };
+  interface QueryFilter {
+    field: string;
+    operator: string;
+    value: string;
+  }
+
+  interface Query {
+    metrics: string[];
+    filters: QueryFilter[];
+    dateRange: { start: string; end: string };
+    groupBy: string;
+    aggregator: string;
+  }
+
+  // Props with default
+  let {
+    query = $bindable({
+      metrics: ["tokens", "cost"],
+      filters: [] as QueryFilter[],
+      dateRange: { start: "", end: "" },
+      groupBy: "day",
+      aggregator: "sum",
+    }),
+  } = $props<{ query?: Query }>();
 
   let loading = $state(false);
-  let results = $state(null);
+  let results = $state<any>(null);
   let showPreview = $state(false);
 
   // Date presets
   const DATE_PRESETS = [
-    { label: 'Today', days: 1 },
-    { label: 'Last 7 Days', days: 7 },
-    { label: 'Last 30 Days', days: 30 },
-    { label: 'Last 90 Days', days: 90 }
+    { label: "Today", days: 1 },
+    { label: "Last 7 Days", days: 7 },
+    { label: "Last 30 Days", days: 30 },
+    { label: "Last 90 Days", days: 90 },
   ];
 
   // Filter operators
   const OPERATORS = [
-    { value: 'equals', label: '=' },
-    { value: 'not_equals', label: '!=' },
-    { value: 'contains', label: 'contains' },
-    { value: 'greater', label: '>' },
-    { value: 'less', label: '<' }
+    { value: "equals", label: "=" },
+    { value: "not_equals", label: "!=" },
+    { value: "contains", label: "contains" },
+    { value: "greater", label: ">" },
+    { value: "less", label: "<" },
   ];
 
   // Load available providers and models
   onMount(async () => {
     try {
       // Fetch providers
-      const providersRes = await fetch('/api/models/providers');
+      const providersRes = await fetch("/api/models/providers");
       if (providersRes.ok) {
         providers = await providersRes.json();
       }
 
       // Fetch models
-      const modelsRes = await fetch('/api/models/list');
+      const modelsRes = await fetch("/api/models/list");
       if (modelsRes.ok) {
         const allModels = await modelsRes.json();
-        models = allModels.map(m => ({ value: m.id, label: m.name, provider: m.provider }));
+        models = allModels.map((m) => ({
+          value: m.id,
+          label: m.name,
+          provider: m.provider,
+        }));
       }
     } catch (error) {
-      console.error('Error loading providers/models:', error);
+      console.error("Error loading providers/models:", error);
     }
 
     // Initialize dates if not set
@@ -88,8 +106,8 @@
   // Format date to YYYY-MM-DD
   function formatDate(date) {
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   }
 
@@ -106,9 +124,9 @@
   // Add filter
   function addFilter() {
     query.filters.push({
-      field: 'provider',
-      operator: 'equals',
-      value: ''
+      field: "provider",
+      operator: "equals",
+      value: "",
     });
   }
 
@@ -125,7 +143,7 @@
   // Get filtered models based on provider
   function getFilteredModels(provider) {
     if (!provider) return models;
-    return models.filter(m => m.provider === provider);
+    return models.filter((m) => m.provider === provider);
   }
 
   // Execute query
@@ -139,35 +157,40 @@
 
       // Add metrics
       if (query.metrics.length > 0) {
-        params.append('metrics', query.metrics.join(','));
+        params.append("metrics", query.metrics.join(","));
       }
 
       // Add date range
       if (query.dateRange.start && query.dateRange.end) {
-        params.append('start_date', query.dateRange.start);
-        params.append('end_date', query.dateRange.end);
+        params.append("start_date", query.dateRange.start);
+        params.append("end_date", query.dateRange.end);
       }
 
       // Add group by
-      params.append('group_by', query.groupBy);
+      params.append("group_by", query.groupBy);
 
       // Add filters
-      query.filters.forEach(filter => {
+      query.filters.forEach((filter) => {
         if (filter.field && filter.value) {
-          params.append(`filter_${filter.field}`, `${filter.operator}:${filter.value}`);
+          params.append(
+            `filter_${filter.field}`,
+            `${filter.operator}:${filter.value}`,
+          );
         }
       });
 
       // Fetch results
-      const response = await fetch(`/api/analytics/custom?${params.toString()}`);
+      const response = await fetch(
+        `/api/analytics/custom?${params.toString()}`,
+      );
       if (response.ok) {
         results = await response.json();
-        dispatch('results', results);
+        dispatch("results", results);
       } else {
-        results = { error: 'Query failed', details: await response.text() };
+        results = { error: "Query failed", details: await response.text() };
       }
     } catch (error) {
-      results = { error: 'Network error', details: error.message };
+      results = { error: "Network error", details: error.message };
     } finally {
       loading = false;
     }
@@ -177,15 +200,15 @@
   function exportCSV() {
     if (!results || !results.data) return;
 
-    const headers = ['Date', ...query.metrics];
-    const rows = results.data.map(row => {
-      return [row.date, ...query.metrics.map(m => row[m] || 0)].join(',');
+    const headers = ["Date", ...query.metrics];
+    const rows = results.data.map((row) => {
+      return [row.date, ...query.metrics.map((m) => row[m] || 0)].join(",");
     });
 
-    const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `query_${Date.now()}.csv`;
     a.click();
@@ -193,52 +216,41 @@
 
   // Save query
   async function saveQuery() {
-    const name = prompt('Enter query name:');
+    const name = prompt("Enter query name:");
     if (!name) return;
 
     try {
-      const response = await fetch('/api/analytics/queries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/analytics/queries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
           query: query,
-          created_at: new Date().toISOString()
-        })
+          created_at: new Date().toISOString(),
+        }),
       });
 
       if (response.ok) {
-        alert('Query saved successfully!');
-        dispatch('saved');
+        alert("Query saved successfully!");
+        dispatch("saved");
       }
     } catch (error) {
-      alert('Failed to save query');
+      alert("Failed to save query");
     }
   }
 
   // Reset query
   function resetQuery() {
     query = {
-      metrics: ['tokens', 'cost'],
+      metrics: ["tokens", "cost"],
       filters: [],
-      dateRange: { start: '', end: '' },
-      groupBy: 'day',
-      aggregator: 'sum'
+      dateRange: { start: "", end: "" },
+      groupBy: "day",
+      aggregator: "sum",
     };
     results = null;
     showPreview = false;
     applyPreset(7);
-  }
-
-  // Auto-execute on filter changes (debounced)
-  let autoExecuteTimer;
-  $: if (query) {
-    clearTimeout(autoExecuteTimer);
-    autoExecuteTimer = setTimeout(() => {
-      if (query.metrics.length > 0 && query.dateRange.start && query.dateRange.end) {
-        // Don't auto-execute, just wait for manual trigger
-      }
-    }, 1000);
   }
 </script>
 
@@ -251,13 +263,21 @@
         <span class="icon"><X size={16} /></span>
         Reset
       </button>
-      <button class="btn btn-secondary" onclick={saveQuery} disabled={query.metrics.length === 0}>
+      <button
+        class="btn btn-secondary"
+        onclick={saveQuery}
+        disabled={query.metrics.length === 0}
+      >
         <span class="icon"><Save size={16} /></span>
         Save
       </button>
-      <button class="btn btn-primary" onclick={executeQuery} disabled={loading || query.metrics.length === 0}>
+      <button
+        class="btn btn-primary"
+        onclick={executeQuery}
+        disabled={loading || query.metrics.length === 0}
+      >
         <span class="icon"><Play size={16} /></span>
-        {loading ? 'Running...' : 'Run Query'}
+        {loading ? "Running..." : "Run Query"}
       </button>
     </div>
   </div>
@@ -271,7 +291,9 @@
     <div class="metrics-grid">
       {#each METRICS as metric}
         <button
-          class="metric-card {query.metrics.includes(metric.value) ? 'active' : ''}"
+          class="metric-card {query.metrics.includes(metric.value)
+            ? 'active'
+            : ''}"
           onclick={() => toggleMetric(metric.value)}
         >
           <span class="metric-icon">{metric.icon}</span>
@@ -305,7 +327,7 @@
           <input
             type="date"
             bind:value={query.dateRange.start}
-            max={query.dateRange.end || new Date().toISOString().split('T')[0]}
+            max={query.dateRange.end || new Date().toISOString().split("T")[0]}
           />
         </div>
         <div class="input-group">
@@ -313,7 +335,7 @@
           <input
             type="date"
             bind:value={query.dateRange.end}
-            max={new Date().toISOString().split('T')[0]}
+            max={new Date().toISOString().split("T")[0]}
           />
         </div>
       </div>
@@ -339,7 +361,7 @@
             <select
               class="filter-field"
               bind:value={filter.field}
-              onchange={(e) => updateFilter(index, 'field', e.target.value)}
+              onchange={(e) => updateFilter(index, "field", e.target.value)}
             >
               <option value="provider">Provider</option>
               <option value="model">Model</option>
@@ -350,32 +372,32 @@
             <select
               class="filter-operator"
               bind:value={filter.operator}
-              onchange={(e) => updateFilter(index, 'operator', e.target.value)}
+              onchange={(e) => updateFilter(index, "operator", e.target.value)}
             >
               {#each OPERATORS as op}
                 <option value={op.value}>{op.label}</option>
               {/each}
             </select>
 
-            {#if filter.field === 'provider'}
+            {#if filter.field === "provider"}
               <select
                 class="filter-value"
                 bind:value={filter.value}
-                onchange={(e) => updateFilter(index, 'value', e.target.value)}
+                onchange={(e) => updateFilter(index, "value", e.target.value)}
               >
                 <option value="">Select provider...</option>
                 {#each providers as provider}
                   <option value={provider}>{provider}</option>
                 {/each}
               </select>
-            {:else if filter.field === 'model'}
+            {:else if filter.field === "model"}
               <select
                 class="filter-value"
                 bind:value={filter.value}
-                onchange={(e) => updateFilter(index, 'value', e.target.value)}
+                onchange={(e) => updateFilter(index, "value", e.target.value)}
               >
                 <option value="">Select model...</option>
-                {#each getFilteredModels(query.filters.find(f => f.field === 'provider')?.value) as model}
+                {#each getFilteredModels(query.filters.find((f) => f.field === "provider")?.value) as model}
                   <option value={model.value}>{model.label}</option>
                 {/each}
               </select>
@@ -385,7 +407,7 @@
                 class="filter-value"
                 placeholder="Value"
                 bind:value={filter.value}
-                oninput={(e) => updateFilter(index, 'value', e.target.value)}
+                oninput={(e) => updateFilter(index, "value", e.target.value)}
               />
             {/if}
 
@@ -446,8 +468,9 @@
       {:else if results}
         {#if results.error}
           <div class="error-state">
-            <strong>Error:</strong> {results.error}
-            {#if results.details}<br/>{results.details}{/if}
+            <strong>Error:</strong>
+            {results.error}
+            {#if results.details}<br />{results.details}{/if}
           </div>
         {:else if results.data && results.data.length > 0}
           <div class="results-table">
@@ -456,7 +479,10 @@
                 <tr>
                   <th>Date</th>
                   {#each query.metrics as metric}
-                    <th>{METRICS.find(m => m.value === metric)?.label || metric}</th>
+                    <th
+                      >{METRICS.find((m) => m.value === metric)?.label ||
+                        metric}</th
+                    >
                   {/each}
                 </tr>
               </thead>
@@ -465,7 +491,7 @@
                   <tr>
                     <td>{row.date || row.timestamp}</td>
                     {#each query.metrics as metric}
-                      <td>{row[metric]?.toFixed(2) || '0.00'}</td>
+                      <td>{row[metric]?.toFixed(2) || "0.00"}</td>
                     {/each}
                   </tr>
                 {/each}
@@ -486,9 +512,8 @@
     <strong>Summary:</strong>
     <span>
       {query.metrics.length} metrics |
-      {query.filters.length} filters |
-      Group by: {query.groupBy} |
-      Range: {query.dateRange.start} to {query.dateRange.end}
+      {query.filters.length} filters | Group by: {query.groupBy} | Range: {query
+        .dateRange.start} to {query.dateRange.end}
     </span>
   </div>
 </div>

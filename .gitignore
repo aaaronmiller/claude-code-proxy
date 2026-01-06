@@ -308,5 +308,50 @@ TROUBLESHOOTING.md
 .cursor/rules/byterover-rules.mdc
 .kiro/steering/byterover-rules.md
 .qoder/rules/byterover-rules.md
-.augment/rules/byterover-rules.md.build-artifacts/
+.augment/rules/byterover-rules.md
+
+# Build artifacts and archives
+.build-artifacts/
+migrations/
+
+# Python cache (ensure comprehensive coverage)
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*$py.class
+
+# macOS system files
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Test session logs
+tests/integration/session_logs/
+
+# Development checkpoint files
+.checkpoints/
+
+# Root clutter files that should be in build-artifacts
+test_*.py
+validate_*.py
+setup_kiro.py
+verify_bash_tool_fix.py
+models.txt
+doggod.txt
+
+# Temporary/obsolete documentation
+PHASE*.md
+*_COMPLETE.md
+*_SPEC.md
+work-log-*.md
+ANALYTICS_ENHANCEMENT_SUMMARY.md
+EXECUTIVE_SUMMARY_METRICS_ENHANCEMENT.md
+PRD_ENHANCED_WEB_UX.md
+TUI_ANALYTICS_ENHANCEMENT_SUMMARY.md
+BASH_TOOL_FIX_SUMMARY.md
+ENHANCED_MODEL_SELECTOR.md
+antigravity_claude_coode_toolcall_failure_resolution.md
+
+# Optional: include web-ui lib (already handled above but keeping)
 !web-ui/src/lib/

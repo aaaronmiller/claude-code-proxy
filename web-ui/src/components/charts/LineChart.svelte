@@ -1,44 +1,67 @@
 <!-- LineChart.svelte - Reusable Chart.js line chart component -->
-<script>
-  import { onMount, createEventDispatcher } from 'svelte';
-  import { Chart, LineController, LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
+<script lang="ts">
+  import { onMount, createEventDispatcher } from "svelte";
+  import {
+    Chart,
+    LineController,
+    LineElement,
+    PointElement,
+    CategoryScale,
+    LinearScale,
+    Tooltip,
+    Legend,
+  } from "chart.js";
+  import type { Chart as ChartType } from "chart.js";
 
   // Register Chart.js components
-  Chart.register(LineController, LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend);
+  Chart.register(
+    LineController,
+    LineElement,
+    PointElement,
+    CategoryScale,
+    LinearScale,
+    Tooltip,
+    Legend,
+  );
+
+  interface Dataset {
+    label?: string;
+    data: number[];
+  }
 
   const dispatch = createEventDispatcher();
 
-  export let labels = [];
-  export let datasets = [];
-  export let title = '';
-  export let height = '300px';
-  export let showLegend = true;
-  export let showTooltip = true;
+  export let labels: string[] = [];
+  export let datasets: Dataset[] = [];
+  export let title: string = "";
+  export let height: string = "300px";
+  export let showLegend: boolean = true;
+  export let showTooltip: boolean = true;
 
-  let canvas;
-  let chart;
-  let loading = false;
+  let canvas: HTMLCanvasElement | null = null;
+  let chart: ChartType | null = null;
+  let loading: boolean = false;
 
   // Colors for datasets
-  const colors = [
-    'rgba(59, 130, 246, 1)',   // blue
-    'rgba(16, 185, 129, 1)',   // green
-    'rgba(249, 115, 22, 1)',   // orange
-    'rgba(236, 72, 153, 1)',   // pink
-    'rgba(139, 92, 246, 1)',   // purple
-    'rgba(234, 179, 8, 1)'     // yellow
+  const colors: string[] = [
+    "rgba(59, 130, 246, 1)", // blue
+    "rgba(16, 185, 129, 1)", // green
+    "rgba(249, 115, 22, 1)", // orange
+    "rgba(236, 72, 153, 1)", // pink
+    "rgba(139, 92, 246, 1)", // purple
+    "rgba(234, 179, 8, 1)", // yellow
   ];
 
-  const bgColors = [
-    'rgba(59, 130, 246, 0.1)',
-    'rgba(16, 185, 129, 0.1)',
-    'rgba(249, 115, 22, 0.1)',
-    'rgba(236, 72, 153, 0.1)',
-    'rgba(139, 92, 246, 0.1)',
-    'rgba(234, 179, 8, 0.1)'
+  const bgColors: string[] = [
+    "rgba(59, 130, 246, 0.1)",
+    "rgba(16, 185, 129, 0.1)",
+    "rgba(249, 115, 22, 0.1)",
+    "rgba(236, 72, 153, 0.1)",
+    "rgba(139, 92, 246, 0.1)",
+    "rgba(234, 179, 8, 0.1)",
   ];
 
-  function createChart() {
+  function createChart(): void {
     if (!canvas || !labels || labels.length === 0) return;
 
     // Destroy existing chart
@@ -47,7 +70,7 @@
     }
 
     // Prepare datasets with colors
-    const chartDatasets = datasets.map((ds, index) => ({
+    const chartDatasets = datasets.map((ds: Dataset, index: number) => ({
       label: ds.label || `Dataset ${index + 1}`,
       data: ds.data || [],
       borderColor: colors[index % colors.length],
@@ -56,16 +79,17 @@
       pointRadius: 3,
       pointHoverRadius: 5,
       tension: 0.3,
-      fill: true
+      fill: true,
     }));
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
     chart = new Chart(ctx, {
-      type: 'line',
+      type: "line",
       data: {
         labels: labels,
-        datasets: chartDatasets
+        datasets: chartDatasets,
       },
       options: {
         responsive: true,
@@ -73,72 +97,82 @@
         plugins: {
           legend: {
             display: showLegend,
-            position: 'top',
+            position: "top",
             labels: {
-              color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary') || '#333',
+              color:
+                getComputedStyle(document.documentElement).getPropertyValue(
+                  "--text-primary",
+                ) || "#333",
               usePointStyle: true,
-              padding: 15
-            }
+              padding: 15,
+            },
           },
           tooltip: {
             enabled: showTooltip,
-            mode: 'index',
+            mode: "index",
             intersect: false,
-            backgroundColor: 'rgba(17, 24, 39, 0.9)',
-            titleColor: '#fff',
-            bodyColor: '#fff',
-            borderColor: 'rgba(59, 130, 246, 1)',
+            backgroundColor: "rgba(17, 24, 39, 0.9)",
+            titleColor: "#fff",
+            bodyColor: "#fff",
+            borderColor: "rgba(59, 130, 246, 1)",
             borderWidth: 1,
             padding: 12,
             displayColors: true,
             callbacks: {
-              label: function(context) {
-                let label = context.dataset.label || '';
+              label: function (context) {
+                let label = context.dataset.label || "";
                 if (label) {
-                  label += ': ';
+                  label += ": ";
                 }
                 if (context.parsed.y !== null) {
                   label += context.parsed.y.toLocaleString();
                 }
                 return label;
-              }
-            }
-          }
+              },
+            },
+          },
         },
         scales: {
           x: {
             display: true,
             grid: {
-              display: false
+              display: false,
             },
             ticks: {
-              color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary') || '#666'
-            }
+              color:
+                getComputedStyle(document.documentElement).getPropertyValue(
+                  "--text-secondary",
+                ) || "#666",
+            },
           },
           y: {
             display: true,
             grid: {
-              color: 'rgba(0, 0, 0, 0.05)',
-              borderDash: [5, 5]
+              color: "rgba(0, 0, 0, 0.05)",
             },
             ticks: {
-              color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary') || '#666',
-              callback: function(value) {
-                return value.toLocaleString();
-              }
-            }
-          }
+              color:
+                getComputedStyle(document.documentElement).getPropertyValue(
+                  "--text-secondary",
+                ) || "#666",
+              callback: function (value) {
+                return typeof value === "number"
+                  ? value.toLocaleString()
+                  : value;
+              },
+            },
+          },
         },
         interaction: {
-          mode: 'nearest',
-          axis: 'x',
-          intersect: false
-        }
-      }
+          mode: "nearest",
+          axis: "x",
+          intersect: false,
+        },
+      },
     });
 
     // Emit chart created event
-    dispatch('chartCreated', { chart });
+    dispatch("chartCreated", { chart });
   }
 
   // Watch for data changes
@@ -150,26 +184,29 @@
   }
 
   // Export chart methods
-  export function getChart() {
+  export function getChart(): ChartType | null {
     return chart;
   }
 
-  export function updateData(newLabels, newDatasets) {
+  export function updateData(
+    newLabels: string[],
+    newDatasets: Dataset[],
+  ): void {
     if (!chart) return;
 
     chart.data.labels = newLabels;
-    chart.data.datasets = newDatasets.map((ds, index) => ({
-      ...chart.data.datasets[index],
+    chart.data.datasets = newDatasets.map((ds: Dataset, index: number) => ({
+      ...chart!.data.datasets[index],
       data: ds.data || [],
-      label: ds.label
+      label: ds.label,
     }));
-    chart.update('active');
+    chart.update("active");
   }
 
-  export function exportChart(format = 'png') {
+  export function exportChart(format: string = "png"): string | null {
     if (!chart) return null;
 
-    if (format === 'png') {
+    if (format === "png") {
       return chart.toBase64Image();
     }
     return null;
@@ -207,7 +244,8 @@
       <div class="empty-hint">Select a date range to visualize metrics</div>
     </div>
   {:else}
-    <canvas bind:this={canvas} aria-label={title || 'Chart visualization'} role="img"></canvas>
+    <canvas bind:this={canvas} aria-label={title || "Chart visualization"}
+    ></canvas>
   {/if}
 </div>
 
@@ -259,7 +297,9 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .empty-state {

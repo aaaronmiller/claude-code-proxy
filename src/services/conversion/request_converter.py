@@ -230,9 +230,16 @@ def _apply_reasoning_config(
 
 
 def convert_claude_to_openai(
-    claude_request: ClaudeMessagesRequest, model_manager
+    claude_request: ClaudeMessagesRequest, model_manager, target_provider: str = None
 ) -> Dict[str, Any]:
-    """Convert Claude API request format to OpenAI format with enhanced validation."""
+    """Convert Claude API request format to OpenAI format with enhanced validation.
+    
+    Args:
+        claude_request: The Claude API request
+        model_manager: Model manager instance
+        target_provider: Target provider name (e.g., 'vibeproxy', 'openrouter', 'gemini')
+                        Used to conditionally apply provider-specific transformations
+    """
 
     # Validate input request
     if not claude_request:
@@ -287,7 +294,7 @@ def convert_claude_to_openai(
             openai_message = convert_claude_user_message(msg)
             openai_messages.append(openai_message)
         elif msg.role == Constants.ROLE_ASSISTANT:
-            openai_message = convert_claude_assistant_message(msg)
+            openai_message = convert_claude_assistant_message(msg, target_provider)
             openai_messages.append(openai_message)
 
             # Check if next message contains tool results
@@ -575,8 +582,15 @@ def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:
         return {"role": Constants.ROLE_USER, "content": openai_content}
 
 
-def convert_claude_assistant_message(msg: ClaudeMessage) -> Dict[str, Any]:
-    """Convert Claude assistant message to OpenAI format."""
+def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = None) -> Dict[str, Any]:
+    """
+    Convert Claude assistant message to OpenAI format.
+    
+    Args:
+        msg: Claude message object
+        target_provider: Target provider name (e.g., 'vibeproxy', 'gemini', 'openrouter')
+                        Used to conditionally apply provider-specific transformations
+    """
     text_parts = []
     tool_calls = []
 
@@ -597,11 +611,19 @@ def convert_claude_assistant_message(msg: ClaudeMessage) -> Dict[str, Any]:
             # REVERSE RENAMING: If tool is Bash/Repl, convert 'command' back to 'prompt'
             # This ensures Gemini sees the parameter name IT expects in the history, 
             # preventing it from getting confused and retrying.
-            if tool_name.lower() in ["bash", "repl"] and isinstance(arguments, dict):
+            # 
+            # IMPORTANT: Only apply this transformation for Gemini/VibeProxy/Antigravity providers.
+            # OpenRouter and other providers expect the original 'command' parameter.
+            should_reverse_rename = target_provider and target_provider.lower() in [
+                'vibeproxy', 'gemini', 'antigravity', 'google'
+            ]
+            
+            if should_reverse_rename and tool_name.lower() in ["bash", "repl"] and isinstance(arguments, dict):
                 # Copy dict to avoid modifying original object if shared
                 arguments = arguments.copy()
                 if "command" in arguments and "prompt" not in arguments:
                     arguments["prompt"] = arguments.pop("command")
+                    logger.debug(f"Reverse renamed Bash 'command' → 'prompt' for {target_provider} provider")
             
             tool_calls.append(
                 {
