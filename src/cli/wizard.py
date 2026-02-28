@@ -87,16 +87,9 @@ class SetupWizard:
                 return [m['id'] for m in data.get('data', [])]
         except Exception:
             pass
-        # Fallback to known models
-        return [
-            "gemini-claude-opus-4-5-thinking",
-            "gemini-claude-sonnet-4-5-thinking",
-            "gemini-claude-sonnet-4-5",
-            "gemini-3-pro-preview",
-            "gemini-3-flash",
-            "gemini-2.5-flash",
-            "gpt-oss-120b-medium",
-        ]
+        # Fallback: return empty list — model names change across CLIProxyAPI upgrades
+        # The wizard will show a manual entry prompt if no models are fetched
+        return []
 
     def check_existing_config(self) -> bool:
         """
@@ -381,7 +374,7 @@ class SetupWizard:
                 big_model = questionary.text(
                     "Enter custom model name:",
                     style=custom_style
-                ).ask() or "gemini-claude-opus-4-5-thinking"
+                ).ask() or ""
             else:
                 # Strip emoji prefix
                 big_model = big_model.replace("🧠 ", "").replace("🤖 ", "")

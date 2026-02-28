@@ -9,6 +9,8 @@ from typing import List, Optional, Tuple, Dict
 from src.services.models.model_filter import get_available_models, filter_models, model_filter
 from src.services.models.modes import ModeManager
 from src.services.models.recommender import ModelRecommender
+from src.services.models.free_model_rankings import get_or_build_free_model_rankings, get_top_free_models
+from src.services.models.selection_history import record_selection, get_recent_selections
 from src.services.usage.model_limits import get_model_limits
 from src.cli.env_utils import update_env_values
 
@@ -438,6 +440,19 @@ def refresh_models_cache() -> Tuple[bool, str]:
 
 # Cache for enriched model data
 _enriched_models_cache: Optional[dict] = None
+_free_rankings_map: Optional[Dict[str, Any]] = None
+
+
+def get_free_ranking(model_id: str):
+    global _free_rankings_map
+    if _free_rankings_map is None:
+        _free_rankings_map = {}
+        try:
+            for row in get_or_build_free_model_rankings():
+                _free_rankings_map[row.model_id] = row
+        except Exception:
+            _free_rankings_map = {}
+    return _free_rankings_map.get(model_id)
 
 def get_enriched_model_info(model_id: str) -> Optional[dict]:
     """Get enriched metadata for a specific model.
@@ -485,6 +500,7 @@ def format_model_line(idx: int, model_id: str, selected_for: Optional[str] = Non
     
     # Badges - use enriched data if available
     badges = []
+    free_rank = get_free_ranking(model_id)
     
     if enriched:
         # Enriched capability badges
@@ -504,6 +520,12 @@ def format_model_line(idx: int, model_id: str, selected_for: Optional[str] = Non
             badges.append("🆓")  # Free
         if model_filter.is_top_model(model_id):
             badges.append("🏆")  # Top/Popular
+
+    if free_rank:
+        if free_rank.class_type == "stealth_free":
+            badges.append("⚡STEALTH")
+        elif free_rank.class_type == "evergreen_free":
+            badges.append("🌲EVERGREEN")
     
     if model_filter.get_recently_used_models(20) and model_id in model_filter.get_recently_used_models(20):
         badges.append("⭐")  # Used
@@ -650,6 +672,8 @@ def draw_menu(cursor: int, big_model: str, middle_model: str, small_model: str,
     
     # Action options
     actions = [
+        ("VIEW HISTORY", ""),
+        ("MANAGE FREE CASCADE", ""),
         ("SAVE & QUIT", ""),
         ("BACK TO SETTINGS", ""),
     ]
@@ -680,6 +704,104 @@ def get_key():
     else:
         # Fallback to regular input
         return input("→ ").strip()
+
+
+def parse_cascade(value: str) -> List[str]:
+    if not value:
+        return []
+    return [m.strip() for m in value.split(",") if m.strip()]
+
+
+def format_cascade(models: List[str]) -> str:
+    return ",".join(models)
+
+
+def show_selection_history(limit: int = 20):
+    """Render recent model selection history."""
+    clear_screen()
+    rows, cols = get_terminal_size()
+    print("╔" + "═" * (cols - 2) + "╗")
+    print("║" + " MODEL SELECTION HISTORY ".center(cols - 2) + "║")
+    print("╠" + "═" * (cols - 2) + "╣")
+    events = get_recent_selections(limit=limit)
+    if not events:
+        print("║" + pad_visual(" No history yet.", cols - 2) + "║")
+    else:
+        for idx, e in enumerate(events, 1):
+            line = f"{idx:2}. [{e.slot}] {e.model_id} ({e.source})"
+            if len(line) > cols - 4:
+                line = line[: cols - 7] + "..."
+            print("║ " + pad_visual(line, cols - 3) + "║")
+    print("╠" + "═" * (cols - 2) + "╣")
+    print("║ Press Enter to return".ljust(cols - 1) + "║")
+    print("╚" + "═" * (cols - 2) + "╝")
+    input()
+
+
+def manage_free_cascade(config, big_model: str, middle_model: str, small_model: str) -> Dict[str, str]:
+    """
+    Build/edit free-model cascade ordering.
+    Returns env updates.
+    """
+    def normalize_current(value) -> List[str]:
+        if isinstance(value, list):
+            return [str(v).strip() for v in value if str(v).strip()]
+        if isinstance(value, str):
+            return parse_cascade(value)
+        return []
+
+    current_big = normalize_current(getattr(config, "big_cascade", []))
+    current_middle = normalize_current(getattr(config, "middle_cascade", []))
+    current_small = normalize_current(getattr(config, "small_cascade", []))
+
+    top_free = get_top_free_models(limit=25)
+    # Keep primary out of its own cascade chain
+    auto_big = [m for m in top_free if m != big_model][:8]
+    auto_middle = [m for m in top_free if m != middle_model][:8]
+    auto_small = [m for m in top_free if m != small_model][:8]
+
+    clear_screen()
+    print("Free Cascade Manager")
+    print("====================")
+    print("\nCurrent:")
+    print(f"  BIG_CASCADE   = {', '.join(current_big) if current_big else '(empty)'}")
+    print(f"  MIDDLE_CASCADE= {', '.join(current_middle) if current_middle else '(empty)'}")
+    print(f"  SMALL_CASCADE = {', '.join(current_small) if current_small else '(empty)'}")
+    print("\nRecommended Top Free Models:")
+    for i, model in enumerate(top_free[:15], 1):
+        print(f"  {i:2}. {model}")
+    print("\nOptions:")
+    print("  1) Apply auto free cascade")
+    print("  2) Edit manually")
+    print("  3) Disable cascade")
+    print("  q) Back")
+    cmd = input("\n→ ").strip().lower()
+
+    if cmd == "1":
+        return {
+            "MODEL_CASCADE": "true",
+            "BIG_CASCADE": format_cascade(auto_big),
+            "MIDDLE_CASCADE": format_cascade(auto_middle),
+            "SMALL_CASCADE": format_cascade(auto_small),
+        }
+    if cmd == "2":
+        big = input("BIG_CASCADE (comma list, blank keep current): ").strip()
+        mid = input("MIDDLE_CASCADE (comma list, blank keep current): ").strip()
+        small = input("SMALL_CASCADE (comma list, blank keep current): ").strip()
+        return {
+            "MODEL_CASCADE": "true",
+            "BIG_CASCADE": big if big else format_cascade(current_big),
+            "MIDDLE_CASCADE": mid if mid else format_cascade(current_middle),
+            "SMALL_CASCADE": small if small else format_cascade(current_small),
+        }
+    if cmd == "3":
+        return {
+            "MODEL_CASCADE": "false",
+            "BIG_CASCADE": "",
+            "MIDDLE_CASCADE": "",
+            "SMALL_CASCADE": "",
+        }
+    return {}
 
 
 def run_model_selector():
@@ -732,13 +854,23 @@ def run_model_selector():
             key = get_key()
             
             if key == 'UP' or key == 'k':
-                menu_cursor = (menu_cursor - 1) % 5
+                menu_cursor = (menu_cursor - 1) % 7
                 continue
             elif key == 'DOWN' or key == 'j':
-                menu_cursor = (menu_cursor + 1) % 5
+                menu_cursor = (menu_cursor + 1) % 7
                 continue
             elif key == 'ENTER':
-                if menu_cursor == 3:  # Save & Quit
+                if menu_cursor == 3:  # History
+                    show_selection_history(limit=30)
+                    continue
+                elif menu_cursor == 4:  # Free cascade manager
+                    cascade_updates = manage_free_cascade(config, big_model, middle_model, small_model)
+                    if cascade_updates:
+                        update_env_values(cascade_updates)
+                        print("\n✅ Cascade settings updated.")
+                        input("Press Enter to continue...")
+                    continue
+                elif menu_cursor == 5:  # Save & Quit
                     # Save to .env using shared utility
                     updates = {
                         "BIG_MODEL": big_model,
@@ -803,7 +935,7 @@ def run_model_selector():
                     print("\n💡 Restart proxy for changes to take effect.")
                     input("\nPress Enter to continue...")
                     return
-                elif menu_cursor == 4:  # Back
+                elif menu_cursor == 6:  # Back
                     print("\n🔙 Returning to settings...")
                     return
                 else:
@@ -821,12 +953,15 @@ def run_model_selector():
                             if slot == 'big':
                                 big_model = selected
                                 big_provider = new_provider
+                                record_selection("big", selected, provider=new_provider, source="tui")
                             elif slot == 'middle':
                                 middle_model = selected
                                 middle_provider = new_provider
+                                record_selection("middle", selected, provider=new_provider, source="tui")
                             elif slot == 'small':
                                 small_model = selected
                                 small_provider = new_provider
+                                record_selection("small", selected, provider=new_provider, source="tui")
             elif key == 'q':
                 print("\n❌ Cancelled (no changes saved)")
                 return
@@ -838,7 +973,16 @@ def run_model_selector():
                 return
             elif cmd.isdigit():
                 choice = int(cmd) - 1
-                if choice == 3:  # Save
+                if choice == 3:
+                    show_selection_history(limit=30)
+                    continue
+                elif choice == 4:
+                    cascade_updates = manage_free_cascade(config, big_model, middle_model, small_model)
+                    if cascade_updates:
+                        update_env_values(cascade_updates)
+                        print("\n✅ Cascade settings updated.")
+                    continue
+                elif choice == 5:  # Save
                     updates = {
                         "BIG_MODEL": big_model,
                         "MIDDLE_MODEL": middle_model,
@@ -846,6 +990,9 @@ def run_model_selector():
                     }
                     update_env_values(updates)
                     print(f"\n✅ Saved!")
+                    return
+                elif choice == 6:  # Back
+                    print("\n🔙 Returning to settings...")
                     return
                 elif 0 <= choice < 3:
                     slot_names = ['big', 'middle', 'small']
@@ -857,12 +1004,15 @@ def run_model_selector():
                             if slot == 'big':
                                 big_model = selected
                                 big_provider = new_provider
+                                record_selection("big", selected, provider=new_provider, source="tui")
                             elif slot == 'middle':
                                 middle_model = selected
                                 middle_provider = new_provider
+                                record_selection("middle", selected, provider=new_provider, source="tui")
                             elif slot == 'small':
                                 small_model = selected
                                 small_provider = new_provider
+                                record_selection("small", selected, provider=new_provider, source="tui")
 
 
 def pick_model(all_models: List[str], slot: str, provider: Optional[str] = None) -> Optional[str]:
@@ -874,7 +1024,7 @@ def pick_model(all_models: List[str], slot: str, provider: Optional[str] = None)
         provider: Optional provider to filter/recommend models for
     """
     # State
-    show_all = False
+    view_mode = "recommended-free"  # recommended-free | recommended | all
     search_query = ""
     page = 0
     cursor = 0
@@ -910,8 +1060,21 @@ def pick_model(all_models: List[str], slot: str, provider: Optional[str] = None)
         
         if search_query:
             return [m for m in candidates if search_query.lower() in m.lower()]
-        elif show_all:
+        elif view_mode == "all":
             return candidates
+        elif view_mode == "recommended-free":
+            ranked_free = get_top_free_models(limit=80)
+            selected = [m for m in ranked_free if m in candidates]
+            if selected:
+                return selected
+            # fallback if cache empty
+            return model_filter.get_filtered_models(
+                candidates,
+                include_free=True,
+                include_top=True,
+                include_recent=True,
+                max_total=60
+            )
         else:
             return model_filter.get_filtered_models(
                 candidates,
@@ -931,7 +1094,7 @@ def pick_model(all_models: List[str], slot: str, provider: Optional[str] = None)
 
     while True:
         # Draw UI with cursor
-        draw_model_picker(models, page, per_page, cursor, search_query, slot, show_all)
+        draw_model_picker(models, page, per_page, cursor, search_query, slot, view_mode)
         
         # Get command
         try:
@@ -953,8 +1116,18 @@ def pick_model(all_models: List[str], slot: str, provider: Optional[str] = None)
                 elif key == 'q' or key == '\x1b':  # ESC
                     return None
                 elif key == 'a':
-                    show_all = not show_all
+                    if view_mode == "recommended-free":
+                        view_mode = "recommended"
+                    elif view_mode == "recommended":
+                        view_mode = "all"
+                    else:
+                        view_mode = "recommended-free"
                     search_query = ""
+                    models = get_current_models()
+                    page = 0
+                    cursor = 0
+                elif key == 'h':
+                    show_selection_history(limit=20)
                     models = get_current_models()
                     page = 0
                     cursor = 0
@@ -979,8 +1152,17 @@ def pick_model(all_models: List[str], slot: str, provider: Optional[str] = None)
                     if page > 0:
                         page -= 1
                 elif cmd.lower() == 'a':
-                    show_all = not show_all
+                    if view_mode == "recommended-free":
+                        view_mode = "recommended"
+                    elif view_mode == "recommended":
+                        view_mode = "all"
+                    else:
+                        view_mode = "recommended-free"
                     search_query = ""
+                    models = get_current_models()
+                    page = 0
+                elif cmd.lower() == 'h':
+                    show_selection_history(limit=20)
                     models = get_current_models()
                     page = 0
                 elif cmd.startswith('/'):
@@ -1004,7 +1186,7 @@ def draw_model_picker(
     cursor: int,
     search_query: str,
     slot: str,
-    show_all: bool
+    view_mode: str
 ):
     """Draw the model picker UI with cursor."""
     clear_screen()
@@ -1016,7 +1198,12 @@ def draw_model_picker(
     print("╠" + "═" * (cols - 2) + "╣")
     
     # Model list header
-    mode = "ALL MODELS" if show_all else "RECOMMENDED"
+    if view_mode == "all":
+        mode = "ALL MODELS"
+    elif view_mode == "recommended-free":
+        mode = "RECOMMENDED FREE"
+    else:
+        mode = "RECOMMENDED"
     total_models = len(models)
     total_pages = (total_models + per_page - 1) // per_page
     current_page = page + 1
@@ -1061,11 +1248,11 @@ def draw_model_picker(
     if ARROW_SUPPORT:
         print("║ CONTROLS:".ljust(cols - 1) + "║")
         print("║   ↑/↓ or j/k  - Navigate | Enter - Select | / - Search".ljust(cols - 1) + "║")
-        print("║   a - Toggle All/Recommended | q/ESC - Cancel".ljust(cols - 1) + "║")
+        print("║   a - Cycle View | h - History | q/ESC - Cancel".ljust(cols - 1) + "║")
     else:
         print("║ COMMANDS:".ljust(cols - 1) + "║")
         print("║   [number] - Select | n/p - Next/Prev | / - Search".ljust(cols - 1) + "║")
-        print("║   a - Toggle All/Recommended | q - Cancel".ljust(cols - 1) + "║")
+        print("║   a - Cycle View | h - History | q - Cancel".ljust(cols - 1) + "║")
     print("╚" + "═" * (cols - 2) + "╝")
     print()
 

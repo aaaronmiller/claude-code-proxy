@@ -160,124 +160,41 @@ class ProviderDetector:
         """
         Normalize model name for VibeProxy (CLIProxyAPI).
 
-        VibeProxy exposes models from multiple providers (Antigravity, Gemini CLI, etc.)
-        and expects exact model IDs as returned by its /v1/models endpoint.
-
-        Available Antigravity models (as of Dec 2025):
-        - gemini-3-flash
-        - gemini-3-pro-preview
-        - gemini-3-pro-image-preview
-        - gemini-2.5-flash
-        - gemini-2.5-flash-lite
-        - gemini-2.5-computer-use-preview-10-2025
-        - gemini-claude-sonnet-4-5
-        - gemini-claude-sonnet-4-5-thinking
-        - gemini-claude-opus-4-5-thinking
-        - gpt-oss-120b-medium
+        VibeProxy exposes models dynamically via its /v1/models endpoint.
+        Model names change across upgrades, so we do NOT hardcode any mappings.
+        The .env BIG_MODEL / MIDDLE_MODEL / SMALL_MODEL values should match
+        exactly what CLIProxyAPI reports in /v1/models.
 
         Args:
             model_name: Original model name
 
         Returns:
-            Model name for VibeProxy
+            Model name for VibeProxy (passthrough with prefix stripping)
         """
-        # Strip provider prefix if present (e.g., "antigravity/gemini-3-pro" -> "gemini-3-pro")
+        # Strip provider prefix if present (e.g., "vibeproxy/claude-opus-4-6-thinking" -> "claude-opus-4-6-thinking")
         if '/' in model_name:
             model_name = model_name.split('/', 1)[1]
 
-        # Map common aliases to VibeProxy model IDs
-        VIBEPROXY_MODEL_MAP = {
-            # ═══════════════════════════════════════════════════════════════════════════════
-            # Gemini models
-            # ═══════════════════════════════════════════════════════════════════════════════
-            'gemini-3-pro': 'gemini-3-pro-preview',
-            'gemini-3-pro-high': 'gemini-3-pro-preview',
-            'gemini-3-pro-low': 'gemini-3-pro-preview',
-            'gemini-2.5-pro': 'gemini-2.5-pro',
-            'gemini-2.5-flash': 'gemini-2.5-flash',
-            'gemini-2.0-flash-thinking': 'gemini-2.0-flash-thinking-exp',
-            
-            # ═══════════════════════════════════════════════════════════════════════════════
-            # Claude via VibeProxy (gemini-claude-* are internal VibeProxy model IDs)
-            # ═══════════════════════════════════════════════════════════════════════════════
-            'claude-sonnet-4': 'claude-sonnet-4',
-            'claude-opus-4': 'claude-opus-4',
-            'claude-sonnet-4.5': 'gemini-claude-sonnet-4-5',
-            'claude-sonnet-4-5': 'gemini-claude-sonnet-4-5',
-            'claude-sonnet-4.5-thinking': 'gemini-claude-sonnet-4-5-thinking',
-            'claude-sonnet-4-5-thinking': 'gemini-claude-sonnet-4-5-thinking',
-            'claude-opus-4.5': 'gemini-claude-opus-4-5-thinking',
-            'claude-opus-4-5': 'gemini-claude-opus-4-5-thinking',
-            'claude-opus-4.5-thinking': 'gemini-claude-opus-4-5-thinking',
-            'claude-opus-4-5-thinking': 'gemini-claude-opus-4-5-thinking',
-            
-            # ═══════════════════════════════════════════════════════════════════════════════
-            # OpenAI via VibeProxy
-            # ═══════════════════════════════════════════════════════════════════════════════
-            'gpt-4o': 'gpt-4o',
-            'gpt-4o-mini': 'gpt-4o-mini',
-            
-            # ═══════════════════════════════════════════════════════════════════════════════
-            # Qwen via VibeProxy
-            # ═══════════════════════════════════════════════════════════════════════════════
-            'qwen-2.5-max': 'qwen-2.5-max',
-            'qwen-2.5-coder': 'qwen-2.5-coder-32b',
-            'qwen-2.5-coder-32b': 'qwen-2.5-coder-32b',
-            
-            # ═══════════════════════════════════════════════════════════════════════════════
-            # Other (GPT-OSS)
-            # ═══════════════════════════════════════════════════════════════════════════════
-            'gpt-oss-120b': 'gpt-oss-120b-medium',
-        }
-
-        # DYNAMIC MAPPING: Check config for Haiku override (users may map SMALL_MODEL to openrouter/etc)
-        if 'haiku' in model_name.lower():
-            # Try to load config safely (lazy import to avoid cycles)
-            try:
-                from src.core.config import config
-                if config.small_model and config.small_model != 'gpt-4o-mini' and 'haiku' not in config.small_model.lower():
-                    # If user set a specific SMALL_MODEL that isn't the default or another Haiku alias
-                    return config.small_model
-            except ImportError:
-                pass
-            # Fallback for Haiku if no override or override is invalid/circular
-            return 'gemini-3-flash'
-
-        # Return mapped name or original
-        return VIBEPROXY_MODEL_MAP.get(model_name.lower(), model_name)
+        return model_name
     
     def _normalize_for_antigravity(self, model_name: str) -> str:
         """
         Normalize model name for Antigravity API.
-        
-        Antigravity uses internal model IDs like:
-        - Gemini 3 Pro (High)
-        - Claude Sonnet 4.5
-        - Claude Opus 4.5 (Thinking)
-        
+
+        Model names are dynamic and should match what the Antigravity
+        backend reports. No hardcoded mappings.
+
         Args:
             model_name: Original model name
-            
+
         Returns:
-            Model name for Antigravity
+            Model name for Antigravity (passthrough with prefix stripping)
         """
-        # Map common model names to Antigravity internal names
-        ANTIGRAVITY_MODEL_MAP = {
-            'gemini-3-pro': 'Gemini 3 Pro (High)',
-            'gemini-3-pro-low': 'Gemini 3 Pro (Low)',
-            'gemini-3-flash': 'Gemini 3 Flash',
-            'claude-sonnet-4.5': 'Claude Sonnet 4.5',
-            'claude-sonnet-4.5-thinking': 'Claude Sonnet 4.5 (Thinking)',
-            'claude-opus-4.5': 'Claude Opus 4.5 (Thinking)',
-            'gpt-oss-120b': 'GPT-OSS 120B (Medium)',
-        }
-        
         # Strip provider prefix if present
         if '/' in model_name:
             model_name = model_name.split('/', 1)[1]
-        
-        # Return mapped name or original
-        return ANTIGRAVITY_MODEL_MAP.get(model_name.lower(), model_name)
+
+        return model_name
     
     def get_provider_info(self) -> dict:
         """

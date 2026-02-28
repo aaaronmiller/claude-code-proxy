@@ -1,0 +1,6 @@
+Testing gemini-claude-opus-4-6-thinking...
+
+----------------------------------------
+Testing gemini-claude-opus-4-5-thinking...
+
+----------------------------------------

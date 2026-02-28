@@ -30,6 +30,7 @@ function switchTab(tabName, buttonEl = null) {
         loadProfiles();
     } else if (tabName === 'models') {
         loadModels();
+        loadSelectionHistory();
     } else if (tabName === 'monitor') {
         refreshStats();
     } else if (tabName === 'logs') {
@@ -97,9 +98,9 @@ const providerPresets = {
     vibeproxy: {
         apiKey: 'dummy',
         baseUrl: 'http://127.0.0.1:8317/v1',
-        bigModel: 'gemini-claude-opus-4-5-thinking',
-        middleModel: 'gemini-3-pro-preview',
-        smallModel: 'gemini-3-flash',
+        bigModel: '',
+        middleModel: '',
+        smallModel: '',
         reasoningMaxTokens: '128000'
     },
     openrouter: {
@@ -217,6 +218,21 @@ async function loadConfig() {
         }
         if (document.getElementById('log-style')) {
             document.getElementById('log-style').value = config.log_style || 'rich';
+        }
+
+        // Cascade settings
+        setCheckbox('model-cascade', config.model_cascade);
+        if (document.getElementById('big-cascade')) {
+            document.getElementById('big-cascade').value = config.big_cascade || '';
+        }
+        if (document.getElementById('middle-cascade')) {
+            document.getElementById('middle-cascade').value = config.middle_cascade || '';
+        }
+        if (document.getElementById('small-cascade')) {
+            document.getElementById('small-cascade').value = config.small_cascade || '';
+        }
+        if (document.getElementById('model-cascade-daily-limit')) {
+            document.getElementById('model-cascade-daily-limit').value = config.model_cascade_daily_limit || '1000';
         }
 
         // Checkboxes
@@ -371,7 +387,14 @@ async function saveConfig() {
         middle_api_key: document.getElementById('middle-api-key')?.value || '',
         enable_small_endpoint: document.getElementById('enable-small-endpoint')?.checked ? 'true' : 'false',
         small_endpoint: document.getElementById('small-endpoint')?.value || '',
-        small_api_key: document.getElementById('small-api-key')?.value || ''
+        small_api_key: document.getElementById('small-api-key')?.value || '',
+
+        // Cascade
+        model_cascade: document.getElementById('model-cascade')?.checked ? 'true' : 'false',
+        big_cascade: document.getElementById('big-cascade')?.value || '',
+        middle_cascade: document.getElementById('middle-cascade')?.value || '',
+        small_cascade: document.getElementById('small-cascade')?.value || '',
+        model_cascade_daily_limit: document.getElementById('model-cascade-daily-limit')?.value || '1000'
     };
 
     try {
@@ -384,6 +407,7 @@ async function saveConfig() {
         if (response.ok) {
             showToast('Configuration saved!', 'success');
             loadConfig();
+            loadSelectionHistory();
         } else {
             const error = await response.json();
             showToast(`Failed to save: ${error.detail}`, 'error');
@@ -434,6 +458,11 @@ function exportConfig() {
         ['BIG_MODEL', 'big-model'],
         ['MIDDLE_MODEL', 'middle-model'],
         ['SMALL_MODEL', 'small-model'],
+        ['MODEL_CASCADE', 'model-cascade'],
+        ['BIG_CASCADE', 'big-cascade'],
+        ['MIDDLE_CASCADE', 'middle-cascade'],
+        ['SMALL_CASCADE', 'small-cascade'],
+        ['MODEL_CASCADE_DAILY_LIMIT', 'model-cascade-daily-limit'],
         ['REASONING_EFFORT', 'reasoning-effort'],
         ['REASONING_MAX_TOKENS', 'reasoning-max-tokens'],
         ['HOST', 'server-host'],
@@ -444,7 +473,7 @@ function exportConfig() {
     const envContent = fields
         .map(([key, id]) => {
             const el = document.getElementById(id);
-            const value = el ? el.value : '';
+            const value = el ? (el.type === 'checkbox' ? (el.checked ? 'true' : 'false') : el.value) : '';
             return value ? `${key}="${value}"` : null;
         })
         .filter(Boolean)
@@ -482,12 +511,20 @@ function importConfig() {
                     'PROXY_AUTH_KEY': 'proxy-auth-key',
                     'BIG_MODEL': 'big-model',
                     'MIDDLE_MODEL': 'middle-model',
-                    'SMALL_MODEL': 'small-model'
+                    'SMALL_MODEL': 'small-model',
+                    'MODEL_CASCADE': 'model-cascade',
+                    'BIG_CASCADE': 'big-cascade',
+                    'MIDDLE_CASCADE': 'middle-cascade',
+                    'SMALL_CASCADE': 'small-cascade',
+                    'MODEL_CASCADE_DAILY_LIMIT': 'model-cascade-daily-limit'
                 };
                 const fieldId = fieldMap[key];
                 if (fieldId) {
                     const el = document.getElementById(fieldId);
-                    if (el) el.value = value;
+                    if (el) {
+                        if (el.type === 'checkbox') el.checked = value.toLowerCase() === 'true';
+                        else el.value = value;
+                    }
                 }
             }
         });
@@ -549,7 +586,12 @@ async function saveProfile() {
         middle_model: document.getElementById('middle-model').value,
         small_model: document.getElementById('small-model').value,
         reasoning_effort: document.getElementById('reasoning-effort').value,
-        reasoning_max_tokens: document.getElementById('reasoning-max-tokens').value
+        reasoning_max_tokens: document.getElementById('reasoning-max-tokens').value,
+        model_cascade: document.getElementById('model-cascade')?.checked ? 'true' : 'false',
+        big_cascade: document.getElementById('big-cascade')?.value || '',
+        middle_cascade: document.getElementById('middle-cascade')?.value || '',
+        small_cascade: document.getElementById('small-cascade')?.value || '',
+        model_cascade_daily_limit: document.getElementById('model-cascade-daily-limit')?.value || '1000'
     };
 
     try {
@@ -584,6 +626,11 @@ async function loadProfile(name) {
         document.getElementById('small-model').value = profile.config.small_model || '';
         document.getElementById('reasoning-effort').value = profile.config.reasoning_effort || '';
         document.getElementById('reasoning-max-tokens').value = profile.config.reasoning_max_tokens || '';
+        setCheckbox('model-cascade', profile.config.model_cascade || 'false');
+        if (document.getElementById('big-cascade')) document.getElementById('big-cascade').value = profile.config.big_cascade || '';
+        if (document.getElementById('middle-cascade')) document.getElementById('middle-cascade').value = profile.config.middle_cascade || '';
+        if (document.getElementById('small-cascade')) document.getElementById('small-cascade').value = profile.config.small_cascade || '';
+        if (document.getElementById('model-cascade-daily-limit')) document.getElementById('model-cascade-daily-limit').value = profile.config.model_cascade_daily_limit || '1000';
 
         // Switch to config tab (find and pass the button element)
         const configBtn = document.querySelector('.tab-button');
@@ -619,10 +666,11 @@ async function deleteProfile(name) {
 async function loadModels() {
     try {
         const response = await fetch('/api/models');
-        const models = await response.json();
+        const payload = await response.json();
+        const models = payload.models || payload || [];
 
         const listDiv = document.getElementById('models-list');
-        if (!models || models.length === 0) {
+        if (!Array.isArray(models) || models.length === 0) {
             listDiv.innerHTML = '<p style="color: var(--text-muted);">No models available. Check provider connection.</p>';
             return;
         }
@@ -637,7 +685,7 @@ async function loadModels() {
                     ${model.context_length ? `<span style="color: var(--text-muted); font-size: 0.8rem; margin-left: 0.5rem;">${(model.context_length / 1000).toFixed(0)}k ctx</span>` : ''}
                 </div>
                 <div>
-                    ${model.pricing && model.pricing.prompt === '0' ? '<span style="color: var(--accent-green); font-size: 0.75rem;">FREE</span>' : ''}
+                    ${model.pricing && (model.pricing.is_free === true || model.pricing.prompt === '0') ? '<span style="color: var(--accent-green); font-size: 0.75rem;">FREE</span>' : ''}
                 </div>
             </div>
         `}).join('');
@@ -664,6 +712,83 @@ function selectModel(modelId) {
     showToast(`Copied: ${modelId}`, 'success');
 }
 
+async function loadFreeRecommended() {
+    const preview = document.getElementById('free-ranked-preview');
+    if (preview) preview.textContent = 'Loading ranked free models...';
+    try {
+        const response = await fetch('/api/models/free-recommended?limit=15');
+        const payload = await response.json();
+        const models = payload.models || [];
+        if (!models.length) {
+            if (preview) preview.textContent = 'No ranked free models available.';
+            return;
+        }
+        if (preview) {
+            preview.innerHTML = models.map((m, i) => {
+                const cls = m.class_type === 'stealth_free' ? 'STEALTH' : 'EVERGREEN';
+                return `${i + 1}. ${escapeHtml(m.id)} [${cls}] score=${m.score}`;
+            }).join('<br/>');
+        }
+    } catch (error) {
+        if (preview) preview.textContent = 'Failed to load ranked free models.';
+        console.error(error);
+    }
+}
+
+async function loadSelectionHistory() {
+    const preview = document.getElementById('selection-history-preview');
+    if (preview) preview.textContent = 'Loading selection history...';
+    try {
+        const response = await fetch('/api/models/selection-history?limit=15');
+        const payload = await response.json();
+        const events = payload.events || [];
+        if (!events.length) {
+            if (preview) preview.textContent = 'No model selections recorded yet.';
+            return;
+        }
+        if (preview) {
+            preview.innerHTML = events.map((event, i) => {
+                const when = new Date(event.timestamp).toLocaleString();
+                const tier = (event.slot || '').toUpperCase();
+                const source = (event.source || 'unknown').toUpperCase();
+                return `${i + 1}. ${escapeHtml(event.model_id)} [${tier}] (${source}) at ${escapeHtml(when)}`;
+            }).join('<br/>');
+        }
+    } catch (error) {
+        if (preview) preview.textContent = 'Failed to load selection history.';
+        console.error(error);
+    }
+}
+
+async function applyFreeCascadeTemplate() {
+    try {
+        const response = await fetch('/api/models/free-recommended?limit=12');
+        const payload = await response.json();
+        const models = (payload.models || []).map(m => m.id);
+        if (!models.length) {
+            showToast('No free models available for cascade template', 'warning');
+            return;
+        }
+        const big = document.getElementById('big-model')?.value || '';
+        const middle = document.getElementById('middle-model')?.value || '';
+        const small = document.getElementById('small-model')?.value || '';
+        const bigChain = models.filter(m => m !== big).slice(0, 6);
+        const midChain = models.filter(m => m !== middle).slice(0, 6);
+        const smallChain = models.filter(m => m !== small).slice(0, 6);
+
+        if (document.getElementById('model-cascade')) document.getElementById('model-cascade').checked = true;
+        if (document.getElementById('big-cascade')) document.getElementById('big-cascade').value = bigChain.join(',');
+        if (document.getElementById('middle-cascade')) document.getElementById('middle-cascade').value = midChain.join(',');
+        if (document.getElementById('small-cascade')) document.getElementById('small-cascade').value = smallChain.join(',');
+
+        showToast('Applied free cascade template', 'success');
+        loadFreeRecommended();
+    } catch (error) {
+        showToast('Failed to apply free cascade template', 'error');
+        console.error(error);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // MONITOR & STATS
 // ═══════════════════════════════════════════════════════════════
@@ -677,6 +802,29 @@ async function refreshStats() {
         document.getElementById('total-tokens').textContent = stats.total_tokens ? stats.total_tokens.toLocaleString() : '0';
         document.getElementById('est-cost').textContent = stats.est_cost ? `$${stats.est_cost.toFixed(2)}` : '$0.00';
         document.getElementById('avg-latency').textContent = stats.avg_latency ? `${stats.avg_latency}ms` : '-';
+        const cascade = stats.cascade || {};
+        const switches = cascade.switches ?? 0;
+        const successRate = cascade.success_rate ?? 0;
+        if (document.getElementById('cascade-switches')) {
+            document.getElementById('cascade-switches').textContent = String(switches);
+        }
+        if (document.getElementById('cascade-success-rate')) {
+            document.getElementById('cascade-success-rate').textContent = `${successRate}%`;
+        }
+
+        const summaryEl = document.getElementById('cascade-summary');
+        if (summaryEl) {
+            const reasons = cascade.reasons || {};
+            const reasonRows = Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 3);
+            if (!cascade.total_events) {
+                summaryEl.textContent = 'Cascade telemetry: no events yet.';
+            } else if (!reasonRows.length) {
+                summaryEl.textContent = `Cascade telemetry: ${cascade.total_events} events, ${switches} switches.`;
+            } else {
+                const topReasons = reasonRows.map(([reason, count]) => `${reason}(${count})`).join(', ');
+                summaryEl.textContent = `Cascade telemetry: ${cascade.total_events} events, ${switches} switches. Top reasons: ${topReasons}`;
+            }
+        }
 
         if (stats.recent_requests) {
             const requestsDiv = document.getElementById('recent-requests');

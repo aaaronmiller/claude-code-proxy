@@ -28,7 +28,7 @@ class OpenAIReasoningConfig(ReasoningConfig):
 class AnthropicThinkingConfig(ReasoningConfig):
     """Configuration for Anthropic thinking models."""
     budget: int  # Token budget for thinking
-    type: str = "enabled"  # Thinking type
+    type: str = "enabled"  # Thinking type: "enabled" or "adaptive"
 
 
 @dataclass

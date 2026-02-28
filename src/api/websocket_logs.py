@@ -2,7 +2,7 @@
 
 import asyncio
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Set, Dict, Any, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
@@ -84,6 +84,9 @@ class LogBroadcaster:
 # Global broadcaster instance
 log_broadcaster = LogBroadcaster()
 
+# Cascade event history for observability and monitor stats
+_cascade_events: deque = deque(maxlen=500)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # WEBSOCKET ENDPOINTS
@@ -146,18 +149,106 @@ def log_request(
 def log_cascade(
     model: str,
     action: str,
+    tier: Optional[str] = None,
+    reason: Optional[str] = None,
+    from_model: Optional[str] = None,
+    to_model: Optional[str] = None,
+    request_id: Optional[str] = None,
     retry_count: int = 0,
     error: Optional[str] = None
 ):
     """Log a cascade event."""
+    event = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "model": model,
+        "action": action,
+        "tier": tier,
+        "reason": reason,
+        "from_model": from_model,
+        "to_model": to_model,
+        "request_id": request_id,
+        "retry_count": retry_count,
+        "error": error,
+    }
+    _cascade_events.append(event)
+
+    message = f"Cascade {action}: {model}"
+    if from_model and to_model:
+        message = f"Cascade {action}: {from_model} -> {to_model}"
+    if reason:
+        message = f"{message} ({reason})"
+
     log_broadcaster.log(
         level="warning" if action == "switch" else "info",
-        message=f"Cascade {action}: {model}",
+        message=message,
+        event_type="cascade",
         model=model,
         action=action,
+        tier=tier,
+        reason=reason,
+        from_model=from_model,
+        to_model=to_model,
+        request_id=request_id,
         retry_count=retry_count,
         error=error
     )
+
+    # Mirror into the Web UI logs stream (/ws/logs) if available.
+    try:
+        from src.api.websocket_dashboard import logs_broadcaster
+
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(
+                logs_broadcaster.broadcast(
+                    f"[cascade] {message}",
+                    "warning" if action == "switch" else "info",
+                )
+            )
+    except Exception:
+        # Keep cascade path resilient; observability must not break requests.
+        pass
+
+
+def get_cascade_stats(limit: int = 20) -> Dict[str, Any]:
+    """Get aggregate cascade metrics and recent events for monitor UI."""
+    events = list(_cascade_events)
+    if not events:
+        return {
+            "total_events": 0,
+            "switches": 0,
+            "retries": 0,
+            "successes": 0,
+            "exhausted": 0,
+            "success_rate": 0.0,
+            "reasons": {},
+            "recent": [],
+        }
+
+    switches = sum(1 for e in events if e.get("action") == "switch")
+    retries = sum(1 for e in events if e.get("action") == "retry")
+    successes = sum(1 for e in events if e.get("action") == "success")
+    exhausted = sum(1 for e in events if e.get("action") == "exhausted")
+
+    reasons: Dict[str, int] = {}
+    for event in events:
+        reason = event.get("reason")
+        if reason:
+            reasons[reason] = reasons.get(reason, 0) + 1
+
+    completed_attempts = successes + exhausted
+    success_rate = (successes / completed_attempts) if completed_attempts > 0 else 0.0
+
+    return {
+        "total_events": len(events),
+        "switches": switches,
+        "retries": retries,
+        "successes": successes,
+        "exhausted": exhausted,
+        "success_rate": round(success_rate * 100, 1),
+        "reasons": reasons,
+        "recent": list(reversed(events[-max(1, limit):])),
+    }
 
 
 def log_crosstalk(

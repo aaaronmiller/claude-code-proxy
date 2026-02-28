@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 import logging
 import os
@@ -14,6 +15,28 @@ from src.services.providers.provider_detector import (
 DEBUG_SSE = os.getenv("DEBUG_SSE", "false").lower() == "true"
 sse_logger = logging.getLogger("sse_debug")
 
+# Compiled regex for fixing numeric params returned as strings in streaming JSON
+# Matches: "timeout":"120" and converts to "timeout":120
+_NUMERIC_PARAM_RE = re.compile(
+    r'"(timeout|offset|limit|cell_number)"\s*:\s*"(\d+)"'
+)
+
+
+def _coerce_int_fields(arguments: dict, fields: list) -> dict:
+    """Coerce string values to int for specified fields.
+
+    Gemini sometimes returns integer-typed parameters as strings
+    (e.g., "120" instead of 120). Claude Code CLI's strict validator
+    rejects these with InputValidationError.
+    """
+    for field in fields:
+        if field in arguments and isinstance(arguments[field], str):
+            try:
+                arguments[field] = int(arguments[field])
+            except (ValueError, TypeError):
+                pass  # Leave non-numeric strings unchanged
+    return arguments
+
 
 def _normalize_tool_name(tool_name: str, provider: str = "gemini") -> str:
     """
@@ -24,7 +47,29 @@ def _normalize_tool_name(tool_name: str, provider: str = "gemini") -> str:
     tool_name_lower = tool_name.lower().replace("_", "")
 
     # Common tool name mappings
+    # Includes direct lowercase→PascalCase restorations (sanitize_function_name lowercases
+    # all tool names sent to CLIProxyAPI, so we must restore them here for Claude Code)
     name_mappings = {
+        # Direct lowercase restorations (from sanitize_function_name lowercasing)
+        "bash": "Bash",
+        "repl": "Repl",
+        "read": "Read",
+        "write": "Write",
+        "edit": "Edit",
+        "multiedit": "MultiEdit",
+        "glob": "Glob",
+        "grep": "Grep",
+        "ls": "LS",
+        "task": "Task",
+        "agentdispatch": "AgentDispatch",
+        "todowrite": "TodoWrite",
+        "todoread": "TodoRead",
+        "webfetch": "WebFetch",
+        "websearch": "WebSearch",
+        "browser": "Browser",
+        "notebookedit": "NotebookEdit",
+        "notebookread": "NotebookRead",
+        # Compound name variants (from models using alternative names)
         "readfile": "Read",
         "writefile": "Write",
         "runcommand": "Bash",
@@ -35,16 +80,8 @@ def _normalize_tool_name(tool_name: str, provider: str = "gemini") -> str:
         "findfiles": "Glob",
         "createtask": "Task",
         "runtask": "Task",
-        "todowrite": "TodoWrite",
         "todolist": "TodoRead",
-        "todoread": "TodoRead",
-        "webfetch": "WebFetch",
-        "websearch": "WebSearch",
         "browse": "Browser",
-        "notebookedit": "NotebookEdit",
-        "notebookread": "NotebookRead",
-        "multiedit": "MultiEdit",
-        "agentdispatch": "AgentDispatch",
     }
 
     return name_mappings.get(tool_name_lower, tool_name)
@@ -110,6 +147,7 @@ def _light_normalize(tool_name: str, arguments: dict) -> dict:
     if tool_name_lower in ["bash", "repl"]:
         if "prompt" in arguments and "command" not in arguments:
             arguments["command"] = arguments.pop("prompt")
+        _coerce_int_fields(arguments, ["timeout"])
 
     # Read: Common path variants
     if tool_name_lower == "read":
@@ -117,6 +155,7 @@ def _light_normalize(tool_name: str, arguments: dict) -> dict:
             arguments["file_path"] = arguments.pop("path")
         elif "filePath" in arguments and "file_path" not in arguments:
             arguments["file_path"] = arguments.pop("filePath")
+        _coerce_int_fields(arguments, ["offset", "limit"])
 
     # Write: Claude CLI expects 'file_path' + 'content'
     # Models often send: path, filePath, filename → file_path
@@ -168,6 +207,7 @@ def _full_normalize(tool_name: str, arguments: dict) -> dict:
             arguments["command"] = arguments.pop("prompt")
         elif "code" in arguments and "command" not in arguments:
             arguments["command"] = arguments.pop("code")
+        _coerce_int_fields(arguments, ["timeout"])
 
     # Read: Claude CLI expects 'file_path', Gemini may output 'path' or 'filename'
     if tool_name_lower == "read":
@@ -177,6 +217,7 @@ def _full_normalize(tool_name: str, arguments: dict) -> dict:
             arguments["file_path"] = arguments.pop("filename")
         elif "file" in arguments and "file_path" not in arguments:
             arguments["file_path"] = arguments.pop("file")
+        _coerce_int_fields(arguments, ["offset", "limit"])
 
     # Write: Claude CLI expects 'file_path' + 'content'
     if tool_name_lower == "write":
@@ -362,6 +403,7 @@ def _full_normalize(tool_name: str, arguments: dict) -> dict:
             arguments["cell_id"] = arguments.pop("cell")
         elif "index" in arguments and "cell_id" not in arguments:
             arguments["cell_id"] = arguments.pop("index")
+        _coerce_int_fields(arguments, ["cell_number"])
 
     # NotebookRead: Claude CLI expects 'notebook_path'
     if tool_name_lower == "notebookread":
@@ -394,6 +436,17 @@ def streaming_transform_partial(
     Returns:
         Unmodified partial_args string
     """
+    # Restore critical fix for Bash/Repl tool validation in streaming mode
+    if tool_name.lower() in ["bash", "repl", "runcommand", "runbash"]:
+        result = partial_args.replace('"prompt":', '"command":')
+        # Fix numeric params returned as strings: "timeout":"120" → "timeout":120
+        result = _NUMERIC_PARAM_RE.sub(r'"\1":\2', result)
+        return result
+
+    # Fix numeric params for Read and NotebookEdit tools in streaming mode
+    if tool_name.lower() in ["read", "readfile", "notebookedit"]:
+        return _NUMERIC_PARAM_RE.sub(r'"\1":\2', partial_args)
+    
     return partial_args
 
 

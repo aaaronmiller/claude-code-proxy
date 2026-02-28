@@ -104,17 +104,17 @@
                 </p>
                 <div class="form-group">
                     <label for="big-model">BIG Model (Claude Opus)</label>
-                    <input type="text" id="big-model" placeholder="gemini-claude-opus-4-5-thinking" />
+                    <input type="text" id="big-model" placeholder="e.g. claude-opus-4-6-thinking" />
                     <small>For complex reasoning tasks</small>
                 </div>
                 <div class="form-group">
                     <label for="middle-model">MIDDLE Model (Claude Sonnet)</label>
-                    <input type="text" id="middle-model" placeholder="gemini-3-pro-preview" />
+                    <input type="text" id="middle-model" placeholder="e.g. gemini-3-pro-preview" />
                     <small>For general coding tasks</small>
                 </div>
                 <div class="form-group">
                     <label for="small-model">SMALL Model (Claude Haiku)</label>
-                    <input type="text" id="small-model" placeholder="gemini-3-flash" />
+                    <input type="text" id="small-model" placeholder="e.g. gemini-3-flash" />
                     <small>For fast, simple tasks</small>
                 </div>
             </div>
@@ -157,6 +157,39 @@
                     <label for="request-timeout">Request Timeout (seconds)</label>
                     <input type="number" id="request-timeout" placeholder="120" value="120" />
                 </div>
+            </div>
+
+            <div class="section">
+                <h2>Model Cascade (Fallback)</h2>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="model-cascade" />
+                        Enable fallback cascade across model chains
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="big-cascade">BIG Cascade (comma-separated model IDs)</label>
+                    <input type="text" id="big-cascade" placeholder="model-a,model-b,model-c" />
+                </div>
+                <div class="form-group">
+                    <label for="middle-cascade">MIDDLE Cascade (comma-separated model IDs)</label>
+                    <input type="text" id="middle-cascade" placeholder="model-a,model-b,model-c" />
+                </div>
+                <div class="form-group">
+                    <label for="small-cascade">SMALL Cascade (comma-separated model IDs)</label>
+                    <input type="text" id="small-cascade" placeholder="model-a,model-b,model-c" />
+                </div>
+                <div class="form-group">
+                    <label for="model-cascade-daily-limit">Daily Request Threshold Per Model (UTC-day)</label>
+                    <input type="number" id="model-cascade-daily-limit" placeholder="1000" min="0" />
+                </div>
+                <div class="actions" style="margin-top: 0.5rem;">
+                    <button class="btn btn-secondary" onclick="applyFreeCascadeTemplate()">Apply Free Cascade Template</button>
+                    <button class="btn btn-secondary" onclick="loadFreeRecommended()">Load Ranked Free Models</button>
+                    <button class="btn btn-secondary" onclick="loadSelectionHistory()">Load Selection History</button>
+                </div>
+                <div id="free-ranked-preview" style="margin-top: 0.5rem; color: var(--text-muted); font-size: 0.85rem;"></div>
+                <div id="selection-history-preview" style="margin-top: 0.5rem; color: var(--text-muted); font-size: 0.85rem;"></div>
             </div>
 
             <div class="section">
@@ -391,7 +424,16 @@
                         <div class="stat-label">Avg Latency</div>
                         <div class="stat-value" id="avg-latency">-</div>
                     </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Cascade Switches</div>
+                        <div class="stat-value" id="cascade-switches">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Cascade Success Rate</div>
+                        <div class="stat-value" id="cascade-success-rate">-</div>
+                    </div>
                 </div>
+                <div id="cascade-summary" style="margin-top: 0.75rem; color: var(--text-secondary); font-size: 0.9rem;"></div>
                 <button class="btn btn-secondary" onclick="refreshStats()">🔄 Refresh Stats</button>
             </div>
 

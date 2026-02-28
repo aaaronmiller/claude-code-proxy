@@ -5,6 +5,8 @@ import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Set
 from pathlib import Path
+from src.services.models.free_model_rankings import get_top_free_models
+from src.services.models.selection_history import get_recent_models
 
 
 class ModelFilter:
@@ -177,11 +179,20 @@ class ModelFilter:
                 new_models.append(model)
                 unique_models.add(model)
         
-        # 2. Recently Used
+        # 2. Recently Used (request usage + selection history)
         recent_models = []
         if include_recent:
             usage_list = self.get_recently_used_models(limit=10)
+            selection_list = get_recent_models(limit=10)
+            merged_recent = []
+            for m in usage_list + selection_list:
+                if m not in merged_recent:
+                    merged_recent.append(m)
             for model in usage_list:
+                if model in all_models and model not in unique_models:
+                    recent_models.append(model)
+                    unique_models.add(model)
+            for model in merged_recent:
                 if model in all_models and model not in unique_models:
                     recent_models.append(model)
                     unique_models.add(model)
@@ -189,6 +200,12 @@ class ModelFilter:
         # 3. Top Free (excluding already added)
         free_models = []
         if include_free:
+            # Prefer dynamic OpenRouter free rankings when available
+            dynamic_free = get_top_free_models(limit=40)
+            for model in dynamic_free:
+                if model in all_models and model not in unique_models:
+                    free_models.append(model)
+                    unique_models.add(model)
             for model in self.FREE_MODELS:
                 if model in all_models and model not in unique_models:
                     free_models.append(model)

@@ -11,6 +11,11 @@ import re
 from dataclasses import dataclass
 from typing import Optional, Union
 import logging
+from src.core.reasoning_validator import (
+    _is_openai_reasoning_model,
+    _is_anthropic_thinking_model,
+    _is_gemini_thinking_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +30,8 @@ class ParsedModel:
     original_model: str
 
 
-# Model family patterns for reasoning type detection
-OPENAI_O_SERIES_PATTERN = re.compile(r'^(o1-|o3-|o4-mini|gpt-5)')
-ANTHROPIC_THINKING_PATTERN = re.compile(r'^(claude-opus-4-|claude-sonnet-4-|claude-3-7-sonnet-)')
-GEMINI_THINKING_PATTERN = re.compile(r'^gemini-2\.5-flash-preview-04-17')
+# Model family detection now uses keyword-based functions from reasoning_validator
+# (no more version-specific regex patterns)
 
 # K-notation conversion mapping
 K_NOTATION_MAP = {
@@ -72,6 +75,9 @@ def _detect_reasoning_type(base_model: str, suffix: Optional[str] = None) -> Opt
     """
     Detect reasoning type based on model family and suffix.
     
+    Uses keyword-based detection from reasoning_validator so new model versions
+    are automatically supported without code changes.
+    
     Args:
         base_model: Base model name without suffix
         suffix: Optional suffix to help determine type
@@ -79,15 +85,20 @@ def _detect_reasoning_type(base_model: str, suffix: Optional[str] = None) -> Opt
     Returns:
         Reasoning type: 'effort', 'thinking_tokens', 'thinking_budget', or None
     """
-    if OPENAI_O_SERIES_PATTERN.match(base_model):
+    model_lower = base_model.lower()
+    # Strip provider prefix for matching
+    if '/' in model_lower:
+        model_lower = model_lower.split('/', 1)[1]
+    
+    if _is_openai_reasoning_model(model_lower):
         # Check if suffix is numeric (token budget) or effort level
         if suffix and suffix.isdigit():
             return 'thinking_tokens'  # Arbitrary token budget for OpenAI
         return 'effort'
-    elif ANTHROPIC_THINKING_PATTERN.match(base_model):
-        return 'thinking_tokens'
-    elif GEMINI_THINKING_PATTERN.match(base_model):
+    elif _is_gemini_thinking_model(model_lower):
         return 'thinking_budget'
+    elif _is_anthropic_thinking_model(model_lower):
+        return 'thinking_tokens'
     
     return None
 

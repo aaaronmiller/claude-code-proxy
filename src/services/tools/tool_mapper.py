@@ -466,43 +466,47 @@ import re
 def sanitize_function_name(name: str, max_length: int = 64) -> str:
     """
     Sanitize a function/tool name to be compatible with all providers.
-    
+
     Addresses the INVALID_ARGUMENT errors that occur when tool names:
     - Start with dots, colons, dashes, or digits
-    - Contain invalid characters
+    - Contain invalid characters or uppercase letters (some providers)
     - Exceed the maximum length (64 chars for most providers)
-    
-    This is equivalent to the SanitizeFunctionName utility in 
-    CLIProxyAPI PR #803.
-    
+
+    This is equivalent to the SanitizeFunctionName utility in
+    CLIProxyAPI PR #803, with added lowercase conversion for Google/Gemini compatibility.
+
     Args:
         name: Original function/tool name
         max_length: Maximum allowed length (default 64)
-        
+
     Returns:
         Sanitized function name safe for all providers
     """
     if not name:
         return "_unnamed"
-    
-    # Step 1: Remove invalid characters (keep only a-zA-Z0-9_.:-) 
-    sanitized = re.sub(r'[^a-zA-Z0-9_.:\-]', '', name)
-    
-    # Step 2: Strip leading dots, colons, dashes
+
+    # Step 1: Convert to lowercase (Google/Gemini require lowercase function names)
+    # While docs say A-Z is allowed, validation rejects it in practice
+    sanitized = name.lower()
+
+    # Step 2: Remove invalid characters (keep only a-z0-9_.:-)
+    sanitized = re.sub(r'[^a-z0-9_.:\-]', '', sanitized)
+
+    # Step 3: Strip leading dots, colons, dashes
     sanitized = sanitized.lstrip('.:-')
-    
-    # Step 3: If starts with digit, prepend underscore
+
+    # Step 4: If starts with digit, prepend underscore
     if sanitized and sanitized[0].isdigit():
         sanitized = '_' + sanitized
-    
-    # Step 4: If empty after sanitization, use placeholder
+
+    # Step 5: If empty after sanitization, use placeholder
     if not sanitized:
         sanitized = '_tool'
-    
-    # Step 5: Truncate to max length
+
+    # Step 6: Truncate to max length
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length]
-    
+
     return sanitized
 
 

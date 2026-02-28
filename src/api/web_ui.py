@@ -11,6 +11,10 @@ import httpx
 
 from src.core.config import config
 from src.core.logging import logger
+from src.cli.env_utils import update_env_values
+from src.services.models.free_model_rankings import get_or_build_free_model_rankings
+from src.services.models.selection_history import get_recent_selections, record_selection
+from src.api.websocket_logs import get_cascade_stats
 
 router = APIRouter()
 
@@ -80,6 +84,13 @@ class ConfigUpdate(BaseModel):
     enable_small_endpoint: Optional[str] = None
     small_endpoint: Optional[str] = None
     small_api_key: Optional[str] = None
+
+    # Cascade settings
+    model_cascade: Optional[str] = None
+    big_cascade: Optional[str] = None
+    middle_cascade: Optional[str] = None
+    small_cascade: Optional[str] = None
+    model_cascade_daily_limit: Optional[str] = None
 
     # Legacy
     use_compact_logger: Optional[str] = None
@@ -213,6 +224,7 @@ async def get_config():
         "big_cascade": os.getenv("BIG_CASCADE", ""),
         "middle_cascade": os.getenv("MIDDLE_CASCADE", ""),
         "small_cascade": os.getenv("SMALL_CASCADE", ""),
+        "model_cascade_daily_limit": os.getenv("MODEL_CASCADE_DAILY_LIMIT", str(getattr(config, "model_cascade_daily_limit", 1000))),
 
         # Mode indicator
         "passthrough_mode": config.passthrough_mode if hasattr(config, 'passthrough_mode') else False,
@@ -237,6 +249,10 @@ async def update_config(config_update: ConfigUpdate):
 
         if config_update.openai_base_url:
             config.openai_base_url = config_update.openai_base_url
+        if config_update.provider_api_key is not None:
+            config.openai_api_key = config_update.provider_api_key or None
+        if config_update.provider_base_url is not None:
+            config.openai_base_url = config_update.provider_base_url or config.openai_base_url
 
         if config_update.big_model:
             config.big_model = config_update.big_model
@@ -253,12 +269,82 @@ async def update_config(config_update: ConfigUpdate):
         if hasattr(config, 'reasoning_max_tokens') and config_update.reasoning_max_tokens:
             config.reasoning_max_tokens = int(config_update.reasoning_max_tokens)
 
-        # Update environment variables for persistence
-        if config_update.track_usage is not None:
-            os.environ["TRACK_USAGE"] = config_update.track_usage
+        if config_update.model_cascade is not None:
+            config.model_cascade = config_update.model_cascade.lower() == "true"
+        if config_update.big_cascade is not None:
+            config.big_cascade = [m.strip() for m in config_update.big_cascade.split(",") if m.strip()]
+        if config_update.middle_cascade is not None:
+            config.middle_cascade = [m.strip() for m in config_update.middle_cascade.split(",") if m.strip()]
+        if config_update.small_cascade is not None:
+            config.small_cascade = [m.strip() for m in config_update.small_cascade.split(",") if m.strip()]
+        if config_update.model_cascade_daily_limit is not None and hasattr(config, "model_cascade_daily_limit"):
+            config.model_cascade_daily_limit = int(config_update.model_cascade_daily_limit)
 
-        if config_update.use_compact_logger is not None:
-            os.environ["USE_COMPACT_LOGGER"] = config_update.use_compact_logger
+        # Persist provided fields to .env (only keys explicitly passed)
+        payload = config_update.model_dump(exclude_none=True)
+        env_updates = {}
+        key_map = {
+            "provider_api_key": "PROVIDER_API_KEY",
+            "provider_base_url": "PROVIDER_BASE_URL",
+            "proxy_auth_key": "PROXY_AUTH_KEY",
+            "host": "HOST",
+            "port": "PORT",
+            "log_level": "LOG_LEVEL",
+            "big_model": "BIG_MODEL",
+            "middle_model": "MIDDLE_MODEL",
+            "small_model": "SMALL_MODEL",
+            "reasoning_effort": "REASONING_EFFORT",
+            "reasoning_max_tokens": "REASONING_MAX_TOKENS",
+            "reasoning_exclude": "REASONING_EXCLUDE",
+            "max_tokens_limit": "MAX_TOKENS_LIMIT",
+            "min_tokens_limit": "MIN_TOKENS_LIMIT",
+            "request_timeout": "REQUEST_TIMEOUT",
+            "track_usage": "TRACK_USAGE",
+            "enable_dashboard": "ENABLE_DASHBOARD",
+            "dashboard_layout": "DASHBOARD_LAYOUT",
+            "dashboard_refresh": "DASHBOARD_REFRESH",
+            "compact_logger": "COMPACT_LOGGER",
+            "enable_big_endpoint": "ENABLE_BIG_ENDPOINT",
+            "big_endpoint": "BIG_ENDPOINT",
+            "big_api_key": "BIG_API_KEY",
+            "enable_middle_endpoint": "ENABLE_MIDDLE_ENDPOINT",
+            "middle_endpoint": "MIDDLE_ENDPOINT",
+            "middle_api_key": "MIDDLE_API_KEY",
+            "enable_small_endpoint": "ENABLE_SMALL_ENDPOINT",
+            "small_endpoint": "SMALL_ENDPOINT",
+            "small_api_key": "SMALL_API_KEY",
+            "model_cascade": "MODEL_CASCADE",
+            "big_cascade": "BIG_CASCADE",
+            "middle_cascade": "MIDDLE_CASCADE",
+            "small_cascade": "SMALL_CASCADE",
+            "model_cascade_daily_limit": "MODEL_CASCADE_DAILY_LIMIT",
+            "terminal_display_mode": "TERMINAL_DISPLAY_MODE",
+            "terminal_color_scheme": "TERMINAL_COLOR_SCHEME",
+            "terminal_show_workspace": "TERMINAL_SHOW_WORKSPACE",
+            "terminal_show_context_pct": "TERMINAL_SHOW_CONTEXT_PCT",
+            "terminal_show_task_type": "TERMINAL_SHOW_TASK_TYPE",
+            "terminal_show_speed": "TERMINAL_SHOW_SPEED",
+            "terminal_show_cost": "TERMINAL_SHOW_COST",
+            "terminal_show_duration_colors": "TERMINAL_SHOW_DURATION_COLORS",
+            "terminal_session_colors": "TERMINAL_SESSION_COLORS",
+            "log_style": "LOG_STYLE",
+        }
+        for k, v in payload.items():
+            env_key = key_map.get(k)
+            if env_key:
+                env_updates[env_key] = str(v)
+        if env_updates:
+            update_env_values(env_updates, verbose=False)
+            for k, v in env_updates.items():
+                os.environ[k] = v
+
+        # Track selected models in selection history
+        if config_update.big_model:
+            record_selection("big", config_update.big_model, source="web")
+        if config_update.middle_model:
+            record_selection("middle", config_update.middle_model, source="web")
+        if config_update.small_model:
+            record_selection("small", config_update.small_model, source="web")
 
         logger.info("Configuration updated via Web UI")
         return {"status": "success", "message": "Configuration updated"}
@@ -475,6 +561,42 @@ async def list_models(
     except Exception as e:
         logger.error(f"Failed to load models: {e}")
         return {"models": [], "count": 0, "error": str(e)}
+
+
+@router.get("/api/models/free-recommended")
+async def get_free_recommended_models(limit: int = 40, refresh: bool = False):
+    """Get programmatically ranked free models for coding workflows."""
+    try:
+        rows = get_or_build_free_model_rankings(force_refresh=refresh)
+        data = [
+            {
+                "id": r.model_id,
+                "provider": r.provider,
+                "score": r.score,
+                "class_type": r.class_type,
+                "age_days": r.age_days,
+                "context_length": r.context_length,
+                "max_completion_tokens": r.max_completion_tokens,
+                "supports_tools": r.supports_tools,
+                "supports_reasoning": r.supports_reasoning,
+            }
+            for r in rows[: max(1, limit)]
+        ]
+        return {"models": data, "count": len(data)}
+    except Exception as e:
+        logger.error(f"Failed to get free recommended models: {e}")
+        return {"models": [], "count": 0, "error": str(e)}
+
+
+@router.get("/api/models/selection-history")
+async def get_model_selection_history(limit: int = 30):
+    """Get recent model selection history (TUI + Web)."""
+    try:
+        events = get_recent_selections(limit=limit)
+        return {"events": [e.__dict__ for e in events], "count": len(events)}
+    except Exception as e:
+        logger.error(f"Failed to get selection history: {e}")
+        return {"events": [], "count": 0, "error": str(e)}
 
 
 @router.post("/api/models/refresh")
@@ -720,9 +842,9 @@ async def get_auto_routing_config(provider: str):
         },
         "vibeproxy": {
             "base_url": "http://127.0.0.1:8317/v1",
-            "recommended_big": "gemini-claude-opus-4-5-thinking",
-            "recommended_middle": "gemini-3-pro-preview",
-            "recommended_small": "mimo-v2-flash:free",
+            "recommended_big": "(auto-detect from /v1/models)",
+            "recommended_middle": "(auto-detect from /v1/models)",
+            "recommended_small": "(auto-detect from /v1/models)",
             "special_notes": "Local OAuth proxy - no API key needed for some models",
             "auto_config": True
         }
@@ -914,7 +1036,8 @@ async def get_stats():
                 "total_tokens": summary.get("total_tokens", 0),
                 "est_cost": summary.get("total_cost", 0),
                 "avg_latency": int(summary.get("avg_duration_ms", 0)),
-                "recent_requests": recent
+                "recent_requests": recent,
+                "cascade": get_cascade_stats(limit=10),
             }
         else:
             # Return empty stats if tracking is disabled
@@ -923,7 +1046,8 @@ async def get_stats():
                 "total_tokens": 0,
                 "est_cost": 0,
                 "avg_latency": 0,
-                "recent_requests": []
+                "recent_requests": [],
+                "cascade": get_cascade_stats(limit=10),
             }
 
     except Exception as e:
@@ -933,7 +1057,8 @@ async def get_stats():
             "total_tokens": 0,
             "est_cost": 0,
             "avg_latency": 0,
-            "recent_requests": []
+            "recent_requests": [],
+            "cascade": get_cascade_stats(limit=10),
         }
 
 

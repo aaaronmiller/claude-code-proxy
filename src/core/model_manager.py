@@ -1,4 +1,3 @@
-import re
 import logging
 from typing import Optional, Tuple, Dict, Any
 from src.core.config import config
@@ -7,7 +6,8 @@ from src.core.reasoning_validator import (
     validate_openai_reasoning,
     validate_anthropic_thinking,
     validate_gemini_thinking,
-    is_reasoning_capable_model
+    is_reasoning_capable_model,
+    _is_openai_reasoning_model,
 )
 from src.models.reasoning import (
     ReasoningConfig,
@@ -16,36 +16,19 @@ from src.models.reasoning import (
     GeminiThinkingConfig
 )
 
+
 logger = logging.getLogger(__name__)
 
-
-# Model capability patterns for reasoning support
-REASONING_CAPABLE_MODELS = {
-    'openai_o_series': {
-        'patterns': [
-            re.compile(r'^o1-'),
-            re.compile(r'^o3-'),
-            re.compile(r'^o4-mini'),
-            re.compile(r'^gpt-5')
-        ],
-        'reasoning_type': 'effort',
+# Reasoning type metadata (no hardcoded model patterns — detection is in reasoning_validator)
+REASONING_TYPE_META = {
+    'effort': {
         'default_effort': 'medium'
     },
-    'anthropic_thinking': {
-        'patterns': [
-            re.compile(r'^claude-opus-4-'),
-            re.compile(r'^claude-sonnet-4-'),
-            re.compile(r'^claude-3-7-sonnet-')
-        ],
-        'reasoning_type': 'thinking_tokens',
+    'thinking_tokens': {
         'min_tokens': 1024,
         'max_tokens': 128000
     },
-    'gemini_thinking': {
-        'patterns': [
-            re.compile(r'^gemini-2\.5-flash-preview-04-17')
-        ],
-        'reasoning_type': 'thinking_budget',
+    'thinking_budget': {
         'min_budget': 0,
         'max_budget': 24576
     }
@@ -93,18 +76,15 @@ class ModelManager:
         return 'o3-' in model_lower or 'o3mini' in model_lower
 
     def map_claude_model_to_openai(self, claude_model: str) -> str:
-        """Map Claude model names to OpenAI model names based on BIG/SMALL pattern"""
-        # Map based on model naming patterns
+        """Map Claude model names to OpenAI model names based on BIG/SMALL pattern.
+        
+        Only maps Claude-specific model family names (haiku/sonnet/opus).
+        All other model names — including Gemini, OpenAI, custom, or 
+        provider-prefixed models — pass through as-is.
+        """
         model_lower = claude_model.lower()
             
-        # Explicit mapping for Gemini 3 models - pass through as-is
-        if 'gemini-3-pro-preview' in model_lower:
-            return "gemini-3-pro-preview"
-            
-        if 'gemini-3-flash' in model_lower:
-            return "gemini-3-flash"
-            
-        # Only map Claude-specific model names
+        # Only map Claude-specific model names by family keyword
         if 'haiku' in model_lower:
             return self.config.small_model
         elif 'sonnet' in model_lower:
@@ -112,7 +92,7 @@ class ModelManager:
         elif 'opus' in model_lower:
             return self.config.big_model
         else:
-            # Pass through all other models as-is (including OpenRouter models, custom models, etc.)
+            # Pass through all other models as-is (Gemini, OpenAI, OpenRouter, custom, etc.)
             return claude_model
     
     def parse_and_map_model(self, claude_model: str) -> Tuple[str, Optional[ReasoningConfig]]:
@@ -232,7 +212,7 @@ class ModelManager:
             
             elif reasoning_type == 'thinking_tokens':
                 # Check if this is for OpenAI (arbitrary token budget) or Anthropic
-                is_openai = any(pattern.match(model_name) for pattern in REASONING_CAPABLE_MODELS['openai_o_series']['patterns'])
+                is_openai = _is_openai_reasoning_model(model_name.lower())
                 
                 if is_openai:
                     # OpenAI with arbitrary token budget
@@ -294,9 +274,9 @@ class ModelManager:
         
         # Get max tokens based on reasoning type
         if reasoning_type == 'thinking_tokens':
-            capabilities['max_reasoning_tokens'] = REASONING_CAPABLE_MODELS['anthropic_thinking']['max_tokens']
+            capabilities['max_reasoning_tokens'] = REASONING_TYPE_META['thinking_tokens']['max_tokens']
         elif reasoning_type == 'thinking_budget':
-            capabilities['max_reasoning_tokens'] = REASONING_CAPABLE_MODELS['gemini_thinking']['max_budget']
+            capabilities['max_reasoning_tokens'] = REASONING_TYPE_META['thinking_budget']['max_budget']
         
         # Get default reasoning config
         capabilities['default_reasoning'] = self._get_default_reasoning_config(model_name)

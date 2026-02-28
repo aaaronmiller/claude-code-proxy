@@ -1,0 +1,31 @@
+{
+  "programmatic_top": [
+    "openrouter/aurora-alpha",
+    "stepfun/step-3.5-flash:free",
+    "openrouter/free",
+    "tngtech/tng-r1t-chimera:free",
+    "upstage/solar-pro-3:free",
+    "qwen/qwen3-vl-235b-a22b-thinking",
+    "qwen/qwen3-vl-30b-a3b-thinking",
+    "z-ai/glm-4.5-air:free",
+    "openai/gpt-oss-120b:free",
+    "openai/gpt-oss-20b:free",
+    "nvidia/nemotron-nano-12b-v2-vl:free",
+    "arcee-ai/trinity-mini:free"
+  ],
+  "deep_analysis_top": [
+    "tngtech/tng-r1t-chimera:free",
+    "stepfun/step-3.5-flash:free",
+    "qwen/qwen3-vl-235b-a22b-thinking",
+    "qwen/qwen3-vl-30b-a3b-thinking",
+    "z-ai/glm-4.5-air:free",
+    "openrouter/aurora-alpha",
+    "openai/gpt-oss-120b:free",
+    "openai/gpt-oss-20b:free",
+    "openrouter/free",
+    "nvidia/nemotron-nano-12b-v2-vl:free",
+    "qwen/qwen3-coder:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free"
+  ],
+  "jaccard_top12": 0.7142857142857143
+}

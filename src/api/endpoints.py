@@ -84,14 +84,18 @@ class RequestDeduplicator:
     def _compute_hash(self, request: "ClaudeMessagesRequest") -> str:
         """Compute a hash of the request content for deduplication."""
         # Extract key fields that define request identity
+        # Include MORE context to avoid false positives
         hash_data = {
             "model": request.model,
+            "stream": getattr(request, 'stream', False),  # Include stream flag
+            "max_tokens": getattr(request, 'max_tokens', None),  # Include max_tokens
             "messages": [
                 {
                     "role": msg.role,
-                    "content": str(msg.content)[:500]  # Limit for performance
+                    # Use more content for better uniqueness
+                    "content": str(msg.content)[:1000] if msg.content else ""
                 }
-                for msg in request.messages[-3:]  # Last 3 messages for identity
+                for msg in request.messages[-5:]  # Last 5 messages for better identity
             ],
         }
 
@@ -124,13 +128,21 @@ class RequestDeduplicator:
                 age = current_time - cached["timestamp"]
 
                 if age < self._window_seconds:
-                    # Duplicate detected
-                    cached["count"] += 1
-                    logger.warning(
-                        f"Duplicate request detected (hash={request_hash[:8]}, "
-                        f"count={cached['count']}, age={age:.2f}s)"
+                    # Only treat as duplicate if we have a cached response
+                    # Streaming requests should NOT be deduplicated
+                    if cached.get("response") and not getattr(request, 'stream', False):
+                        cached["count"] += 1
+                        logger.warning(
+                            f"Duplicate request detected (hash={request_hash[:8]}, "
+                            f"count={cached['count']}, age={age:.2f}s)"
+                        )
+                        return True, request_hash, cached.get("response")
+                    # No cached response yet - request is still processing
+                    # Log but don't block - let it through
+                    logger.debug(
+                        f"Request {request_hash[:8]} similar to in-flight request "
+                        f"(age={age:.2f}s, count={cached['count']}) - allowing"
                     )
-                    return True, request_hash, cached.get("response")
 
             # Not a duplicate, add to cache
             self._cache[request_hash] = {
@@ -285,29 +297,21 @@ async def create_message(
     # REQUEST DEDUPLICATION CHECK
     # ═══════════════════════════════════════════════════════════════════════════════
     # Detects and handles duplicate requests caused by client retries
+    # Only blocks if we have a cached response (non-streaming only)
     request_hash = None
     if ENABLE_DEDUP:
         is_duplicate, request_hash, cached_response = request_deduplicator.check_duplicate(request)
-        if is_duplicate:
-            if cached_response:
-                # Return cached response for duplicate
-                logger.info(f"Request {request_id}: Returning cached response for duplicate request")
-                return JSONResponse(content=cached_response)
-            else:
-                # Duplicate detected but no cached response yet (still processing)
-                # Return a retry-after response to prevent thundering herd
-                logger.info(f"Request {request_id}: Duplicate request while original still processing")
-                raise HTTPException(
-                    status_code=429,
-                    detail="Request is already being processed. Please wait.",
-                    headers={"Retry-After": "1"}
-                )
+        if is_duplicate and cached_response:
+            # Return cached response for duplicate non-streaming request
+            logger.info(f"Request {request_id}: Returning cached response for duplicate request")
+            return JSONResponse(content=cached_response)
 
     try:
         logger.debug(
             f"Processing Claude request: model={request.model}, stream={request.stream}"
         )
         logger.debug(f"Request ID: {request_id}")
+        logger.debug("Request deduplication check passed")
 
         # Parse model to get routing info and reasoning config
         routed_model, reasoning_config = model_manager.parse_and_map_model(request.model)
@@ -353,6 +357,15 @@ async def create_message(
         
         # Update the openai_request with the routed model
         openai_request["model"] = routed_model
+
+        def infer_model_tier(model_name: str) -> Optional[str]:
+            if model_name == config.big_model:
+                return "big"
+            if model_name == config.middle_model:
+                return "middle"
+            if model_name == config.small_model:
+                return "small"
+            return None
 
         # Log API configuration for debugging (helps diagnose 401 errors)
         logger.debug(f"Request {request_id}: Routing to endpoint: {endpoint}")
@@ -488,9 +501,15 @@ async def create_message(
             # Streaming response - wrap in error handling
             logger.debug(f"Starting streaming response for request_id: {request_id}")
             try:
-                openai_stream = openai_client.create_chat_completion_stream(
-                    openai_request, request_id, config, api_key=openai_api_key
-                )
+                tier = infer_model_tier(openai_request.get("model", ""))
+                if config.model_cascade and tier:
+                    openai_stream = openai_client.create_chat_completion_stream_with_cascade(
+                        openai_request, tier=tier, config=config, request_id=request_id, api_key=openai_api_key
+                    )
+                else:
+                    openai_stream = openai_client.create_chat_completion_stream(
+                        openai_request, request_id, config, api_key=openai_api_key
+                    )
                 logger.debug(f"OpenAI stream created for request_id: {request_id}")
                 return StreamingResponse(
                     convert_openai_streaming_to_claude_with_cancellation(
@@ -546,6 +565,7 @@ async def create_message(
         else:
             # Non-streaming response
             logger.debug(f"Starting non-streaming response for request_id: {request_id}")
+            logger.debug("Request deduplication check passed")
             
             # Seamless Key Rotation / Retry Loop
             # If we get a 401, we wait for the user to fix the key via the wizard
@@ -557,9 +577,15 @@ async def create_message(
             
             while True:
                 try:
-                    openai_response = await openai_client.create_chat_completion(
-                        openai_request, request_id, config, api_key=openai_api_key
-                    )
+                    tier = infer_model_tier(openai_request.get("model", ""))
+                    if config.model_cascade and tier:
+                        openai_response = await openai_client.create_chat_completion_with_cascade(
+                            openai_request, tier=tier, config=config, request_id=request_id, api_key=openai_api_key
+                        )
+                    else:
+                        openai_response = await openai_client.create_chat_completion(
+                            openai_request, request_id, config, api_key=openai_api_key
+                        )
                     break # Success!
 
                 except VibeProxyUnavailableError as e:
@@ -601,7 +627,7 @@ async def create_message(
                         raise e # Re-raise other errors immediately
 
             logger.debug(f"OpenAI response received for request_id: {request_id}")
-            
+            logger.debug("Request deduplication check passed")
             # Log comprehensive completion with all metadata
             duration_ms = (time.time() - request_start_time) * 1000
             usage = openai_response.get("usage", {})
@@ -743,6 +769,10 @@ async def create_message(
                     original_cost=original_cost,
                     model_tier=model_tier
                 )
+                daily_count = usage_tracker.get_daily_model_request_count(routed_model)
+                logger.info(
+                    f"Request {request_id}: {routed_model} UTC-day requests={daily_count}"
+                )
 
             claude_response = convert_openai_to_claude_response(
                 openai_response, request, provider
@@ -782,6 +812,7 @@ async def create_message(
             return claude_response
     except HTTPException as e:
         duration_ms = (time.time() - request_start_time) * 1000
+        logger.error(f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}")
 
         # Log error
         active_logger.log_request_error(
@@ -804,45 +835,13 @@ async def create_message(
                 session_id=request_id[:8],
                 client_ip=client_ip
             )
-
-        # Enhanced error logging for 401 errors
-        if e.status_code == 401:
-            logger.error(f"Authentication failed for request {request_id}")
-            logger.error(f"Endpoint: {endpoint if 'endpoint' in locals() else 'unknown'}")
-            logger.error(f"Model: {routed_model if 'routed_model' in locals() else request.model}")
-            if config.passthrough_mode:
-                logger.error("Running in PASSTHROUGH mode - check client-provided API key")
-            else:
-                logger.error("Running in PROXY mode - check server OPENAI_API_KEY configuration")
-                logger.error("Note: OPENAI_API_KEY is used for ANY provider (OpenRouter, OpenAI, Azure, etc.)")
-                if config.openai_api_key:
-                    logger.error(f"Server API key prefix: {config.openai_api_key[:15]}...")
-                else:
-                    logger.error("Server API key is NOT SET - this will cause 401 errors!")
-            logger.error(f"See docs/TROUBLESHOOTING_401.md for detailed troubleshooting steps")
-
-        # Dashboard hook: request error
-        error_type = "Unknown"
-        if e.status_code == 401:
-            error_type = "Invalid Key"
-        elif e.status_code == 429:
-            error_type = "Rate Limit"
-        elif e.status_code == 404:
-            error_type = "Model Not Found"
-
-        dashboard_hooks.on_request_complete(request_id, 'error', {
-            'model': routed_model if 'routed_model' in locals() else request.model,
-            'duration_ms': int(duration_ms),
-            'error': str(e.detail),
-            'error_type': error_type
-        })
-
         logger.error(f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}")
         raise
     except Exception as e:
         import traceback
-
         duration_ms = (time.time() - request_start_time) * 1000
+        logger.error(f"Unexpected error processing request {request_id}: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         error_message = openai_client.classify_openai_error(str(e))
 
         # Log error
@@ -856,7 +855,7 @@ async def create_message(
         if usage_tracker.enabled:
             usage_tracker.log_request(
                 request_id=request_id,
-                original_model=request.model if hasattr(request, 'model') else "unknown",
+                original_model=request.model,
                 routed_model="unknown",
                 provider="unknown",
                 endpoint="unknown",
@@ -869,7 +868,7 @@ async def create_message(
 
         # Dashboard hook: request error
         dashboard_hooks.on_request_complete(request_id, 'error', {
-            'model': routed_model if 'routed_model' in locals() else (request.model if hasattr(request, 'model') else "unknown"),
+            'model': routed_model,
             'duration_ms': int(duration_ms),
             'error': error_message,
             'error_type': "Unknown"
@@ -1094,22 +1093,6 @@ async def delete_crosstalk_session(
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    return CrosstalkDeleteResponse(
-        session_id=session_id,
-        status="deleted"
-    )
-
-
-@router.post("/api/event_logging/batch")
-async def event_logging_batch(request: Request):
-    """
-    Dummy endpoint for Claude Code telemetry to silence 404 errors.
-    Returns 200 OK without processing payload.
-    """
-    # Simply consume body and return success
-    _ = await request.body()
-    return {"status": "ok"}
-
     return CrosstalkDeleteResponse(
         success=True,
         message="Session deleted successfully"

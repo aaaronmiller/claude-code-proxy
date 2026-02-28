@@ -47,12 +47,19 @@ def check_vibeproxy_health(force_refresh: bool = False) -> Tuple[bool, Optional[
         if _vibeproxy_health_cache["available"] is not None:
             return _vibeproxy_health_cache["available"], None
 
-    # Perform health check
+    # Perform health check - try /health first, then /v1/models (CLIProxyAPI)
     try:
         response = httpx.get(
             f"{VIBEPROXY_BASE_URL}/health",
             timeout=VIBEPROXY_HEALTH_TIMEOUT
         )
+        if response.status_code == 404:
+            # CLIProxyAPI doesn't have /health, try /v1/models instead
+            response = httpx.get(
+                f"{VIBEPROXY_BASE_URL}/v1/models",
+                timeout=VIBEPROXY_HEALTH_TIMEOUT,
+                headers={"Authorization": f"Bearer {os.getenv('BIG_API_KEY', 'pass')}"}
+            )
         is_available = response.status_code == 200
 
         _vibeproxy_health_cache["available"] = is_available
@@ -223,77 +230,7 @@ def get_antigravity_token() -> Optional[str]:
     return get_antigravity_auth().get_token()
 
 
-# Available Antigravity/VibeProxy models (from VibeProxy /v1/models endpoint - Dec 2025)
-ANTIGRAVITY_MODELS = [
-    # Gemini 3 Series (Bleeding Edge)
-    "gemini-3-flash",
-    "gemini-3-pro-preview",
-    "gemini-3-pro-image-preview",
-    # Gemini 2.5 Series (Stable/Fast)
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash-thinking-exp",
-    "gemini-2.5-computer-use-preview-10-2025",
-    # Claude via VibeProxy
-    "claude-sonnet-4",
-    "claude-opus-4",
-    "gemini-claude-sonnet-4-5",
-    "gemini-claude-sonnet-4-5-thinking",
-    "gemini-claude-opus-4-5-thinking",
-    # OpenAI via VibeProxy
-    "gpt-4o",
-    "gpt-4o-mini",
-    # Qwen via VibeProxy
-    "qwen-2.5-max",
-    "qwen-2.5-coder-32b",
-    # Open Source / Other
-    "gpt-oss-120b-medium",
-]
-
-# Friendly aliases for VibeProxy models (maps user-friendly names to actual IDs)
-# Both vibeproxy/ and antigravity/ prefixes are supported
-ANTIGRAVITY_ALIASES = {
-    # ═══════════════════════════════════════════════════════════════════════════════
-    # VIBEPROXY/ PREFIX (Recommended - clearer intent)
-    # ═══════════════════════════════════════════════════════════════════════════════
-    
-    # Gemini via VibeProxy
-    "vibeproxy/gemini-2.5-pro": "gemini-2.5-pro",
-    "vibeproxy/gemini-2.5-flash": "gemini-2.5-flash",
-    "vibeproxy/gemini-2.0-flash-thinking": "gemini-2.0-flash-thinking-exp",
-    "vibeproxy/gemini-3-pro": "gemini-3-pro-preview",
-    "vibeproxy/gemini-3-flash": "gemini-3-flash",
-    
-    # Claude via VibeProxy
-    "vibeproxy/claude-sonnet-4": "claude-sonnet-4",
-    "vibeproxy/claude-opus-4": "claude-opus-4",
-    "vibeproxy/claude-sonnet-4.5": "gemini-claude-sonnet-4-5",
-    "vibeproxy/claude-sonnet-4.5-thinking": "gemini-claude-sonnet-4-5-thinking",
-    "vibeproxy/claude-opus-4.5": "gemini-claude-opus-4-5-thinking",
-    
-    # OpenAI via VibeProxy
-    "vibeproxy/gpt-4o": "gpt-4o",
-    "vibeproxy/gpt-4o-mini": "gpt-4o-mini",
-    
-    # Qwen via VibeProxy
-    "vibeproxy/qwen-2.5-max": "qwen-2.5-max",
-    "vibeproxy/qwen-2.5-coder": "qwen-2.5-coder-32b",
-    
-    # ═══════════════════════════════════════════════════════════════════════════════
-    # ANTIGRAVITY/ PREFIX (Legacy - still supported for backward compatibility)
-    # ═══════════════════════════════════════════════════════════════════════════════
-    
-    # Gemini 3 aliases
-    "antigravity/gemini-3-pro": "gemini-3-pro-preview",
-    "antigravity/gemini-3-pro-high": "gemini-3-pro-preview",
-    "antigravity/gemini-3-pro-low": "gemini-3-pro-preview",
-    "antigravity/gemini-3-flash": "gemini-3-flash",
-    # Claude via Antigravity aliases
-    "antigravity/claude-sonnet-4.5": "gemini-claude-sonnet-4-5",
-    "antigravity/claude-sonnet-4.5-thinking": "gemini-claude-sonnet-4-5-thinking",
-    "antigravity/claude-opus-4.5": "gemini-claude-opus-4-5-thinking",
-    # GPT-OSS alias
-    "antigravity/gpt-oss-120b": "gpt-oss-120b-medium",
-}
-
+# NOTE: ANTIGRAVITY_MODELS list and ANTIGRAVITY_ALIASES dict were removed.
+# Model names are dynamic and come from CLIProxyAPI /v1/models endpoint.
+# The .env BIG_MODEL / MIDDLE_MODEL / SMALL_MODEL values should match
+# exactly what CLIProxyAPI reports. No hardcoded mappings needed.

@@ -13,6 +13,7 @@ from src.models.reasoning import (
 )
 from src.services.models.model_filter import model_filter
 from src.core.constants import Constants
+from src.services.tools.tool_mapper import sanitize_tool_declarations
 
 logger = logging.getLogger(__name__)
 
@@ -387,6 +388,8 @@ def convert_claude_to_openai(
                     }
                 )
         if openai_tools:
+            # Sanitize tool names for provider compatibility (e.g., lowercase for Google/Gemini)
+            openai_tools = sanitize_tool_declarations(openai_tools)
             openai_request["tools"] = openai_tools
 
     # Convert tool choice
@@ -395,7 +398,10 @@ def convert_claude_to_openai(
         if choice_type == "auto":
             openai_request["tool_choice"] = "auto"
         elif choice_type == "any":
-            openai_request["tool_choice"] = "auto"
+            # Anthropic "any" = force model to use a tool → OpenAI "required"
+            openai_request["tool_choice"] = "required"
+        elif choice_type == "none":
+            openai_request["tool_choice"] = "none"
         elif choice_type == "tool" and "name" in claude_request.tool_choice:
             openai_request["tool_choice"] = {
                 "type": Constants.TOOL_FUNCTION,
@@ -403,6 +409,10 @@ def convert_claude_to_openai(
             }
         else:
             openai_request["tool_choice"] = "auto"
+        
+        # Handle disable_parallel_tool_use
+        if claude_request.tool_choice.get("disable_parallel_tool_use"):
+            openai_request["parallel_tool_calls"] = False
 
     # Apply reasoning configuration if present
     if reasoning_config:
@@ -609,15 +619,20 @@ def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = 
             arguments = block.input
             
             # REVERSE RENAMING: If tool is Bash/Repl, convert 'command' back to 'prompt'
-            # This ensures Gemini sees the parameter name IT expects in the history, 
+            # This ensures Gemini sees the parameter name IT expects in the history,
             # preventing it from getting confused and retrying.
-            # 
+            #
             # IMPORTANT: Only apply this transformation for Gemini/VibeProxy/Antigravity providers.
             # OpenRouter and other providers expect the original 'command' parameter.
-            should_reverse_rename = target_provider and target_provider.lower() in [
-                'vibeproxy', 'gemini', 'antigravity', 'google'
-            ]
-            
+            #
+            # UPDATE (2026-02-11): Disabling this because it causes InputValidationError on the client side.
+            # The local Bash tool expects 'command', so forcing 'prompt' confuses the model or the
+            # tool execution layer.
+            should_reverse_rename = False
+            # should_reverse_rename = target_provider and target_provider.lower() in [
+            #     'vibeproxy', 'gemini', 'antigravity', 'google'
+            # ]
+
             if should_reverse_rename and tool_name.lower() in ["bash", "repl"] and isinstance(arguments, dict):
                 # Copy dict to avoid modifying original object if shared
                 arguments = arguments.copy()

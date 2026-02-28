@@ -23,6 +23,7 @@ from src.services.notifications import notification_service
 @dataclass
 class AlertRule:
     """Data class for alert rule configuration"""
+
     id: str
     name: str
     description: str
@@ -40,7 +41,24 @@ class AlertRule:
 
     @property
     def conditions(self):
-        return json.loads(self.condition_json)
+        try:
+            parsed = json.loads(self.condition_json)
+            if isinstance(parsed, str):
+                # Handle double-encoded JSON
+                try:
+                    parsed = json.loads(parsed)
+                except json.JSONDecodeError:
+                    pass
+
+            if not isinstance(parsed, list):
+                # Ensure we always return a list
+                if isinstance(parsed, dict):
+                    return [parsed]
+                return []
+
+            return parsed
+        except (json.JSONDecodeError, TypeError):
+            return []
 
     @property
     def logic(self):
@@ -54,6 +72,7 @@ class AlertRule:
 @dataclass
 class AlertTrigger:
     """Data class for triggered alert"""
+
     id: str
     rule_id: str
     rule_name: str
@@ -113,7 +132,6 @@ class AlertEngine:
 
             conn.commit()
             conn.close()
-
 
             # Load all active rules
             rules = self.get_active_rules()
@@ -249,7 +267,8 @@ class AlertEngine:
         time_condition = datetime.utcnow() - timedelta(minutes=time_window)
 
         # Get basic metrics
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT
                 COUNT(*) as total_requests,
                 SUM(total_tokens) as total_tokens,
@@ -259,7 +278,9 @@ class AlertEngine:
                 SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as errors
             FROM api_requests
             WHERE timestamp >= ?
-        """, (time_condition.isoformat(),))
+        """,
+            (time_condition.isoformat(),),
+        )
 
         row = cursor.fetchone()
 
@@ -273,11 +294,14 @@ class AlertEngine:
         yesterday_start = datetime.utcnow() - timedelta(days=1)
         yesterday_end = yesterday_start + timedelta(days=1)
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT SUM(estimated_cost) as yesterday_cost
             FROM api_requests
             WHERE timestamp >= ? AND timestamp < ?
-        """, (yesterday_start.isoformat(), yesterday_end.isoformat()))
+        """,
+            (yesterday_start.isoformat(), yesterday_end.isoformat()),
+        )
 
         yesterday_row = cursor.fetchone()
         yesterday_cost = yesterday_row["yesterday_cost"] or 0
@@ -303,10 +327,12 @@ class AlertEngine:
             "cost_per_token": cost_per_token,
             "cost_change_percent": cost_change_percent,
             "time_window_minutes": time_window,
-            "evaluated_at": datetime.utcnow().isoformat()
+            "evaluated_at": datetime.utcnow().isoformat(),
         }
 
-    def check_conditions(self, rule: AlertRule, metrics: Dict[str, Any]) -> tuple[bool, Dict[str, Any]]:
+    def check_conditions(
+        self, rule: AlertRule, metrics: Dict[str, Any]
+    ) -> tuple[bool, Dict[str, Any]]:
         """
         Check if alert conditions are met.
         Supports complex logic: AND, OR, nested conditions
@@ -322,19 +348,23 @@ class AlertEngine:
         # Evaluate complex logic
         return self.evaluate_complex_logic(logic, metrics)
 
-    def evaluate_simple_condition(self, conditions: List[Dict], metrics: Dict[str, Any]) -> tuple[bool, Dict[str, Any]]:
+    def evaluate_simple_condition(
+        self, conditions: List[Dict], metrics: Dict[str, Any]
+    ) -> tuple[bool, Dict[str, Any]]:
         """Evaluate simple list of conditions (all must be true)"""
         results = []
         matched_conditions = []
 
         for condition in conditions:
+            if not isinstance(condition, dict):
+                continue
+
             field = condition.get("field")
             metric = condition.get("metric")
             operator = condition.get("operator")
             threshold = condition.get("threshold")
             value = condition.get("value")
 
-            # Determine what to compare
             if metric:
                 compare_value = metrics.get(metric)
                 if compare_value is None:
@@ -352,13 +382,15 @@ class AlertEngine:
             results.append(match)
 
             if match:
-                matched_conditions.append({
-                    "metric": metric,
-                    "field": field,
-                    "operator": operator,
-                    "value": test_value,
-                    "actual": compare_value
-                })
+                matched_conditions.append(
+                    {
+                        "metric": metric,
+                        "field": field,
+                        "operator": operator,
+                        "value": test_value,
+                        "actual": compare_value,
+                    }
+                )
 
         # All conditions must be met
         all_met = len(results) > 0 and all(results)
@@ -366,12 +398,14 @@ class AlertEngine:
         alert_data = {
             "triggered_conditions": matched_conditions,
             "all_metrics": metrics,
-            "rule_type": "simple"
+            "rule_type": "simple",
         }
 
         return all_met, alert_data
 
-    def evaluate_complex_logic(self, logic: Dict[str, Any], metrics: Dict[str, Any]) -> tuple[bool, Dict[str, Any]]:
+    def evaluate_complex_logic(
+        self, logic: Dict[str, Any], metrics: Dict[str, Any]
+    ) -> tuple[bool, Dict[str, Any]]:
         """Evaluate complex logic with AND/OR and nesting"""
         logic_type = logic.get("type", "AND")
         conditions = logic.get("conditions", [])
@@ -383,12 +417,19 @@ class AlertEngine:
             # Check if nested logic
             if "type" in condition:
                 # Recursive call for nested logic
-                nested_match, nested_data = self.evaluate_complex_logic(condition, metrics)
+                nested_match, nested_data = self.evaluate_complex_logic(
+                    condition, metrics
+                )
                 results.append(nested_match)
                 if nested_match:
-                    matched_conditions.extend(nested_data.get("triggered_conditions", []))
+                    matched_conditions.extend(
+                        nested_data.get("triggered_conditions", [])
+                    )
             else:
                 # Regular condition
+                if not isinstance(condition, dict):
+                    continue
+
                 metric = condition.get("metric")
                 field = condition.get("field")
                 operator = condition.get("operator")
@@ -408,13 +449,15 @@ class AlertEngine:
                 results.append(match)
 
                 if match:
-                    matched_conditions.append({
-                        "metric": metric,
-                        "field": field,
-                        "operator": operator,
-                        "value": test_value,
-                        "actual": compare_value
-                    })
+                    matched_conditions.append(
+                        {
+                            "metric": metric,
+                            "field": field,
+                            "operator": operator,
+                            "value": test_value,
+                            "actual": compare_value,
+                        }
+                    )
 
         # Apply logic type
         if logic_type == "AND":
@@ -428,7 +471,7 @@ class AlertEngine:
             "triggered_conditions": matched_conditions,
             "all_metrics": metrics,
             "rule_type": "complex",
-            "logic_type": logic_type
+            "logic_type": logic_type,
         }
 
         return final_match, alert_data
@@ -472,14 +515,18 @@ class AlertEngine:
         description = self.generate_alert_description(rule, alert_data)
 
         # Log to database
-        alert_trigger = self.log_alert(alert_id, rule, description, severity, alert_data)
+        alert_trigger = self.log_alert(
+            alert_id, rule, description, severity, alert_data
+        )
 
         # Send notifications
         await self.send_notifications(rule, alert_trigger)
 
         logger.info(f"🔔 Alert triggered: {rule.name} ({severity})")
 
-    def generate_alert_description(self, rule: AlertRule, alert_data: Dict[str, Any]) -> str:
+    def generate_alert_description(
+        self, rule: AlertRule, alert_data: Dict[str, Any]
+    ) -> str:
         """Generate human-readable alert description"""
         conditions = alert_data.get("triggered_conditions", [])
 
@@ -501,7 +548,14 @@ class AlertEngine:
 
         return f"{rule.name}: {' AND '.join(parts)}"
 
-    def log_alert(self, alert_id: str, rule: AlertRule, description: str, severity: str, alert_data: Dict[str, Any]) -> AlertTrigger:
+    def log_alert(
+        self,
+        alert_id: str,
+        rule: AlertRule,
+        description: str,
+        severity: str,
+        alert_data: Dict[str, Any],
+    ) -> AlertTrigger:
         """Log alert to database"""
         if not usage_tracker.enabled:
             return None
@@ -512,29 +566,35 @@ class AlertEngine:
         triggered_at = datetime.utcnow().isoformat()
 
         # Insert into alert_history
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO alert_history (
                 id, rule_id, rule_name, triggered_at, severity,
                 alert_data_json, description, resolved, acknowledged
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            alert_id,
-            rule.id,
-            rule.name,
-            triggered_at,
-            severity,
-            json.dumps(alert_data),
-            description,
-            0,  # Not resolved
-            0   # Not acknowledged
-        ))
+        """,
+            (
+                alert_id,
+                rule.id,
+                rule.name,
+                triggered_at,
+                severity,
+                json.dumps(alert_data),
+                description,
+                0,  # Not resolved
+                0,  # Not acknowledged
+            ),
+        )
 
         # Update rule stats
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE alert_rules
             SET last_triggered = ?, trigger_count = trigger_count + 1
             WHERE id = ?
-        """, (triggered_at, rule.id))
+        """,
+            (triggered_at, rule.id),
+        )
 
         conn.commit()
         conn.close()
@@ -546,7 +606,7 @@ class AlertEngine:
             triggered_at=triggered_at,
             severity=severity,
             alert_data=alert_data,
-            description=description
+            description=description,
         )
 
     async def send_notifications(self, rule: AlertRule, alert: AlertTrigger):
@@ -570,17 +630,20 @@ class AlertEngine:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO notification_history (id, alert_id, channel_id, status, error_message, sent_at)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            f"notif_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-            alert_id,
-            channel_id,
-            "failed",
-            error,
-            datetime.utcnow().isoformat()
-        ))
+        """,
+            (
+                f"notif_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
+                alert_id,
+                channel_id,
+                "failed",
+                error,
+                datetime.utcnow().isoformat(),
+            ),
+        )
 
         conn.commit()
         conn.close()
@@ -593,11 +656,14 @@ class AlertEngine:
         conn = sqlite3.connect(self.db_path)
         triggered_at = datetime.utcnow().isoformat()
 
-        conn.execute("""
+        conn.execute(
+            """
             UPDATE alert_rules
             SET last_triggered = ?
             WHERE id = ?
-        """, (triggered_at, rule.id))
+        """,
+            (triggered_at, rule.id),
+        )
 
         conn.commit()
         conn.close()
@@ -616,7 +682,8 @@ class AlertEngine:
         time_condition = datetime.utcnow() - timedelta(days=days)
 
         # Total triggered
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT
                 COUNT(*) as total,
                 COUNT(DISTINCT rule_id) as unique_rules,
@@ -624,19 +691,26 @@ class AlertEngine:
                 SUM(CASE WHEN acknowledged = 1 THEN 1 ELSE 0 END) as acknowledged
             FROM alert_history
             WHERE triggered_at >= ?
-        """, (time_condition.isoformat(),))
+        """,
+            (time_condition.isoformat(),),
+        )
 
         row = cursor.fetchone()
 
         # By severity
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT severity, COUNT(*) as count
             FROM alert_history
             WHERE triggered_at >= ?
             GROUP BY severity
-        """, (time_condition.isoformat(),))
+        """,
+            (time_condition.isoformat(),),
+        )
 
-        severity_breakdown = {row["severity"]: row["count"] for row in cursor.fetchall()}
+        severity_breakdown = {
+            row["severity"]: row["count"] for row in cursor.fetchall()
+        }
 
         conn.close()
 
@@ -647,7 +721,7 @@ class AlertEngine:
             "acknowledged": row["acknowledged"] or 0,
             "open": (row["total"] or 0) - (row["resolved"] or 0),
             "severity_breakdown": severity_breakdown,
-            "time_period_days": days
+            "time_period_days": days,
         }
 
 

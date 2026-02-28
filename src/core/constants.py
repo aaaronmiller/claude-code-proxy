@@ -16,7 +16,10 @@ class Constants:
     
     STOP_END_TURN = "end_turn"
     STOP_MAX_TOKENS = "max_tokens"
+    STOP_STOP_SEQUENCE = "stop_sequence"
     STOP_TOOL_USE = "tool_use"
+    STOP_PAUSE_TURN = "pause_turn"
+    STOP_REFUSAL = "refusal"
     STOP_ERROR = "error"
     
     EVENT_MESSAGE_START = "message_start"

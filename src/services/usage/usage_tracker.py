@@ -643,6 +643,29 @@ class UsageTracker:
             logger.error(f"Failed to get top models: {e}")
             return []
 
+    def get_daily_model_request_count(self, model: str, date_utc: Optional[str] = None) -> int:
+        """Get request count for a model on a UTC calendar day."""
+        if not self.enabled:
+            return 0
+        target_date = date_utc or datetime.utcnow().strftime('%Y-%m-%d')
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT request_count
+                FROM daily_model_stats
+                WHERE date = ? AND model = ?
+                """,
+                (target_date, model),
+            )
+            row = cursor.fetchone()
+            conn.close()
+            return int(row[0]) if row and row[0] is not None else 0
+        except Exception as e:
+            logger.error(f"Failed to get daily model request count: {e}")
+            return 0
+
     def get_cost_summary(self, days: int = 7) -> Dict[str, Any]:
         """Get cost summary for last N days."""
         if not self.enabled:

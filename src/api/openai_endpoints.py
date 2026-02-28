@@ -293,23 +293,27 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
         openai_request = body.model_dump(exclude_none=True)
         openai_request["model"] = routed_model
 
+        def infer_model_tier(model_name: str) -> Optional[str]:
+            if model_name == config.big_model:
+                return "big"
+            if model_name == config.middle_model:
+                return "middle"
+            if model_name == config.small_model:
+                return "small"
+            return None
+
         # Normalize tools for provider
         if openai_request.get("tools"):
             openai_request["tools"] = normalize_openai_tools_for_provider(
                 openai_request["tools"], provider, source_ide
             )
+        tier = infer_model_tier(openai_request.get("model", ""))
 
         if body.stream:
             # Streaming response
             async def generate_stream():
                 try:
-                    stream = await client.chat.completions.create(
-                        **openai_request, stream=True
-                    )
-
-                    async for chunk in stream:
-                        chunk_dict = chunk.model_dump()
-
+                    def transform_chunk_dict(chunk_dict: Dict[str, Any]) -> List[str]:
                         # Normalize tool calls in streaming response
                         for choice in chunk_dict.get("choices", []):
                             delta = choice.get("delta", {})
@@ -319,29 +323,17 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                                 )
 
                         # Fix for Issue #796: Split merged usage/finish_reason chunks
-                        # Some upstream providers send usage in the same chunk as finish_reason,
-                        # which crashes strict clients like Letta AI.
                         usage = chunk_dict.get("usage")
                         choices = chunk_dict.get("choices", [])
-
-                        has_stop = False
-                        for choice in choices:
-                            if choice.get("finish_reason"):
-                                has_stop = True
-                                break
+                        has_stop = any(choice.get("finish_reason") for choice in choices)
 
                         if usage and has_stop:
                             logger.debug(
                                 f"[{request_id}] Detected merged usage/stop chunk, splitting..."
                             )
-
-                            # 1. Send finish_reason chunk WITHOUT usage
                             chunk_no_usage = chunk_dict.copy()
                             if "usage" in chunk_no_usage:
                                 del chunk_no_usage["usage"]
-                            yield f"data: {json.dumps(chunk_no_usage)}\n\n"
-
-                            # 2. Send usage chunk WITHOUT choices (or empty choices)
                             chunk_usage_only = {
                                 "id": chunk_dict.get("id"),
                                 "object": chunk_dict.get(
@@ -352,13 +344,40 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                                 "choices": [],
                                 "usage": usage,
                             }
-                            yield f"data: {json.dumps(chunk_usage_only)}\n\n"
+                            return [
+                                f"data: {json.dumps(chunk_no_usage)}\n\n",
+                                f"data: {json.dumps(chunk_usage_only)}\n\n",
+                            ]
 
-                        else:
-                            # Send as is
-                            yield f"data: {json.dumps(chunk_dict)}\n\n"
+                        return [f"data: {json.dumps(chunk_dict)}\n\n"]
 
-                    yield "data: [DONE]\n\n"
+                    if config.model_cascade and tier:
+                        stream_lines = openai_client.create_chat_completion_stream_with_cascade(
+                            openai_request,
+                            tier=tier,
+                            config=config,
+                            request_id=request_id
+                        )
+                        async for line in stream_lines:
+                            if not line.startswith("data: "):
+                                continue
+                            payload = line[6:].strip()
+                            if payload == "[DONE]":
+                                yield "data: [DONE]\n\n"
+                                break
+                            chunk_dict = json.loads(payload)
+                            for output in transform_chunk_dict(chunk_dict):
+                                yield output
+                    else:
+                        stream = await client.chat.completions.create(
+                            **openai_request, stream=True
+                        )
+                        async for chunk in stream:
+                            chunk_dict = chunk.model_dump()
+                            for output in transform_chunk_dict(chunk_dict):
+                                yield output
+
+                        yield "data: [DONE]\n\n"
 
                 except Exception as e:
                     logger.error(f"[{request_id}] Streaming error: {e}")
@@ -375,8 +394,19 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
             )
         else:
             # Non-streaming response
-            response = await client.chat.completions.create(**openai_request)
-            response_dict = response.model_dump()
+            if config.model_cascade and tier:
+                response_dict = await openai_client.create_chat_completion_with_cascade(
+                    openai_request,
+                    tier=tier,
+                    config=config,
+                    request_id=request_id
+                )
+                # create_chat_completion_with_cascade returns dict in this codebase.
+                # Keep response API stable by reusing dict directly.
+                response_dict = response_dict if isinstance(response_dict, dict) else response_dict.model_dump()
+            else:
+                response = await client.chat.completions.create(**openai_request)
+                response_dict = response.model_dump()
 
             # Normalize tool calls in response
             for choice in response_dict.get("choices", []):

@@ -184,6 +184,9 @@ class Config:
         self.big_cascade = self._parse_cascade(os.environ.get("BIG_CASCADE", ""))
         self.middle_cascade = self._parse_cascade(os.environ.get("MIDDLE_CASCADE", ""))
         self.small_cascade = self._parse_cascade(os.environ.get("SMALL_CASCADE", ""))
+        # Preemptive cascade when local UTC-day request counters approach provider limits.
+        # Set to 0 to disable threshold-based skipping.
+        self.model_cascade_daily_limit = int(os.environ.get("MODEL_CASCADE_DAILY_LIMIT", "1000"))
 
         # Optional: Per-model routing for hybrid deployments
         # Enable per-model endpoints (set to "true" to enable)
@@ -386,6 +389,9 @@ class Config:
 
         # Enable usage tracking for dashboard metrics (default: true if dashboard enabled)
         self.track_usage = os.environ.get("TRACK_USAGE", "true" if self.enable_dashboard else "false").lower() == "true"
+
+        # Usage tracking database path
+        self.usage_tracking_db_path = os.environ.get("USAGE_DB_PATH", "usage_tracking.db")
 
         # Compact logger mode - reduce console noise when dashboard is active
         self.compact_logger = os.environ.get("COMPACT_LOGGER", "true" if self.enable_dashboard else "false").lower() == "true"

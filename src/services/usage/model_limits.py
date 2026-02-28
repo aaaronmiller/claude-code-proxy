@@ -97,6 +97,7 @@ def _get_fallback_limits() -> Dict[str, Dict[str, int]]:
         "gemini-3-flash": {"context": 1000000, "output": 8192},
         "google/gemini-3-pro-preview": {"context": 1000000, "output": 8192},
         "gemini-3-pro-preview": {"context": 1000000, "output": 8192},
+        # VibeProxy/CLIProxyAPI model limits are dynamic — use conservative defaults
         
         # Meta Llama
         "meta-llama/llama-3.3-70b": {"context": 128000, "output": 4096},

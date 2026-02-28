@@ -74,33 +74,36 @@ class OpenAIClient:
                 logger.error(f"[Kiro {timestamp}] Please set Kiro tokens via /api/providers/kiro/tokens endpoint")
                 # Proceed anyway - let it fail with clear auth error
 
-        # Special handling for VibeProxy (Antigravity's local proxy on port 8317)
+        # Special handling for VibeProxy/CLIProxyAPI (Antigravity's local proxy on port 8317)
         elif is_vibeproxy:
-            # Check VibeProxy availability BEFORE attempting to use it
+            # Check VibeProxy/CLIProxyAPI availability BEFORE attempting to use it
             if check_health:
-                from src.services.antigravity import is_vibeproxy_available, check_vibeproxy_health
+                from src.services.antigravity import check_vibeproxy_health
 
                 available, error_msg = check_vibeproxy_health()
                 if not available:
-                    logger.warning(f"[VibeProxy {timestamp}] VibeProxy is NOT available: {error_msg}")
-                    # Store the error state but don't fail yet - let caller handle fallback
+                    logger.warning(f"[VibeProxy {timestamp}] VibeProxy/CLIProxyAPI is NOT available: {error_msg}")
                     self._vibeproxy_available = False
                     self._vibeproxy_error = error_msg
                 else:
                     self._vibeproxy_available = True
                     self._vibeproxy_error = None
 
-            # VibeProxy requires Antigravity's OAuth token, not OpenRouter/OpenAI keys
-            from src.services.antigravity import get_antigravity_token
-
-            logger.debug(f"[VibeProxy {timestamp}] CLIENT CREATION for VibeProxy - Fetching Antigravity token...")
-            antigravity_token = get_antigravity_token()
-            if antigravity_token:
-                logger.debug(f"[VibeProxy {timestamp}] Token retrieved successfully (first 20 chars): {antigravity_token[:20]}...")
-                api_key = antigravity_token
+            # If caller provided an explicit API key (e.g. BIG_API_KEY=pass for CLIProxyAPI),
+            # use it directly — CLIProxyAPI handles OAuth internally.
+            # Only fetch Antigravity token if no key was provided.
+            if api_key and api_key not in ("dummy", "your-api-key-here", ""):
+                logger.debug(f"[VibeProxy {timestamp}] Using provided API key for CLIProxyAPI (first 10 chars): {api_key[:10]}...")
             else:
-                logger.error(f"[VibeProxy {timestamp}] No Antigravity token found! Authentication will FAIL.")
-                logger.error(f"[VibeProxy {timestamp}] Please ensure you're logged into Antigravity IDE.")
+                from src.services.antigravity import get_antigravity_token
+                logger.debug(f"[VibeProxy {timestamp}] No explicit API key - fetching Antigravity token...")
+                antigravity_token = get_antigravity_token()
+                if antigravity_token:
+                    logger.debug(f"[VibeProxy {timestamp}] Token retrieved successfully (first 20 chars): {antigravity_token[:20]}...")
+                    api_key = antigravity_token
+                else:
+                    logger.error(f"[VibeProxy {timestamp}] No Antigravity token found! Authentication will FAIL.")
+                    logger.error(f"[VibeProxy {timestamp}] Please ensure you're logged into Antigravity IDE.")
 
         # Diagnostic logging for special providers
         if is_vibeproxy:
@@ -248,38 +251,43 @@ class OpenAIClient:
             base_url = str(client.base_url)
             is_vibeproxy = "127.0.0.1:8317" in base_url or "localhost:8317" in base_url
             
-            # Allow refresh for any tier (including small) if it points to VibeProxy
+            # Allow refresh for any tier (including small) if it points to VibeProxy/CLIProxyAPI
             if is_vibeproxy:
-                # CRITICAL: Check VibeProxy health BEFORE attempting to use it
-                from src.services.antigravity import check_vibeproxy_health, get_antigravity_auth
+                # Check CLIProxyAPI/VibeProxy health BEFORE attempting to use it
+                from src.services.antigravity import check_vibeproxy_health
 
                 available, error_msg = check_vibeproxy_health()
                 if not available:
-                    logger.error(f"[VibeProxy {timestamp}] VibeProxy is NOT available: {error_msg}")
+                    logger.error(f"[VibeProxy {timestamp}] CLIProxyAPI/VibeProxy is NOT available: {error_msg}")
                     raise VibeProxyUnavailableError(
                         f"VibeProxy is not available: {error_msg}. "
-                        "Please ensure Antigravity IDE is running and you're logged in. "
+                        "Please ensure CLIProxyAPI or Antigravity IDE is running. "
                         "Alternatively, use a different model/provider."
                     )
 
-                logger.debug(f"[VibeProxy {timestamp}] Refreshing client with fresh Antigravity token for request")
-
-                # Force refresh token from database
-                auth = get_antigravity_auth()
-                fresh_token = auth.get_token(force_refresh=True)
-
-                if fresh_token:
-                    logger.debug(f"[VibeProxy {timestamp}] Creating new client with fresh token (first 20 chars): {fresh_token[:20]}...")
-                    # Create a fresh client with the new token
-                    client = self._create_client(
-                        fresh_token,
-                        base_url,
-                        config.azure_api_version if config else self.default_api_version,
-                        self.custom_headers,
-                        check_health=False  # Already checked above
-                    )
+                # When CLIProxyAPI handles auth (BIG_API_KEY is set), skip token refresh.
+                # CLIProxyAPI manages OAuth tokens internally from ~/.cli-proxy-api/ credentials.
+                big_api_key = config.big_api_key if config else None
+                if big_api_key and big_api_key not in ("dummy", "your-api-key-here", ""):
+                    logger.debug(f"[VibeProxy {timestamp}] CLIProxyAPI mode - using provided API key, skipping token refresh")
                 else:
-                    logger.error(f"[VibeProxy {timestamp}] Failed to retrieve fresh token! Using cached client (may fail)")
+                    # Legacy: direct Antigravity token refresh from macOS SQLite DB
+                    from src.services.antigravity import get_antigravity_auth
+                    logger.debug(f"[VibeProxy {timestamp}] Refreshing client with fresh Antigravity token for request")
+                    auth = get_antigravity_auth()
+                    fresh_token = auth.get_token(force_refresh=True)
+
+                    if fresh_token:
+                        logger.debug(f"[VibeProxy {timestamp}] Creating new client with fresh token (first 20 chars): {fresh_token[:20]}...")
+                        client = self._create_client(
+                            fresh_token,
+                            base_url,
+                            config.azure_api_version if config else self.default_api_version,
+                            self.custom_headers,
+                            check_health=False
+                        )
+                    else:
+                        logger.error(f"[VibeProxy {timestamp}] Failed to retrieve fresh token! Using cached client (may fail)")
             elif is_small_tier:
                 logger.debug(f"[Client Selection {timestamp}] SMALL tier - routing to {config.small_endpoint} (not VibeProxy)")
 
@@ -375,26 +383,27 @@ class OpenAIClient:
             base_url = str(client.base_url)
             is_vibeproxy = "127.0.0.1:8317" in base_url or "localhost:8317" in base_url
             
-            # Allow refresh for any tier (including small) if it points to VibeProxy
+            # Allow refresh for any tier (including small) if it points to VibeProxy/CLIProxyAPI
             if is_vibeproxy:
-                logger.debug(f"[VibeProxy {timestamp}] Refreshing client with fresh Antigravity token for streaming request")
-                from src.services.antigravity import get_antigravity_auth
-                
-                # Force refresh token from database
-                auth = get_antigravity_auth()
-                fresh_token = auth.get_token(force_refresh=True)
-                
-                if fresh_token:
-                    logger.debug(f"[VibeProxy {timestamp}] Creating new client with fresh token (first 20 chars): {fresh_token[:20]}...")
-                    # Create a fresh client with the new token
-                    client = self._create_client(
-                        fresh_token,
-                        base_url,
-                        config.azure_api_version if config else self.default_api_version,
-                        self.custom_headers
-                    )
+                # When CLIProxyAPI handles auth, skip token refresh
+                big_api_key = config.big_api_key if config else None
+                if big_api_key and big_api_key not in ("dummy", "your-api-key-here", ""):
+                    logger.debug(f"[VibeProxy {timestamp}] CLIProxyAPI mode - using provided API key for streaming, skipping token refresh")
                 else:
-                    logger.error(f"[VibeProxy {timestamp}] Failed to retrieve fresh token! Using cached client (may fail)")
+                    logger.debug(f"[VibeProxy {timestamp}] Refreshing client with fresh Antigravity token for streaming request")
+                    from src.services.antigravity import get_antigravity_auth
+                    auth = get_antigravity_auth()
+                    fresh_token = auth.get_token(force_refresh=True)
+                    if fresh_token:
+                        logger.debug(f"[VibeProxy {timestamp}] Creating new client with fresh token (first 20 chars): {fresh_token[:20]}...")
+                        client = self._create_client(
+                            fresh_token,
+                            base_url,
+                            config.azure_api_version if config else self.default_api_version,
+                            self.custom_headers
+                        )
+                    else:
+                        logger.error(f"[VibeProxy {timestamp}] Failed to retrieve fresh token! Using cached client (may fail)")
             elif is_small_tier:
                 logger.debug(f"[Client Selection {timestamp}] SMALL tier streaming - routing to {config.small_endpoint} (not VibeProxy)")
 
@@ -515,6 +524,8 @@ class OpenAIClient:
         import ssl
         import httpx
         import time
+        from src.api.websocket_logs import log_cascade
+        from src.services.usage.usage_tracker import usage_tracker
         
         if not config or not config.model_cascade:
             # Cascade disabled - use normal call
@@ -538,6 +549,29 @@ class OpenAIClient:
             if not model:
                 model_idx += 1
                 continue
+
+            # Optional preemptive switch when local UTC-day request count is at/over threshold.
+            daily_limit = getattr(config, "model_cascade_daily_limit", 0) if config else 0
+            if daily_limit and usage_tracker.enabled:
+                daily_count = usage_tracker.get_daily_model_request_count(model)
+                if daily_count >= daily_limit:
+                    next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                    print(
+                        f"[CASCADE {timestamp}] ⏭️  Skipping {model} "
+                        f"(UTC-day requests={daily_count} >= threshold={daily_limit})"
+                    )
+                    log_cascade(
+                        model=model,
+                        action="switch",
+                        tier=tier,
+                        reason="daily_limit_threshold",
+                        from_model=model,
+                        to_model=next_model,
+                        request_id=request_id,
+                        retry_count=retry_counts.get(model, 0),
+                    )
+                    model_idx += 1
+                    continue
             
             # Initialize retry count for this model
             if model not in retry_counts:
@@ -549,17 +583,45 @@ class OpenAIClient:
                 
                 if model_idx > 0 and retry_counts[model] == 0:
                     print(f"[CASCADE {timestamp}] ⚡ Trying fallback model: {model}")
+                    log_cascade(
+                        model=model,
+                        action="switch",
+                        tier=tier,
+                        reason="fallback_attempt",
+                        from_model=models_to_try[model_idx - 1],
+                        to_model=model,
+                        request_id=request_id,
+                        retry_count=retry_counts[model],
+                    )
                 
                 result = await self.create_chat_completion(current_request, request_id, config, api_key)
                 
                 if model_idx > 0:
                     print(f"[CASCADE {timestamp}] ✅ Success with fallback: {model}")
+                    log_cascade(
+                        model=model,
+                        action="success",
+                        tier=tier,
+                        reason="fallback_success",
+                        request_id=request_id,
+                    )
                 
                 return result
                 
             except (ssl.SSLCertVerificationError, ssl.SSLError) as e:
                 # SSL/Cert errors: switch IMMEDIATELY (hard failure)
                 print(f"[CASCADE {timestamp}] 🔒 SSL/Cert error on {model} - switching immediately: {e}")
+                next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                log_cascade(
+                    model=model,
+                    action="switch",
+                    tier=tier,
+                    reason="ssl_error",
+                    from_model=model,
+                    to_model=next_model,
+                    request_id=request_id,
+                    error=str(e),
+                )
                 last_error = e
                 model_idx += 1  # Move to next model immediately
                 continue
@@ -567,27 +629,87 @@ class OpenAIClient:
             except httpx.ConnectError as e:
                 retry_counts[model] += 1
                 print(f"[CASCADE {timestamp}] ⚠️  Connection error on {model} ({retry_counts[model]}/{MAX_RETRIES_BEFORE_CASCADE}): {e}")
+                log_cascade(
+                    model=model,
+                    action="retry",
+                    tier=tier,
+                    reason="connect_error",
+                    request_id=request_id,
+                    retry_count=retry_counts[model],
+                    error=str(e),
+                )
                 last_error = e
                 if retry_counts[model] >= MAX_RETRIES_BEFORE_CASCADE:
                     print(f"[CASCADE {timestamp}] 🔄 Max retries reached for {model}, switching to next")
+                    next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                    log_cascade(
+                        model=model,
+                        action="switch",
+                        tier=tier,
+                        reason="max_connect_retries",
+                        from_model=model,
+                        to_model=next_model,
+                        request_id=request_id,
+                        retry_count=retry_counts[model],
+                    )
                     model_idx += 1
                 continue
                 
             except httpx.TimeoutException as e:
                 retry_counts[model] += 1
                 print(f"[CASCADE {timestamp}] ⚠️  Timeout on {model} ({retry_counts[model]}/{MAX_RETRIES_BEFORE_CASCADE}): {e}")
+                log_cascade(
+                    model=model,
+                    action="retry",
+                    tier=tier,
+                    reason="timeout_error",
+                    request_id=request_id,
+                    retry_count=retry_counts[model],
+                    error=str(e),
+                )
                 last_error = e
                 if retry_counts[model] >= MAX_RETRIES_BEFORE_CASCADE:
                     print(f"[CASCADE {timestamp}] 🔄 Max retries reached for {model}, switching to next")
+                    next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                    log_cascade(
+                        model=model,
+                        action="switch",
+                        tier=tier,
+                        reason="max_timeout_retries",
+                        from_model=model,
+                        to_model=next_model,
+                        request_id=request_id,
+                        retry_count=retry_counts[model],
+                    )
                     model_idx += 1
                 continue
                 
             except RateLimitError as e:
                 retry_counts[model] += 1
                 print(f"[CASCADE {timestamp}] ⚠️  Rate limit on {model} ({retry_counts[model]}/{MAX_RETRIES_BEFORE_CASCADE}): {e}")
+                log_cascade(
+                    model=model,
+                    action="retry",
+                    tier=tier,
+                    reason="rate_limit",
+                    request_id=request_id,
+                    retry_count=retry_counts[model],
+                    error=str(e),
+                )
                 last_error = e
                 if retry_counts[model] >= MAX_RETRIES_BEFORE_CASCADE:
                     print(f"[CASCADE {timestamp}] 🔄 Max retries reached for {model}, switching to next")
+                    next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                    log_cascade(
+                        model=model,
+                        action="switch",
+                        tier=tier,
+                        reason="max_rate_limit_retries",
+                        from_model=model,
+                        to_model=next_model,
+                        request_id=request_id,
+                        retry_count=retry_counts[model],
+                    )
                     model_idx += 1
                 # Add small delay on rate limit
                 await asyncio.sleep(1)
@@ -596,6 +718,17 @@ class OpenAIClient:
             except (BadRequestError, AuthenticationError) as e:
                 # 400/401 errors: switch IMMEDIATELY (model not available or auth failed)
                 print(f"[CASCADE {timestamp}] 🚫 Request error on {model} - switching immediately: {e}")
+                next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                log_cascade(
+                    model=model,
+                    action="switch",
+                    tier=tier,
+                    reason="request_error",
+                    from_model=model,
+                    to_model=next_model,
+                    request_id=request_id,
+                    error=str(e),
+                )
                 last_error = e
                 model_idx += 1  # Move to next model immediately
                 continue
@@ -605,9 +738,29 @@ class OpenAIClient:
                 if hasattr(e, 'status_code') and e.status_code in [502, 503, 504]:
                     retry_counts[model] += 1
                     print(f"[CASCADE {timestamp}] ⚠️  Server error {e.status_code} on {model} ({retry_counts[model]}/{MAX_RETRIES_BEFORE_CASCADE})")
+                    log_cascade(
+                        model=model,
+                        action="retry",
+                        tier=tier,
+                        reason=f"server_error_{e.status_code}",
+                        request_id=request_id,
+                        retry_count=retry_counts[model],
+                        error=str(e),
+                    )
                     last_error = e
                     if retry_counts[model] >= MAX_RETRIES_BEFORE_CASCADE:
                         print(f"[CASCADE {timestamp}] 🔄 Max retries reached for {model}, switching to next")
+                        next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                        log_cascade(
+                            model=model,
+                            action="switch",
+                            tier=tier,
+                            reason=f"max_server_error_{e.status_code}_retries",
+                            from_model=model,
+                            to_model=next_model,
+                            request_id=request_id,
+                            retry_count=retry_counts[model],
+                        )
                         model_idx += 1
                     continue
                 # Other API errors should not cascade
@@ -615,6 +768,270 @@ class OpenAIClient:
         
         # All models failed
         print(f"[CASCADE {timestamp}] ❌ All cascade models exhausted")
+        log_cascade(
+            model=primary_model,
+            action="exhausted",
+            tier=tier,
+            reason="all_models_failed",
+            request_id=request_id,
+            error=str(last_error) if last_error else None,
+        )
         if last_error:
             raise last_error
         raise APIError("All cascade models failed")
+
+    async def create_chat_completion_stream_with_cascade(
+        self,
+        request: Dict[str, Any],
+        tier: str,
+        config=None,
+        request_id: Optional[str] = None,
+        api_key: Optional[str] = None
+    ) -> AsyncGenerator[str, None]:
+        """
+        Streaming chat completion with cascade fallback on provider errors.
+
+        Args:
+            request: OpenAI request dictionary
+            tier: Model tier (big, middle, small)
+            config: Config object with cascade settings
+            request_id: Optional request ID for cancellation
+            api_key: Optional per-request API key
+
+        Yields:
+            OpenAI-format SSE lines ("data: ...")
+        """
+        import ssl
+        import httpx
+        import time
+        from src.api.websocket_logs import log_cascade
+        from src.services.usage.usage_tracker import usage_tracker
+
+        if not config or not config.model_cascade:
+            async for line in self.create_chat_completion_stream(
+                request, request_id, config, api_key
+            ):
+                yield line
+            return
+
+        primary_model = request.get("model", "")
+        cascade_models = config.get_cascade_for_tier(tier)
+        models_to_try = []
+        for model_name in [primary_model] + cascade_models:
+            if model_name and model_name not in models_to_try:
+                models_to_try.append(model_name)
+
+        timestamp = time.strftime("%H:%M:%S")
+        last_error = None
+        retry_counts = {}
+        max_retries_before_cascade = 5
+
+        model_idx = 0
+        while model_idx < len(models_to_try):
+            model = models_to_try[model_idx]
+            if model not in retry_counts:
+                retry_counts[model] = 0
+
+            daily_limit = getattr(config, "model_cascade_daily_limit", 0) if config else 0
+            if daily_limit and usage_tracker.enabled:
+                daily_count = usage_tracker.get_daily_model_request_count(model)
+                if daily_count >= daily_limit:
+                    next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                    print(
+                        f"[CASCADE {timestamp}] ⏭️  Skipping {model} (stream) "
+                        f"(UTC-day requests={daily_count} >= threshold={daily_limit})"
+                    )
+                    log_cascade(
+                        model=model,
+                        action="switch",
+                        tier=tier,
+                        reason="daily_limit_threshold_stream",
+                        from_model=model,
+                        to_model=next_model,
+                        request_id=request_id,
+                        retry_count=retry_counts[model],
+                    )
+                    model_idx += 1
+                    continue
+
+            current_request = {**request, "model": model}
+            emitted_any_chunk = False
+
+            try:
+                if model_idx > 0 and retry_counts[model] == 0:
+                    print(f"[CASCADE {timestamp}] ⚡ Trying fallback model (stream): {model}")
+                    log_cascade(
+                        model=model,
+                        action="switch",
+                        tier=tier,
+                        reason="fallback_attempt_stream",
+                        from_model=models_to_try[model_idx - 1],
+                        to_model=model,
+                        request_id=request_id,
+                        retry_count=retry_counts[model],
+                    )
+
+                stream = self.create_chat_completion_stream(
+                    current_request, request_id, config, api_key
+                )
+                async for line in stream:
+                    emitted_any_chunk = True
+                    yield line
+
+                if model_idx > 0:
+                    print(f"[CASCADE {timestamp}] ✅ Streaming success with fallback: {model}")
+                    log_cascade(
+                        model=model,
+                        action="success",
+                        tier=tier,
+                        reason="fallback_success_stream",
+                        request_id=request_id,
+                    )
+                return
+
+            except HTTPException as e:
+                if emitted_any_chunk:
+                    # Do not restart a stream after partial output.
+                    raise
+
+                last_error = e
+                status_code = e.status_code
+
+                if status_code in (400, 401):
+                    print(f"[CASCADE {timestamp}] 🚫 Streaming request error on {model} - switching immediately: {e.detail}")
+                    next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                    log_cascade(
+                        model=model,
+                        action="switch",
+                        tier=tier,
+                        reason="request_error_stream",
+                        from_model=model,
+                        to_model=next_model,
+                        request_id=request_id,
+                        error=str(e.detail),
+                    )
+                    model_idx += 1
+                    continue
+
+                if status_code == 429:
+                    retry_counts[model] += 1
+                    print(f"[CASCADE {timestamp}] ⚠️  Streaming rate limit on {model} ({retry_counts[model]}/{max_retries_before_cascade})")
+                    log_cascade(
+                        model=model,
+                        action="retry",
+                        tier=tier,
+                        reason="rate_limit_stream",
+                        request_id=request_id,
+                        retry_count=retry_counts[model],
+                        error=str(e.detail),
+                    )
+                    if retry_counts[model] >= max_retries_before_cascade:
+                        print(f"[CASCADE {timestamp}] 🔄 Max retries reached for {model}, switching to next")
+                        next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                        log_cascade(
+                            model=model,
+                            action="switch",
+                            tier=tier,
+                            reason="max_rate_limit_retries_stream",
+                            from_model=model,
+                            to_model=next_model,
+                            request_id=request_id,
+                            retry_count=retry_counts[model],
+                        )
+                        model_idx += 1
+                    await asyncio.sleep(1)
+                    continue
+
+                if status_code in (500, 502, 503, 504):
+                    retry_counts[model] += 1
+                    print(f"[CASCADE {timestamp}] ⚠️  Streaming server error {status_code} on {model} ({retry_counts[model]}/{max_retries_before_cascade})")
+                    log_cascade(
+                        model=model,
+                        action="retry",
+                        tier=tier,
+                        reason=f"server_error_stream_{status_code}",
+                        request_id=request_id,
+                        retry_count=retry_counts[model],
+                        error=str(e.detail),
+                    )
+                    if retry_counts[model] >= max_retries_before_cascade:
+                        print(f"[CASCADE {timestamp}] 🔄 Max retries reached for {model}, switching to next")
+                        next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                        log_cascade(
+                            model=model,
+                            action="switch",
+                            tier=tier,
+                            reason=f"max_server_error_stream_{status_code}_retries",
+                            from_model=model,
+                            to_model=next_model,
+                            request_id=request_id,
+                            retry_count=retry_counts[model],
+                        )
+                        model_idx += 1
+                    continue
+
+                # 499 (cancelled) and other errors should propagate.
+                raise
+
+            except (ssl.SSLCertVerificationError, ssl.SSLError) as e:
+                if emitted_any_chunk:
+                    raise
+                print(f"[CASCADE {timestamp}] 🔒 Streaming SSL/Cert error on {model} - switching immediately: {e}")
+                next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                log_cascade(
+                    model=model,
+                    action="switch",
+                    tier=tier,
+                    reason="ssl_error_stream",
+                    from_model=model,
+                    to_model=next_model,
+                    request_id=request_id,
+                    error=str(e),
+                )
+                last_error = e
+                model_idx += 1
+                continue
+
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                if emitted_any_chunk:
+                    raise
+                retry_counts[model] += 1
+                print(f"[CASCADE {timestamp}] ⚠️  Streaming network error on {model} ({retry_counts[model]}/{max_retries_before_cascade}): {e}")
+                log_cascade(
+                    model=model,
+                    action="retry",
+                    tier=tier,
+                    reason="network_error_stream",
+                    request_id=request_id,
+                    retry_count=retry_counts[model],
+                    error=str(e),
+                )
+                last_error = e
+                if retry_counts[model] >= max_retries_before_cascade:
+                    print(f"[CASCADE {timestamp}] 🔄 Max retries reached for {model}, switching to next")
+                    next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                    log_cascade(
+                        model=model,
+                        action="switch",
+                        tier=tier,
+                        reason="max_network_retries_stream",
+                        from_model=model,
+                        to_model=next_model,
+                        request_id=request_id,
+                        retry_count=retry_counts[model],
+                    )
+                    model_idx += 1
+                continue
+
+        print(f"[CASCADE {timestamp}] ❌ All stream cascade models exhausted")
+        log_cascade(
+            model=primary_model,
+            action="exhausted",
+            tier=tier,
+            reason="all_models_failed_stream",
+            request_id=request_id,
+            error=str(last_error) if last_error else None,
+        )
+        if last_error:
+            raise last_error
+        raise APIError("All stream cascade models failed")

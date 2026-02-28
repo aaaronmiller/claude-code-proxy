@@ -17,6 +17,7 @@
 |-------|-------------|
 | [Configuration](guides/configuration.md) | All environment variables and options |
 | [Model Selection](guides/model-selection.md) | Choosing and configuring models |
+| [Free Cascade](guides/free-cascade.md) | Ranked free models, fallback chains, and history |
 | [Reasoning](guides/reasoning.md) | Extended thinking and reasoning tokens |
 | [Prompt Injection](guides/prompt-injection.md) | Custom system prompts |
 
