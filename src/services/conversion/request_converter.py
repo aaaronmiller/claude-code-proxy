@@ -325,7 +325,7 @@ def convert_claude_to_openai(
     # Check if this is a newer OpenAI model (o1, o3, o4, gpt-5)
     is_newer_model = model_manager.is_newer_openai_model(openai_model)
 
-    # Calculate token limit
+    # Calculate token limit - use larger default for modern models
     token_limit = min(
         max(claude_request.max_tokens, config.min_tokens_limit),
         config.max_tokens_limit,

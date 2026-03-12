@@ -156,8 +156,8 @@
       "first_used": "2026-02-10T10:01:33.551277"
     },
     "openai/gpt-oss-120b:free": {
-      "count": 572,
-      "last_used": "2026-02-28T02:52:47.382573",
+      "count": 605,
+      "last_used": "2026-03-11T16:51:17.750070",
       "first_used": "2026-02-11T01:10:27.695552"
     },
     "openai/gpt-oss-120b": {
@@ -176,25 +176,35 @@
       "first_used": "2026-02-11T16:19:03.030615"
     },
     "gemini-claude-opus-4-6-thinking": {
-      "count": 226,
-      "last_used": "2026-02-23T04:05:46.004898",
+      "count": 436,
+      "last_used": "2026-02-28T10:52:22.105315",
       "first_used": "2026-02-12T03:19:21.047718"
     },
     "stepfun/step-3.5-flash:free": {
-      "count": 500,
-      "last_used": "2026-02-27T12:03:09.502090",
+      "count": 1635,
+      "last_used": "2026-03-11T04:49:08.864328",
       "first_used": "2026-02-13T15:58:15.833897"
     },
     "arcee-ai/trinity-large-preview:free": {
-      "count": 112,
-      "last_used": "2026-02-17T01:44:56.743221",
+      "count": 2132,
+      "last_used": "2026-03-11T16:53:04.627655",
       "first_used": "2026-02-13T16:58:44.333828"
     },
     "gemini-3.1-pro": {
       "count": 42,
       "last_used": "2026-02-28T02:55:21.273308",
       "first_used": "2026-02-23T04:08:14.774181"
+    },
+    "gemini-3.1-pro-high": {
+      "count": 163,
+      "last_used": "2026-03-05T21:41:27.366212",
+      "first_used": "2026-03-04T11:47:33.608534"
+    },
+    "gemini-pro-3.1-high": {
+      "count": 2,
+      "last_used": "2026-03-05T22:20:36.478109",
+      "first_used": "2026-03-05T22:20:34.718653"
     }
   },
-  "last_updated": "2026-02-28T02:55:21.273328"
+  "last_updated": "2026-03-11T16:53:04.627717"
 }
