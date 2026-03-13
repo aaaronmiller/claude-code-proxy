@@ -181,6 +181,10 @@ configs/profiles/
 
 # Runtime Data
 data/
+usage_tracking.db
+
+# Model scraper data (can be regenerated)
+model-scraper/data/
 
 # Documentation
 
