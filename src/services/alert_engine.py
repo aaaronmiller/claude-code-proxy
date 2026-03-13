@@ -342,8 +342,22 @@ class AlertEngine:
 
         logic = rule.logic
         if not logic:
-            # Fallback to simple conditions
-            return self.evaluate_simple_condition(rule.conditions, metrics)
+            # Fallback to simple conditions - handle both list and JSON string
+            conditions = rule.conditions
+            if isinstance(conditions, str):
+                try:
+                    conditions = json.loads(conditions)
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(
+                        f"Rule {rule.id}: conditions is invalid JSON string: {conditions}"
+                    )
+                    return False, {}
+            if not isinstance(conditions, list):
+                logger.warning(
+                    f"Rule {rule.id}: conditions is not a list: {type(conditions)}"
+                )
+                return False, {}
+            return self.evaluate_simple_condition(conditions, metrics)
 
         # Evaluate complex logic
         return self.evaluate_complex_logic(logic, metrics)

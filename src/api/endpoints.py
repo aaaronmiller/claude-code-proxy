@@ -18,7 +18,7 @@ from src.services.conversion.request_converter import convert_claude_to_openai
 from src.services.conversion.response_converter import (
     convert_openai_to_claude_response,
     convert_openai_streaming_to_claude_with_cancellation,
-    convert_openai_streaming_to_claude
+    convert_openai_streaming_to_claude,
 )
 from src.core.model_manager import model_manager
 from src.services.logging.request_logger import request_logger, RequestLogger
@@ -55,9 +55,9 @@ if DEBUG_TRAFFIC_LOG:
         os.makedirs(log_dir)
 
     file_handler = logging.FileHandler(f"{log_dir}/debug_traffic.log")
-    file_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s'
-    ))
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    )
     traffic_logger.addHandler(file_handler)
 
 
@@ -65,6 +65,7 @@ if DEBUG_TRAFFIC_LOG:
 # REQUEST DEDUPLICATION
 # ═══════════════════════════════════════════════════════════════════════════════
 # Prevents duplicate terminal output caused by client retries
+
 
 class RequestDeduplicator:
     """
@@ -82,30 +83,48 @@ class RequestDeduplicator:
         self._max_cache_size = max_cache_size
 
     def _compute_hash(self, request: "ClaudeMessagesRequest") -> str:
-        """Compute a hash of the request content for deduplication."""
-        # Extract key fields that define request identity
-        # Include MORE context to avoid false positives
-        hash_data = {
-            "model": request.model,
-            "stream": getattr(request, 'stream', False),  # Include stream flag
-            "max_tokens": getattr(request, 'max_tokens', None),  # Include max_tokens
-            "messages": [
-                {
-                    "role": msg.role,
-                    # Use more content for better uniqueness
-                    "content": str(msg.content)[:1000] if msg.content else ""
-                }
-                for msg in request.messages[-5:]  # Last 5 messages for better identity
-            ],
-        }
+        """Compute hash for request - includes session ID to avoid cross-session false duplicates."""
+        # Extract session ID from metadata if available
+        session_id = "none"
+        if request.metadata and isinstance(request.metadata, dict):
+            # Try to find session ID in metadata
+            user_id = request.metadata.get("user_id", "")
+            if user_id and "session_" in str(user_id):
+                # Extract session ID from user_id field
+                parts = str(user_id).split("session_")
+                if len(parts) > 1:
+                    session_id = parts[1].split("_")[0] if parts[1] else "none"
 
-        # Create deterministic hash
-        content_str = json_module.dumps(hash_data, sort_keys=True)
+        # Build content string including session ID
+        content_parts = [session_id]
+
+        # Include model and key fields
+        content_parts.append(request.model)
+        if request.stream is not None:
+            content_parts.append(str(request.stream))
+
+        # Include first few messages (truncated) for content-based matching
+        for msg in request.messages[:3]:
+            if hasattr(msg, "content"):
+                content = msg.content
+                if isinstance(content, str):
+                    content_parts.append(content[:200])  # Truncate long content
+                elif isinstance(content, list):
+                    for block in content[:2]:
+                        if isinstance(block, dict):
+                            text = block.get("text", "")
+                            if text:
+                                content_parts.append(text[:100])
+
+        content_str = "|".join(str(x) for x in content_parts)
         return hashlib.sha256(content_str.encode()).hexdigest()[:16]
 
-    def check_duplicate(self, request: "ClaudeMessagesRequest") -> tuple[bool, str, Optional[Dict]]:
+    def check_duplicate(
+        self, request: "ClaudeMessagesRequest"
+    ) -> tuple[bool, str, Optional[Dict]]:
         """
         Check if request is a duplicate within the time window.
+        Now session-aware: only deduplicates requests from the same session.
 
         Returns:
             (is_duplicate, request_hash, cached_response or None)
@@ -130,7 +149,7 @@ class RequestDeduplicator:
                 if age < self._window_seconds:
                     # Only treat as duplicate if we have a cached response
                     # Streaming requests should NOT be deduplicated
-                    if cached.get("response") and not getattr(request, 'stream', False):
+                    if cached.get("response") and not getattr(request, "stream", False):
                         cached["count"] += 1
                         logger.warning(
                             f"Duplicate request detected (hash={request_hash[:8]}, "
@@ -148,7 +167,7 @@ class RequestDeduplicator:
             self._cache[request_hash] = {
                 "timestamp": current_time,
                 "count": 1,
-                "response": None
+                "response": None,
             }
 
             # Move to end (most recent)
@@ -166,6 +185,7 @@ class RequestDeduplicator:
             if request_hash in self._cache:
                 self._cache[request_hash]["response"] = response
 
+
 # Global deduplicator instance
 ENABLE_DEDUP = os.getenv("ENABLE_REQUEST_DEDUP", "true").lower() == "true"
 DEDUP_WINDOW = float(os.getenv("DEDUP_WINDOW_SECONDS", "3.0"))
@@ -176,30 +196,35 @@ async def log_request_body(request: Request):
     """Middleware-like function to log request body if enabled."""
     if not DEBUG_TRAFFIC_LOG:
         return
-        
+
     try:
         # Clone body stream so it can be read again
         body = await request.body()
-        
+
         # Log basic info
         traffic_logger.info(f"--- INCOMING REQUEST: {request.method} {request.url} ---")
         traffic_logger.info(f"Headers: {dict(request.headers)}")
-        
+
         # Log body (truncated if too large)
         try:
-            body_str = body.decode('utf-8')
+            body_str = body.decode("utf-8")
             # Filter out (no content) placeholders to reduce token waste in debug logs
-            body_str_filtered = body_str.replace("(no content)", "[empty]").replace("no content", "[empty]")
+            body_str_filtered = body_str.replace("(no content)", "[empty]").replace(
+                "no content", "[empty]"
+            )
             if len(body_str_filtered) > 50000:
-                traffic_logger.info(f"Body (Truncated): {body_str_filtered[:1000]}... [Total {len(body_str_filtered)} bytes]")
+                traffic_logger.info(
+                    f"Body (Truncated): {body_str_filtered[:1000]}... [Total {len(body_str_filtered)} bytes]"
+                )
             else:
                 traffic_logger.info(f"Body: {body_str_filtered}")
         except:
             traffic_logger.info(f"Body (Binary): {len(body)} bytes")
-            
+
         traffic_logger.info("------------------------------------------------")
     except Exception as e:
         traffic_logger.error(f"Failed to log request: {e}")
+
 
 router = APIRouter()
 
@@ -211,7 +236,7 @@ active_logger = compact_logger if USE_COMPACT_LOGGER else request_logger
 custom_headers = config.get_custom_headers()
 
 openai_client = OpenAIClient(
-    config.openai_api_key,
+    config.openai_api_key or "",
     config.openai_base_url,
     config.request_timeout,
     api_version=config.azure_api_version,
@@ -221,10 +246,11 @@ openai_client = OpenAIClient(
 # Configure per-model clients for hybrid deployments
 openai_client.configure_per_model_clients(config)
 
+
 async def validate_and_extract_api_key(
     x_api_key: Optional[str] = Header(None),
     authorization: Optional[str] = Header(None),
-    openai_api_key: Optional[str] = Header(None, alias="openai-api-key")
+    openai_api_key: Optional[str] = Header(None, alias="openai-api-key"),
 ) -> Optional[str]:
     """
     Validate and extract API keys based on operating mode.
@@ -256,14 +282,14 @@ async def validate_and_extract_api_key(
         if not openai_key:
             raise HTTPException(
                 status_code=401,
-                detail="Passthrough mode: Please provide your OpenAI API key via 'openai-api-key' header"
+                detail="Passthrough mode: Please provide your OpenAI API key via 'openai-api-key' header",
             )
 
         # Validate OpenAI API key format
         if not config.validate_api_key(openai_key):
             raise HTTPException(
                 status_code=401,
-                detail="Invalid OpenAI API key format. Key must start with 'sk-' and be at least 20 characters"
+                detail="Invalid OpenAI API key format. Key must start with 'sk-' and be at least 20 characters",
             )
 
         logger.debug("Passthrough mode: OpenAI API key validated")
@@ -272,20 +298,23 @@ async def validate_and_extract_api_key(
     # Proxy mode: Validate Anthropic client key if configured
     if config.anthropic_api_key:
         if not client_api_key or not config.validate_client_api_key(client_api_key):
-            logger.warning(f"Invalid API key provided by client. Expected: {config.anthropic_api_key}, Got: {client_api_key[:10] if client_api_key else 'None'}...")
+            logger.warning(
+                f"Invalid API key provided by client. Expected: {config.anthropic_api_key}, Got: {client_api_key[:10] if client_api_key else 'None'}..."
+            )
             raise HTTPException(
                 status_code=401,
-                detail="Invalid API key. Please provide a valid Anthropic API key."
+                detail="Invalid API key. Please provide a valid Anthropic API key.",
             )
         logger.debug("Proxy mode: Anthropic API key validation passed")
 
     return None  # Proxy mode: use server-configured API key
 
+
 @router.post("/v1/messages")
 async def create_message(
     request: ClaudeMessagesRequest,
     http_request: Request,
-    openai_api_key: Optional[str] = Depends(validate_and_extract_api_key)
+    openai_api_key: Optional[str] = Depends(validate_and_extract_api_key),
 ):
     # Log full request for debugging
     await log_request_body(http_request)
@@ -300,10 +329,14 @@ async def create_message(
     # Only blocks if we have a cached response (non-streaming only)
     request_hash = None
     if ENABLE_DEDUP:
-        is_duplicate, request_hash, cached_response = request_deduplicator.check_duplicate(request)
+        is_duplicate, request_hash, cached_response = (
+            request_deduplicator.check_duplicate(request)
+        )
         if is_duplicate and cached_response:
             # Return cached response for duplicate non-streaming request
-            logger.info(f"Request {request_id}: Returning cached response for duplicate request")
+            logger.info(
+                f"Request {request_id}: Returning cached response for duplicate request"
+            )
             return JSONResponse(content=cached_response)
 
     try:
@@ -314,8 +347,10 @@ async def create_message(
         logger.debug("Request deduplication check passed")
 
         # Parse model to get routing info and reasoning config
-        routed_model, reasoning_config = model_manager.parse_and_map_model(request.model)
-        
+        routed_model, reasoning_config = model_manager.parse_and_map_model(
+            request.model
+        )
+
         # Determine endpoint and provider FIRST (before conversion)
         client = openai_client.get_client_for_model(routed_model, config)
         endpoint = config.openai_base_url
@@ -337,10 +372,18 @@ async def create_message(
 
         # FALLBACK ROUTING: If selected endpoint uses VibeProxy and it's down, fallback to SMALL tier
         # Also check default endpoint for VibeProxy
-        is_vibeproxy_endpoint = endpoint and ("127.0.0.1:8317" in endpoint or "localhost:8317" in endpoint)
-        is_default_vibeproxy = config.openai_base_url and ("127.0.0.1:8317" in config.openai_base_url or "localhost:8317" in config.openai_base_url)
-        if (is_vibeproxy_endpoint or (original_tier is None and is_default_vibeproxy)) and openai_client.small_client:
+        is_vibeproxy_endpoint = endpoint and (
+            "127.0.0.1:8317" in endpoint or "localhost:8317" in endpoint
+        )
+        is_default_vibeproxy = config.openai_base_url and (
+            "127.0.0.1:8317" in config.openai_base_url
+            or "localhost:8317" in config.openai_base_url
+        )
+        if (
+            is_vibeproxy_endpoint or (original_tier is None and is_default_vibeproxy)
+        ) and openai_client.small_client:
             from src.services.antigravity import is_vibeproxy_available
+
             if not is_vibeproxy_available():
                 # Fallback to SMALL tier (OpenRouter)
                 tier_name = original_tier or "DEFAULT"
@@ -353,8 +396,10 @@ async def create_message(
                 routed_model = config.small_model
 
         # Convert Claude request to OpenAI format with provider-specific transformations
-        openai_request = convert_claude_to_openai(request, model_manager, target_provider=provider)
-        
+        openai_request = convert_claude_to_openai(
+            request, model_manager, target_provider=provider
+        )
+
         # Update the openai_request with the routed model
         openai_request["model"] = routed_model
 
@@ -371,16 +416,22 @@ async def create_message(
         logger.debug(f"Request {request_id}: Routing to endpoint: {endpoint}")
         logger.debug(f"Request {request_id}: Using model: {routed_model}")
         if openai_api_key:
-            logger.debug(f"Request {request_id}: Using passthrough mode with user-provided API key")
+            logger.debug(
+                f"Request {request_id}: Using passthrough mode with user-provided API key"
+            )
         else:
-            api_key_preview = config.openai_api_key[:15] if config.openai_api_key else "None"
-            logger.debug(f"Request {request_id}: Using proxy mode with server API key: {api_key_preview}...")
+            api_key_preview = (
+                config.openai_api_key[:15] if config.openai_api_key else "None"
+            )
+            logger.debug(
+                f"Request {request_id}: Using proxy mode with server API key: {api_key_preview}..."
+            )
 
         # Extract request metadata for comprehensive logging
         message_count = len(request.messages)
         has_system = bool(request.system)
         client_ip = http_request.client.host if http_request.client else "unknown"
-        
+
         # Extract input text for token counting and workspace detection
         input_text = ""
         workspace_name = None
@@ -394,13 +445,13 @@ async def create_message(
                 # Try multiple patterns in order of preference
                 patterns = [
                     # Claude Code pattern: "Working directory: /path/to/project"
-                    r'Working directory:\s+([^\n]+)',
+                    r"Working directory:\s+([^\n]+)",
                     # Git path pattern: /something/git/project-name
-                    r'/git/([^/\s]+)',
+                    r"/git/([^/\s]+)",
                     # Generic path pattern: extract last folder name from absolute paths
-                    r'/([a-zA-Z0-9_-]+)(?:/[a-zA-Z0-9_.-]+)*\s',
+                    r"/([a-zA-Z0-9_-]+)(?:/[a-zA-Z0-9_.-]+)*\s",
                     # Workspace keyword pattern
-                    r'workspace.*?:?\s+([a-zA-Z0-9_-]+)',
+                    r"workspace.*?:?\s+([a-zA-Z0-9_-]+)",
                 ]
 
                 for pattern in patterns:
@@ -408,10 +459,20 @@ async def create_message(
                     if match:
                         candidate = match.group(1).strip()
                         # If it's a full path, extract just the last folder name
-                        if '/' in candidate:
-                            candidate = os.path.basename(candidate.rstrip('/'))
+                        if "/" in candidate:
+                            candidate = os.path.basename(candidate.rstrip("/"))
                         # Skip common parent folders
-                        skip_names = ['users', 'home', 'user', 'documents', 'projects', 'git', 'code', 'my_projects', '0my_projects']
+                        skip_names = [
+                            "users",
+                            "home",
+                            "user",
+                            "documents",
+                            "projects",
+                            "git",
+                            "code",
+                            "my_projects",
+                            "0my_projects",
+                        ]
                         if candidate.lower() not in skip_names and len(candidate) > 0:
                             # Shorten if too long
                             if len(candidate) > 20:
@@ -433,7 +494,7 @@ async def create_message(
                         input_text += block.text
                         if not workspace_name and block.text:
                             workspace_name = extract_workspace_name(block.text)
-        
+
         for msg in request.messages:
             if isinstance(msg.content, str):
                 input_text += msg.content
@@ -441,12 +502,13 @@ async def create_message(
                 for block in msg.content:
                     if hasattr(block, "text") and block.text:
                         input_text += block.text
-        
+
         # Get model limits and token counts for logging
         # Get model limits and token counts for logging
         from src.services.usage.model_limits import get_model_limits
+
         context_limit, output_limit = get_model_limits(routed_model)
-        
+
         # Estimate input tokens
         input_tokens = 0
         if input_text:
@@ -470,7 +532,7 @@ async def create_message(
             routed_model=routed_model,
             endpoint=endpoint,
             reasoning_config=reasoning_config,
-            stream=request.stream,
+            stream=request.stream if request.stream is not None else False,
             input_text=input_text,
             context_limit=context_limit,
             output_limit=output_limit,
@@ -480,21 +542,26 @@ async def create_message(
             has_tools=has_tools,
             has_images=has_images,
             client_info=client_ip,
-            workspace_name=workspace_name
+            workspace_name=workspace_name,
         )
 
         # Dashboard hook: request start
-        dashboard_hooks.on_request_start(request_id, {
-            'model': routed_model,
-            'stream': request.stream,
-            'has_tools': has_tools,
-            'has_images': has_images,
-            'input_tokens': input_tokens
-        })
+        dashboard_hooks.on_request_start(
+            request_id,
+            {
+                "model": routed_model,
+                "stream": request.stream,
+                "has_tools": has_tools,
+                "has_images": has_images,
+                "input_tokens": input_tokens,
+            },
+        )
 
         # Check if client disconnected before processing
         if await http_request.is_disconnected():
-            logger.warning(f"Client disconnected before processing request_id: {request_id}")
+            logger.warning(
+                f"Client disconnected before processing request_id: {request_id}"
+            )
             raise HTTPException(status_code=499, detail="Client disconnected")
 
         if request.stream:
@@ -503,8 +570,14 @@ async def create_message(
             try:
                 tier = infer_model_tier(openai_request.get("model", ""))
                 if config.model_cascade and tier:
-                    openai_stream = openai_client.create_chat_completion_stream_with_cascade(
-                        openai_request, tier=tier, config=config, request_id=request_id, api_key=openai_api_key
+                    openai_stream = (
+                        openai_client.create_chat_completion_stream_with_cascade(
+                            openai_request,
+                            tier=tier,
+                            config=config,
+                            request_id=request_id,
+                            api_key=openai_api_key,
+                        )
                     )
                 else:
                     openai_stream = openai_client.create_chat_completion_stream(
@@ -532,7 +605,9 @@ async def create_message(
                 )
             except HTTPException as e:
                 # Convert to proper error response for streaming
-                logger.error(f"Streaming HTTPException for request_id {request_id}: status={e.status_code}, detail={e.detail}")
+                logger.error(
+                    f"Streaming HTTPException for request_id {request_id}: status={e.status_code}, detail={e.detail}"
+                )
                 import traceback
 
                 logger.error(f"Streaming traceback: {traceback.format_exc()}")
@@ -553,8 +628,11 @@ async def create_message(
                 }
                 return JSONResponse(status_code=503, content=error_response)
             except Exception as e:
-                logger.error(f"Unexpected streaming error for request_id {request_id}: {e}")
+                logger.error(
+                    f"Unexpected streaming error for request_id {request_id}: {e}"
+                )
                 import traceback
+
                 logger.error(f"Streaming traceback: {traceback.format_exc()}")
                 error_message = openai_client.classify_openai_error(str(e))
                 error_response = {
@@ -564,33 +642,43 @@ async def create_message(
                 return JSONResponse(status_code=500, content=error_response)
         else:
             # Non-streaming response
-            logger.debug(f"Starting non-streaming response for request_id: {request_id}")
+            logger.debug(
+                f"Starting non-streaming response for request_id: {request_id}"
+            )
             logger.debug("Request deduplication check passed")
-            
+
             # Seamless Key Rotation / Retry Loop
             # If we get a 401, we wait for the user to fix the key via the wizard
             from src.utils.key_reloader import key_reloader
             import asyncio
-            
+
             max_retries = 150  # Wait up to 300 seconds (5 minutes)
             retry_count = 0
-            
+
             while True:
                 try:
                     tier = infer_model_tier(openai_request.get("model", ""))
                     if config.model_cascade and tier:
-                        openai_response = await openai_client.create_chat_completion_with_cascade(
-                            openai_request, tier=tier, config=config, request_id=request_id, api_key=openai_api_key
+                        openai_response = (
+                            await openai_client.create_chat_completion_with_cascade(
+                                openai_request,
+                                tier=tier,
+                                config=config,
+                                request_id=request_id,
+                                api_key=openai_api_key,
+                            )
                         )
                     else:
                         openai_response = await openai_client.create_chat_completion(
                             openai_request, request_id, config, api_key=openai_api_key
                         )
-                    break # Success!
+                    break  # Success!
 
                 except VibeProxyUnavailableError as e:
                     # VibeProxy is down - fail fast with clear error
-                    logger.error(f"VibeProxy unavailable for request_id {request_id}: {e}")
+                    logger.error(
+                        f"VibeProxy unavailable for request_id {request_id}: {e}"
+                    )
                     error_response = {
                         "type": "error",
                         "error": {
@@ -601,30 +689,40 @@ async def create_message(
                     return JSONResponse(status_code=503, content=error_response)
 
                 except HTTPException as e:
-                    if e.status_code == 401 and not openai_api_key: # Only retry for server-side keys (proxy mode)
+                    if (
+                        e.status_code == 401 and not openai_api_key
+                    ):  # Only retry for server-side keys (proxy mode)
                         if retry_count >= max_retries:
-                            logger.error(f"Authentication failed. Timed out waiting for key update.")
+                            logger.error(
+                                f"Authentication failed. Timed out waiting for key update."
+                            )
                             raise e
-                        
+
                         if retry_count == 0:
-                            logger.warning(f"Authentication failed (401). Waiting for key update in profile...")
-                            logger.warning(f"Run 'cproxy-init' or the wizard to fix your key.")
-                        
+                            logger.warning(
+                                f"Authentication failed (401). Waiting for key update in profile..."
+                            )
+                            logger.warning(
+                                f"Run 'cproxy-init' or the wizard to fix your key."
+                            )
+
                         # Wait and check for updates
                         await asyncio.sleep(2)
                         retry_count += 1
-                        
+
                         if key_reloader.check_for_updates():
                             logger.info("Key update detected! Retrying request...")
                             # Re-configure client with new key
-                            openai_client.api_key = config.openai_api_key
+                            openai_client.api_key = config.openai_api_key or ""  # type: ignore
                             continue
-                        
+
                         # Log progress every 10 seconds
                         if retry_count % 5 == 0:
-                            logger.info(f"Still waiting for key update... ({retry_count * 2}s elapsed)")
+                            logger.info(
+                                f"Still waiting for key update... ({retry_count * 2}s elapsed)"
+                            )
                     else:
-                        raise e # Re-raise other errors immediately
+                        raise e  # Re-raise other errors immediately
 
             logger.debug(f"OpenAI response received for request_id: {request_id}")
             logger.debug("Request deduplication check passed")
@@ -644,7 +742,10 @@ async def create_message(
             provider = "unknown"
             if "openrouter" in endpoint.lower():
                 provider = "openrouter"
-            elif "daily-cloudcode-pa" in endpoint.lower() or "antigravity" in routed_model.lower():
+            elif (
+                "daily-cloudcode-pa" in endpoint.lower()
+                or "antigravity" in routed_model.lower()
+            ):
                 provider = "antigravity"
             elif "openai" in endpoint.lower():
                 provider = "openai"
@@ -657,6 +758,7 @@ async def create_message(
             # Fallback for when calculate_cost is missing or fails
             try:
                 from src.services.usage.cost_calculator import calculate_cost
+
                 estimated_cost = calculate_cost(usage, routed_model)
             except ImportError:
                 # If module missing, define inline or skip
@@ -672,24 +774,46 @@ async def create_message(
                 duration_ms=duration_ms,
                 status="OK",
                 model_name=routed_model,
-                stream=request.stream,
-                has_reasoning=bool(reasoning_config)
+                stream=request.stream if request.stream is not None else False,
+                has_reasoning=bool(reasoning_config),
             )
 
             # Track usage if enabled
             if usage_tracker.enabled:
                 # Capture content for full logging if enabled
                 import json as json_module
-                req_content = json_module.dumps(request.model_dump()) if hasattr(request, 'model_dump') else str(request)
-                resp_content = json_module.dumps(openai_response) if openai_response else None
 
-                # Extract detailed token breakdown if available
-                completion_details = usage.get("completion_tokens_details", {})
+                req_content = (
+                    json_module.dumps(request.model_dump())
+                    if hasattr(request, "model_dump")
+                    else str(request)
+                )
+                resp_content = (
+                    json_module.dumps(openai_response) if openai_response else None
+                )
+
+                # Extract detailed token breakdown if available (with None safety)
+                usage = usage or {}
+                completion_details = usage.get("completion_tokens_details", {}) or {}
                 prompt_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
-                completion_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0))
-                reasoning_tokens = usage.get("reasoning_tokens", 0) or completion_details.get("reasoning_tokens", 0)
-                cached_tokens = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if isinstance(usage.get("prompt_tokens_details"), dict) else 0
-                audio_tokens = usage.get("completion_tokens_details", {}).get("audio_tokens", 0) if isinstance(usage.get("completion_tokens_details"), dict) else 0
+                completion_tokens = usage.get(
+                    "completion_tokens", usage.get("output_tokens", 0)
+                )
+                reasoning_tokens = usage.get("reasoning_tokens", 0) or (
+                    completion_details.get("reasoning_tokens", 0)
+                    if completion_details
+                    else 0
+                )
+                cached_tokens = (
+                    usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
+                    if isinstance(usage.get("prompt_tokens_details"), dict)
+                    else 0
+                )
+                audio_tokens = (
+                    usage.get("completion_tokens_details", {}).get("audio_tokens", 0)
+                    if isinstance(usage.get("completion_tokens_details"), dict)
+                    else 0
+                )
 
                 # Detect if this was a tool call request
                 tool_use_tokens = 0
@@ -709,7 +833,11 @@ async def create_message(
                 # For savings calculation, we need to compare against what would have been used
                 # If this was a routing decision, the original_model tells us what was requested
                 try:
-                    from src.services.usage.cost_calculator import calculate_cost, get_model_pricing
+                    from src.services.usage.cost_calculator import (
+                        calculate_cost,
+                        get_model_pricing,
+                    )
+
                     if routed_model != original_model:
                         original_pricing = get_model_pricing(original_model)
                         if original_pricing:
@@ -720,13 +848,28 @@ async def create_message(
                 # Determine model tier for comparison stats
                 # Simple tier detection based on model names and pricing
                 model_tier = None
-                if "free" in routed_model or "mini" in routed_model.lower() or "flash" in routed_model.lower():
+                if (
+                    "free" in routed_model
+                    or "mini" in routed_model.lower()
+                    or "flash" in routed_model.lower()
+                ):
                     model_tier = "small"
-                elif "sonnet" in routed_model.lower() or "medium" in routed_model.lower() or "turbo" in routed_model.lower():
+                elif (
+                    "sonnet" in routed_model.lower()
+                    or "medium" in routed_model.lower()
+                    or "turbo" in routed_model.lower()
+                ):
                     model_tier = "middle"
-                elif "opus" in routed_model.lower() or "large" in routed_model.lower() or "4.5" in routed_model.lower():
+                elif (
+                    "opus" in routed_model.lower()
+                    or "large" in routed_model.lower()
+                    or "4.5" in routed_model.lower()
+                ):
                     model_tier = "big"
-                elif "gpt-4o" in routed_model.lower() and "mini" not in routed_model.lower():
+                elif (
+                    "gpt-4o" in routed_model.lower()
+                    and "mini" not in routed_model.lower()
+                ):
                     model_tier = "middle"
 
                 # Check if it's a free model
@@ -747,7 +890,7 @@ async def create_message(
                     thinking_tokens=reasoning_tokens,
                     duration_ms=duration_ms,
                     estimated_cost=estimated_cost,
-                    stream=request.stream,
+                    stream=request.stream if request.stream is not None else False,
                     message_count=message_count,
                     has_system=has_system,
                     has_tools=has_tools,
@@ -767,7 +910,7 @@ async def create_message(
                     tool_use_tokens=tool_use_tokens,
                     audio_tokens=audio_tokens,
                     original_cost=original_cost,
-                    model_tier=model_tier
+                    model_tier=model_tier,
                 )
                 daily_count = usage_tracker.get_daily_model_request_count(routed_model)
                 logger.info(
@@ -783,9 +926,9 @@ async def create_message(
             if ENABLE_DEDUP and request_hash:
                 try:
                     # Convert response to dict if it's a model
-                    if hasattr(claude_response, 'model_dump'):
+                    if hasattr(claude_response, "model_dump"):
                         response_dict = claude_response.model_dump()
-                    elif hasattr(claude_response, 'dict'):
+                    elif hasattr(claude_response, "dict"):
                         response_dict = claude_response.dict()
                     else:
                         response_dict = claude_response
@@ -794,31 +937,43 @@ async def create_message(
                     logger.debug(f"Failed to cache response for dedup: {cache_err}")
 
             # Dashboard hook: request complete
-            dashboard_hooks.on_request_complete(request_id, 'completed', {
-                'model': routed_model,
-                'duration_ms': int(duration_ms),
-                'input_tokens': usage.get("input_tokens", usage.get("prompt_tokens", 0)),
-                'output_tokens': usage.get("output_tokens", usage.get("completion_tokens", 0)),
-                'thinking_tokens': usage.get("thinking_tokens", 0),
-                'tokens': usage.get("total_tokens", 0),
-                'cost': estimated_cost,
-                'tokens_per_sec': int(usage.get("total_tokens", 0) / (duration_ms / 1000)) if duration_ms > 0 else 0,
-                'has_tools': has_tools,
-                'has_images': has_images,
-                'context_tokens': input_tokens,
-                'context_limit': context_limit
-            })
+            dashboard_hooks.on_request_complete(
+                request_id,
+                "completed",
+                {
+                    "model": routed_model,
+                    "duration_ms": int(duration_ms),
+                    "input_tokens": usage.get(
+                        "input_tokens", usage.get("prompt_tokens", 0)
+                    ),
+                    "output_tokens": usage.get(
+                        "output_tokens", usage.get("completion_tokens", 0)
+                    ),
+                    "thinking_tokens": usage.get("thinking_tokens", 0),
+                    "tokens": usage.get("total_tokens", 0),
+                    "cost": estimated_cost,
+                    "tokens_per_sec": int(
+                        usage.get("total_tokens", 0) / (duration_ms / 1000)
+                    )
+                    if duration_ms > 0
+                    else 0,
+                    "has_tools": has_tools,
+                    "has_images": has_images,
+                    "context_tokens": input_tokens,
+                    "context_limit": context_limit,
+                },
+            )
 
             return claude_response
     except HTTPException as e:
         duration_ms = (time.time() - request_start_time) * 1000
-        logger.error(f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}")
+        logger.error(
+            f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}"
+        )
 
         # Log error
         active_logger.log_request_error(
-            request_id=request_id,
-            error=e.detail,
-            duration_ms=duration_ms
+            request_id=request_id, error=e.detail, duration_ms=duration_ms
         )
 
         # Track error if enabled
@@ -833,12 +988,15 @@ async def create_message(
                 error_message=str(e.detail),
                 duration_ms=duration_ms,
                 session_id=request_id[:8],
-                client_ip=client_ip
+                client_ip=client_ip,
             )
-        logger.error(f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}")
+        logger.error(
+            f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}"
+        )
         raise
     except Exception as e:
         import traceback
+
         duration_ms = (time.time() - request_start_time) * 1000
         logger.error(f"Unexpected error processing request {request_id}: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -846,9 +1004,7 @@ async def create_message(
 
         # Log error
         active_logger.log_request_error(
-            request_id=request_id,
-            error=error_message,
-            duration_ms=duration_ms
+            request_id=request_id, error=error_message, duration_ms=duration_ms
         )
 
         # Track error if enabled
@@ -863,16 +1019,20 @@ async def create_message(
                 error_message=error_message,
                 duration_ms=duration_ms,
                 session_id=request_id[:8],
-                client_ip="unknown"
+                client_ip="unknown",
             )
 
         # Dashboard hook: request error
-        dashboard_hooks.on_request_complete(request_id, 'error', {
-            'model': routed_model,
-            'duration_ms': int(duration_ms),
-            'error': error_message,
-            'error_type': "Unknown"
-        })
+        dashboard_hooks.on_request_complete(
+            request_id,
+            "error",
+            {
+                "model": routed_model,
+                "duration_ms": int(duration_ms),
+                "error": error_message,
+                "error_type": "Unknown",
+            },
+        )
 
         logger.error(f"Unexpected error processing request {request_id}: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -882,7 +1042,7 @@ async def create_message(
 @router.post("/v1/messages/count_tokens")
 async def count_tokens(
     request: ClaudeTokenCountRequest,
-    openai_api_key: Optional[str] = Depends(validate_and_extract_api_key)
+    openai_api_key: Optional[str] = Depends(validate_and_extract_api_key),
 ):
     try:
         # For token counting, we'll use a simple estimation
@@ -953,8 +1113,7 @@ async def test_connection():
             test_request["max_tokens"] = 5
 
         test_response = await openai_client.create_chat_completion(
-            test_request,
-            config=config
+            test_request, config=config
         )
 
         return {
@@ -983,12 +1142,10 @@ async def test_connection():
         )
 
 
-
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # CROSSTALK ENDPOINTS - Model-to-Model Conversations
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @router.post("/v1/crosstalk/setup")
 async def setup_crosstalk(
@@ -1006,7 +1163,7 @@ async def setup_crosstalk(
             system_prompts=request.system_prompts,
             paradigm=request.paradigm,
             iterations=request.iterations,
-            topic=request.topic
+            topic=request.topic,
         )
 
         return CrosstalkSetupResponse(
@@ -1014,7 +1171,7 @@ async def setup_crosstalk(
             status="configured",
             models=request.models,
             paradigm=request.paradigm,
-            iterations=request.iterations
+            iterations=request.iterations,
         )
 
     except Exception as e:
@@ -1040,7 +1197,7 @@ async def run_crosstalk(
             session_id=session_id,
             status="completed",
             conversation=conversation,
-            duration_seconds=duration
+            duration_seconds=duration,
         )
 
     except ValueError as e:
@@ -1075,10 +1232,7 @@ async def list_crosstalk_sessions() -> CrosstalkListResponse:
         status = crosstalk_orchestrator.get_session_status(session_id)
         sessions.append(status)
 
-    return CrosstalkListResponse(
-        sessions=sessions,
-        total=len(sessions)
-    )
+    return CrosstalkListResponse(sessions=sessions, total=len(sessions))
 
 
 @router.delete("/v1/crosstalk/{session_id}/delete")
@@ -1092,8 +1246,5 @@ async def delete_crosstalk_session(
 
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")
-    
-    return CrosstalkDeleteResponse(
-        success=True,
-        message="Session deleted successfully"
-    )
+
+    return CrosstalkDeleteResponse(success=True, message="Session deleted successfully")
