@@ -13,7 +13,10 @@ from src.core.config import config
 from src.core.logging import logger
 from src.cli.env_utils import update_env_values
 from src.services.models.free_model_rankings import get_or_build_free_model_rankings
-from src.services.models.selection_history import get_recent_selections, record_selection
+from src.services.models.selection_history import (
+    get_recent_selections,
+    record_selection,
+)
 from src.api.websocket_logs import get_cascade_stats
 
 router = APIRouter()
@@ -25,6 +28,7 @@ PROFILES_DIR.mkdir(parents=True, exist_ok=True)
 
 class ConfigUpdate(BaseModel):
     """Configuration update model - supports all web UI settings"""
+
     # Core settings
     provider_api_key: Optional[str] = None
     provider_base_url: Optional[str] = None
@@ -98,6 +102,7 @@ class ConfigUpdate(BaseModel):
 
 class ProfileCreate(BaseModel):
     """Profile creation model"""
+
     name: str
     config: Dict[str, Any]
 
@@ -109,65 +114,82 @@ async def get_config():
         # ═══════════════════════════════════════════════════════════════════════════════
         # PROVIDER & AUTH
         # ═══════════════════════════════════════════════════════════════════════════════
-        "provider_api_key": "***" if (os.getenv("PROVIDER_API_KEY") or config.openai_api_key) else "",
+        "provider_api_key": "***"
+        if (os.getenv("PROVIDER_API_KEY") or config.openai_api_key)
+        else "",
         "provider_base_url": os.getenv("PROVIDER_BASE_URL") or config.openai_base_url,
-        "proxy_auth_key": "***" if (os.getenv("PROXY_AUTH_KEY") or config.anthropic_api_key) else "",
+        "proxy_auth_key": "***"
+        if (os.getenv("PROXY_AUTH_KEY") or config.anthropic_api_key)
+        else "",
         "default_provider": os.getenv("DEFAULT_PROVIDER", "openrouter"),
         "azure_api_version": os.getenv("AZURE_API_VERSION", ""),
         "enable_openrouter_selection": os.getenv("ENABLE_OPENROUTER_SELECTION", "true"),
-
         # Legacy names (for backward compatibility)
         "openai_api_key": "***" if config.openai_api_key else "",
         "anthropic_api_key": "***" if config.anthropic_api_key else "",
         "openai_base_url": config.openai_base_url,
-
         # ═══════════════════════════════════════════════════════════════════════════════
         # SERVER CONFIGURATION
         # ═══════════════════════════════════════════════════════════════════════════════
-        "host": os.getenv("HOST", config.host if hasattr(config, 'host') else "0.0.0.0"),
-        "port": os.getenv("PORT", str(config.port) if hasattr(config, 'port') else "8082"),
-        "log_level": os.getenv("LOG_LEVEL", config.log_level if hasattr(config, 'log_level') else "INFO"),
-
+        "host": os.getenv(
+            "HOST", config.host if hasattr(config, "host") else "0.0.0.0"
+        ),
+        "port": os.getenv(
+            "PORT", str(config.port) if hasattr(config, "port") else "8082"
+        ),
+        "log_level": os.getenv(
+            "LOG_LEVEL", config.log_level if hasattr(config, "log_level") else "INFO"
+        ),
         # ═══════════════════════════════════════════════════════════════════════════════
         # MODEL SETTINGS
         # ═══════════════════════════════════════════════════════════════════════════════
         "big_model": config.big_model,
         "middle_model": config.middle_model,
         "small_model": config.small_model,
-
         # ═══════════════════════════════════════════════════════════════════════════════
         # REASONING CONFIGURATION
         # ═══════════════════════════════════════════════════════════════════════════════
-        "reasoning_effort": config.reasoning_effort if hasattr(config, 'reasoning_effort') else "",
-        "reasoning_max_tokens": str(config.reasoning_max_tokens) if hasattr(config, 'reasoning_max_tokens') and config.reasoning_max_tokens else "",
+        "reasoning_effort": config.reasoning_effort
+        if hasattr(config, "reasoning_effort")
+        else "",
+        "reasoning_max_tokens": str(config.reasoning_max_tokens)
+        if hasattr(config, "reasoning_max_tokens") and config.reasoning_max_tokens
+        else "",
         "reasoning_exclude": os.getenv("REASONING_EXCLUDE", "false"),
         "verbosity": os.getenv("VERBOSITY", ""),
         # Per-tier reasoning overrides
         "big_model_reasoning": os.getenv("BIG_MODEL_REASONING", ""),
         "middle_model_reasoning": os.getenv("MIDDLE_MODEL_REASONING", ""),
         "small_model_reasoning": os.getenv("SMALL_MODEL_REASONING", ""),
-
         # ═══════════════════════════════════════════════════════════════════════════════
         # CUSTOM SYSTEM PROMPTS
         # ═══════════════════════════════════════════════════════════════════════════════
         "enable_custom_big_prompt": os.getenv("ENABLE_CUSTOM_BIG_PROMPT", "false"),
         "big_system_prompt": os.getenv("BIG_SYSTEM_PROMPT", ""),
         "big_system_prompt_file": os.getenv("BIG_SYSTEM_PROMPT_FILE", ""),
-        "enable_custom_middle_prompt": os.getenv("ENABLE_CUSTOM_MIDDLE_PROMPT", "false"),
+        "enable_custom_middle_prompt": os.getenv(
+            "ENABLE_CUSTOM_MIDDLE_PROMPT", "false"
+        ),
         "middle_system_prompt": os.getenv("MIDDLE_SYSTEM_PROMPT", ""),
         "middle_system_prompt_file": os.getenv("MIDDLE_SYSTEM_PROMPT_FILE", ""),
         "enable_custom_small_prompt": os.getenv("ENABLE_CUSTOM_SMALL_PROMPT", "false"),
         "small_system_prompt": os.getenv("SMALL_SYSTEM_PROMPT", ""),
         "small_system_prompt_file": os.getenv("SMALL_SYSTEM_PROMPT_FILE", ""),
-
         # ═══════════════════════════════════════════════════════════════════════════════
         # PERFORMANCE SETTINGS
         # ═══════════════════════════════════════════════════════════════════════════════
-        "max_tokens_limit": str(config.max_tokens_limit) if hasattr(config, 'max_tokens_limit') else "65536",
-        "min_tokens_limit": str(config.min_tokens_limit) if hasattr(config, 'min_tokens_limit') else "4096",
-        "request_timeout": str(config.request_timeout) if hasattr(config, 'request_timeout') else "120",
-        "max_retries": str(config.max_retries) if hasattr(config, 'max_retries') else "2",
-
+        "max_tokens_limit": str(config.max_tokens_limit)
+        if hasattr(config, "max_tokens_limit")
+        else "65536",
+        "min_tokens_limit": str(config.min_tokens_limit)
+        if hasattr(config, "min_tokens_limit")
+        else "4096",
+        "request_timeout": str(config.request_timeout)
+        if hasattr(config, "request_timeout")
+        else "120",
+        "max_retries": str(config.max_retries)
+        if hasattr(config, "max_retries")
+        else "2",
         # ═══════════════════════════════════════════════════════════════════════════════
         # TERMINAL DISPLAY
         # ═══════════════════════════════════════════════════════════════════════════════
@@ -178,9 +200,10 @@ async def get_config():
         "terminal_show_task_type": os.getenv("TERMINAL_SHOW_TASK_TYPE", "true"),
         "terminal_show_speed": os.getenv("TERMINAL_SHOW_SPEED", "true"),
         "terminal_show_cost": os.getenv("TERMINAL_SHOW_COST", "true"),
-        "terminal_show_duration_colors": os.getenv("TERMINAL_SHOW_DURATION_COLORS", "true"),
+        "terminal_show_duration_colors": os.getenv(
+            "TERMINAL_SHOW_DURATION_COLORS", "true"
+        ),
         "terminal_session_colors": os.getenv("TERMINAL_SESSION_COLORS", "true"),
-
         # ═══════════════════════════════════════════════════════════════════════════════
         # LOGGING SETTINGS
         # ═══════════════════════════════════════════════════════════════════════════════
@@ -189,13 +212,11 @@ async def get_config():
         "show_token_counts": os.getenv("SHOW_TOKEN_COUNTS", "true"),
         "show_performance": os.getenv("SHOW_PERFORMANCE", "true"),
         "color_scheme": os.getenv("COLOR_SCHEME", "auto"),
-
         # ═══════════════════════════════════════════════════════════════════════════════
         # USAGE & ANALYTICS
         # ═══════════════════════════════════════════════════════════════════════════════
         "track_usage": os.getenv("TRACK_USAGE", "false"),
         "usage_db_path": os.getenv("USAGE_DB_PATH", "usage_tracking.db"),
-
         # ═══════════════════════════════════════════════════════════════════════════════
         # DASHBOARD SETTINGS
         # ═══════════════════════════════════════════════════════════════════════════════
@@ -203,7 +224,6 @@ async def get_config():
         "dashboard_layout": os.getenv("DASHBOARD_LAYOUT", "default"),
         "dashboard_refresh": os.getenv("DASHBOARD_REFRESH", "0.5"),
         "dashboard_waterfall_size": os.getenv("DASHBOARD_WATERFALL_SIZE", "20"),
-
         # ═══════════════════════════════════════════════════════════════════════════════
         # HYBRID MODE (Per-tier routing)
         # ═══════════════════════════════════════════════════════════════════════════════
@@ -216,7 +236,6 @@ async def get_config():
         "enable_small_endpoint": os.getenv("ENABLE_SMALL_ENDPOINT", "false"),
         "small_endpoint": os.getenv("SMALL_ENDPOINT", ""),
         "small_api_key": "***" if os.getenv("SMALL_API_KEY") else "",
-
         # ═══════════════════════════════════════════════════════════════════════════════
         # CASCADE (Fallback)
         # ═══════════════════════════════════════════════════════════════════════════════
@@ -224,10 +243,14 @@ async def get_config():
         "big_cascade": os.getenv("BIG_CASCADE", ""),
         "middle_cascade": os.getenv("MIDDLE_CASCADE", ""),
         "small_cascade": os.getenv("SMALL_CASCADE", ""),
-        "model_cascade_daily_limit": os.getenv("MODEL_CASCADE_DAILY_LIMIT", str(getattr(config, "model_cascade_daily_limit", 1000))),
-
+        "model_cascade_daily_limit": os.getenv(
+            "MODEL_CASCADE_DAILY_LIMIT",
+            str(getattr(config, "model_cascade_daily_limit", 1000)),
+        ),
         # Mode indicator
-        "passthrough_mode": config.passthrough_mode if hasattr(config, 'passthrough_mode') else False,
+        "passthrough_mode": config.passthrough_mode
+        if hasattr(config, "passthrough_mode")
+        else False,
     }
 
 
@@ -252,7 +275,9 @@ async def update_config(config_update: ConfigUpdate):
         if config_update.provider_api_key is not None:
             config.openai_api_key = config_update.provider_api_key or None
         if config_update.provider_base_url is not None:
-            config.openai_base_url = config_update.provider_base_url or config.openai_base_url
+            config.openai_base_url = (
+                config_update.provider_base_url or config.openai_base_url
+            )
 
         if config_update.big_model:
             config.big_model = config_update.big_model
@@ -263,22 +288,38 @@ async def update_config(config_update: ConfigUpdate):
         if config_update.small_model:
             config.small_model = config_update.small_model
 
-        if hasattr(config, 'reasoning_effort') and config_update.reasoning_effort is not None:
+        if (
+            hasattr(config, "reasoning_effort")
+            and config_update.reasoning_effort is not None
+        ):
             config.reasoning_effort = config_update.reasoning_effort
 
-        if hasattr(config, 'reasoning_max_tokens') and config_update.reasoning_max_tokens:
+        if (
+            hasattr(config, "reasoning_max_tokens")
+            and config_update.reasoning_max_tokens
+        ):
             config.reasoning_max_tokens = int(config_update.reasoning_max_tokens)
 
         if config_update.model_cascade is not None:
             config.model_cascade = config_update.model_cascade.lower() == "true"
         if config_update.big_cascade is not None:
-            config.big_cascade = [m.strip() for m in config_update.big_cascade.split(",") if m.strip()]
+            config.big_cascade = [
+                m.strip() for m in config_update.big_cascade.split(",") if m.strip()
+            ]
         if config_update.middle_cascade is not None:
-            config.middle_cascade = [m.strip() for m in config_update.middle_cascade.split(",") if m.strip()]
+            config.middle_cascade = [
+                m.strip() for m in config_update.middle_cascade.split(",") if m.strip()
+            ]
         if config_update.small_cascade is not None:
-            config.small_cascade = [m.strip() for m in config_update.small_cascade.split(",") if m.strip()]
-        if config_update.model_cascade_daily_limit is not None and hasattr(config, "model_cascade_daily_limit"):
-            config.model_cascade_daily_limit = int(config_update.model_cascade_daily_limit)
+            config.small_cascade = [
+                m.strip() for m in config_update.small_cascade.split(",") if m.strip()
+            ]
+        if config_update.model_cascade_daily_limit is not None and hasattr(
+            config, "model_cascade_daily_limit"
+        ):
+            config.model_cascade_daily_limit = int(
+                config_update.model_cascade_daily_limit
+            )
 
         # Persist provided fields to .env (only keys explicitly passed)
         payload = config_update.model_dump(exclude_none=True)
@@ -361,7 +402,9 @@ async def reload_config():
         # Re-initialize config from environment
         config.openai_api_key = os.environ.get("OPENAI_API_KEY")
         config.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
-        config.openai_base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        config.openai_base_url = os.environ.get(
+            "OPENAI_BASE_URL", "https://api.openai.com/v1"
+        )
         config.big_model = os.environ.get("BIG_MODEL", "gpt-4o")
         config.middle_model = os.environ.get("MIDDLE_MODEL", config.big_model)
         config.small_model = os.environ.get("SMALL_MODEL", "gpt-4o-mini")
@@ -380,15 +423,19 @@ async def list_profiles():
     try:
         profiles = []
         for profile_file in PROFILES_DIR.glob("*.json"):
-            with open(profile_file, 'r') as f:
+            with open(profile_file, "r") as f:
                 profile_data = json.load(f)
-                profiles.append({
-                    "name": profile_data["name"],
-                    "modified": profile_data.get("modified", datetime.now().isoformat()),
-                    "big_model": profile_data["config"].get("big_model", ""),
-                    "middle_model": profile_data["config"].get("middle_model", ""),
-                    "small_model": profile_data["config"].get("small_model", ""),
-                })
+                profiles.append(
+                    {
+                        "name": profile_data["name"],
+                        "modified": profile_data.get(
+                            "modified", datetime.now().isoformat()
+                        ),
+                        "big_model": profile_data["config"].get("big_model", ""),
+                        "middle_model": profile_data["config"].get("middle_model", ""),
+                        "small_model": profile_data["config"].get("small_model", ""),
+                    }
+                )
         return profiles
 
     except Exception as e:
@@ -404,10 +451,10 @@ async def save_profile(profile: ProfileCreate):
         profile_data = {
             "name": profile.name,
             "modified": datetime.now().isoformat(),
-            "config": profile.config
+            "config": profile.config,
         }
 
-        with open(profile_file, 'w') as f:
+        with open(profile_file, "w") as f:
             json.dump(profile_data, f, indent=2)
 
         logger.info(f"Profile '{profile.name}' saved")
@@ -426,7 +473,7 @@ async def get_profile(profile_name: str):
         if not profile_file.exists():
             raise HTTPException(status_code=404, detail="Profile not found")
 
-        with open(profile_file, 'r') as f:
+        with open(profile_file, "r") as f:
             return json.load(f)
 
     except FileNotFoundError:
@@ -465,7 +512,7 @@ async def list_models(
     is_free: Optional[bool] = None,
     min_context: Optional[int] = None,
     limit: Optional[int] = None,
-    group_by_provider: bool = False
+    group_by_provider: bool = False,
 ):
     """
     List available models with optional filtering and organization.
@@ -485,7 +532,10 @@ async def list_models(
         Either flat list or grouped structure based on group_by_provider
     """
     try:
-        from src.services.models.openrouter_fetcher import filter_models, get_model_stats
+        from src.services.models.openrouter_fetcher import (
+            filter_models,
+            get_model_stats,
+        )
 
         # Use the filter function from the fetcher
         models = filter_models(
@@ -495,7 +545,7 @@ async def list_models(
             supports_tools=supports_tools,
             is_free=is_free,
             min_context=min_context,
-            search=search
+            search=search,
         )
 
         # Apply limit if specified
@@ -506,7 +556,7 @@ async def list_models(
         if group_by_provider:
             grouped = {}
             for model in models:
-                model_provider = model.get('provider', 'unknown')
+                model_provider = model.get("provider", "unknown")
                 if model_provider not in grouped:
                     grouped[model_provider] = []
                 grouped[model_provider].append(model)
@@ -514,6 +564,7 @@ async def list_models(
             # Get provider status for additional context
             try:
                 from src.core.config import get_provider_status_cache
+
                 provider_status = get_provider_status_cache()
             except:
                 provider_status = {}
@@ -522,36 +573,36 @@ async def list_models(
             grouped_response = []
             for provider_name, provider_models in grouped.items():
                 status = provider_status.get(provider_name, {})
-                grouped_response.append({
-                    "provider": provider_name,
-                    "is_available": status.get("is_valid", False),
-                    "model_count": len(provider_models),
-                    "models": provider_models,
-                    "display_name": provider_name.replace("_", " ").title()
-                })
+                grouped_response.append(
+                    {
+                        "provider": provider_name,
+                        "is_available": status.get("is_valid", False),
+                        "model_count": len(provider_models),
+                        "models": provider_models,
+                        "display_name": provider_name.replace("_", " ").title(),
+                    }
+                )
 
             # Sort by availability and model count
-            grouped_response.sort(key=lambda x: (not x["is_available"], -x["model_count"]))
+            grouped_response.sort(
+                key=lambda x: (not x["is_available"], -x["model_count"])
+            )
 
             return {
                 "grouped": grouped_response,
                 "flat": models,
                 "count": len(models),
-                "stats": get_model_stats()
+                "stats": get_model_stats(),
             }
 
-        return {
-            "models": models,
-            "count": len(models),
-            "stats": get_model_stats()
-        }
+        return {"models": models, "count": len(models), "stats": get_model_stats()}
 
     except ImportError:
         # Fallback to legacy models.json
         try:
             models_file = Path("models.json")
             if models_file.exists():
-                with open(models_file, 'r') as f:
+                with open(models_file, "r") as f:
                     models_data = json.load(f)
                     return {"models": models_data.get("models", []), "count": 0}
             return {"models": [], "count": 0}
@@ -599,6 +650,124 @@ async def get_model_selection_history(limit: int = 30):
         return {"events": [], "count": 0, "error": str(e)}
 
 
+@router.get("/api/models/catalog")
+async def get_model_catalog():
+    """
+    Get curated model catalog with categories and specs.
+
+    Returns:
+        Curated model lists organized by category (free, smartest, coding, value)
+        plus recent models from selection history
+    """
+    try:
+        from src.services.models.model_catalog import model_catalog
+
+        all_lists = model_catalog.get_all_curated(limit_per_category=5)
+
+        # Convert to dict for JSON response
+        result = {}
+        for category, models in all_lists.items():
+            result[category] = [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "provider": m.provider,
+                    "context_length": m.context_length,
+                    "max_output": m.max_output,
+                    "price_per_1m_input": m.price_per_1m_input,
+                    "price_per_1m_output": m.price_per_1m_output,
+                    "throughput_tps": m.throughput_tps,
+                    "intelligence_score": m.intelligence_score,
+                    "is_free": m.is_free,
+                }
+                for m in models
+            ]
+
+        # Add recent models from selection history
+        recent = model_catalog.get_recent_models(limit=5)
+        result["recent"] = [
+            {
+                "id": m.id,
+                "name": m.name,
+                "provider": m.provider,
+                "context_length": m.context_length,
+                "max_output": m.max_output,
+                "is_free": m.is_free,
+            }
+            for m in recent
+        ]
+
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get model catalog: {e}")
+        return {
+            "error": str(e),
+            "free": [],
+            "smartest": [],
+            "coding": [],
+            "value": [],
+            "recent": [],
+        }
+
+
+@router.get("/api/models/specs/{model_id}")
+async def get_model_specs(model_id: str):
+    """Get specifications for a specific model."""
+    try:
+        from src.services.models.model_catalog import model_catalog
+
+        spec = model_catalog.get_model_spec(model_id)
+        if spec:
+            return {
+                "id": spec.id,
+                "name": spec.name,
+                "provider": spec.provider,
+                "context_length": spec.context_length,
+                "max_output": spec.max_output,
+                "price_per_1m_input": spec.price_per_1m_input,
+                "price_per_1m_output": spec.price_per_1m_output,
+                "throughput_tps": spec.throughput_tps,
+                "intelligence_score": spec.intelligence_score,
+                "is_free": spec.is_free,
+            }
+        return {"error": "Model not found"}
+    except Exception as e:
+        logger.error(f"Failed to get model specs: {e}")
+        return {"error": str(e)}
+
+
+@router.post("/api/models/refresh-catalog")
+async def refresh_model_catalog():
+    """
+    Refresh model catalog from scraper.
+    """
+    try:
+        import subprocess
+        from pathlib import Path
+
+        result = subprocess.run(
+            ["python", "-m", "src.services.models.catalog_sync", "--sync"],
+            cwd=Path(__file__).parent.parent.parent,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        # Reload the catalog
+        from src.services.models.model_catalog import model_catalog
+
+        model_catalog.reload()
+
+        return {
+            "success": result.returncode == 0,
+            "output": result.stdout,
+            "error": result.stderr if result.returncode != 0 else None,
+        }
+    except Exception as e:
+        logger.error(f"Failed to refresh catalog: {e}")
+        return {"success": False, "error": str(e)}
+
+
 @router.post("/api/models/refresh")
 async def refresh_models():
     """
@@ -616,14 +785,14 @@ async def refresh_models():
             return {
                 "success": False,
                 "error": error,
-                "models_count": len(data.get("models", []))
+                "models_count": len(data.get("models", [])),
             }
 
         return {
             "success": True,
             "was_refreshed": was_refreshed,
             "models_count": len(data.get("models", [])),
-            "stats": data.get("stats", {})
+            "stats": data.get("stats", {}),
         }
 
     except Exception as e:
@@ -694,7 +863,9 @@ async def list_providers():
             status = cached_status.get(provider["id"], {})
             provider["is_available"] = status.get("is_valid", False)
             provider["status"] = status.get("status", "unknown")
-            provider["key_set"] = bool(os.getenv(provider["env_var"])) if provider["env_var"] else False
+            provider["key_set"] = (
+                bool(os.getenv(provider["env_var"])) if provider["env_var"] else False
+            )
             provider["model_count"] = provider_counts.get(provider["id"], 0)
 
         # Also include model providers from OpenRouter data
@@ -705,17 +876,19 @@ async def list_providers():
         # Add any additional providers from the model data
         for provider_id, count in provider_counts.items():
             if provider_id not in unique_providers:
-                providers.append({
-                    "id": provider_id,
-                    "name": provider_id.capitalize(),
-                    "description": f"Provider with {count} models",
-                    "endpoint": None,
-                    "env_var": None,
-                    "is_available": True,  # Available via OpenRouter
-                    "status": "via_openrouter",
-                    "key_set": False,
-                    "model_count": count,
-                })
+                providers.append(
+                    {
+                        "id": provider_id,
+                        "name": provider_id.capitalize(),
+                        "description": f"Provider with {count} models",
+                        "endpoint": None,
+                        "env_var": None,
+                        "is_available": True,  # Available via OpenRouter
+                        "status": "via_openrouter",
+                        "key_set": False,
+                        "model_count": count,
+                    }
+                )
 
         # Sort by model count descending
         providers.sort(key=lambda p: p["model_count"], reverse=True)
@@ -765,7 +938,7 @@ async def test_provider(provider_id: str):
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 f"{endpoint}/models",
-                headers={"Authorization": f"Bearer {api_key}"} if api_key else {}
+                headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
             )
 
             if response.status_code == 200:
@@ -778,7 +951,7 @@ async def test_provider(provider_id: str):
                 return {
                     "success": True,
                     "status": "connected",
-                    "models_available": model_count
+                    "models_available": model_count,
                 }
             elif response.status_code == 401:
                 return {"success": False, "error": "Invalid API key (401)"}
@@ -814,7 +987,7 @@ async def get_auto_routing_config(provider: str):
             "recommended_middle": "openai/gpt-4o",
             "recommended_small": "google/gemini-2.0-flash-exp",
             "special_notes": "Uses OPENROUTER_API_KEY - routes to 350+ models",
-            "auto_config": True
+            "auto_config": True,
         },
         "openai": {
             "base_url": "https://api.openai.com/v1",
@@ -822,7 +995,7 @@ async def get_auto_routing_config(provider: str):
             "recommended_middle": "gpt-4o-mini",
             "recommended_small": "gpt-4o-mini",
             "special_notes": "Uses OPENAI_API_KEY - direct OpenAI access",
-            "auto_config": True
+            "auto_config": True,
         },
         "anthropic": {
             "base_url": "https://api.anthropic.com/v1",
@@ -830,7 +1003,7 @@ async def get_auto_routing_config(provider: str):
             "recommended_middle": "claude-3-5-sonnet-20241022",
             "recommended_small": "claude-3-haiku-20240307",
             "special_notes": "Uses ANTHROPIC_API_KEY - direct Anthropic access",
-            "auto_config": True
+            "auto_config": True,
         },
         "google": {
             "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -838,7 +1011,7 @@ async def get_auto_routing_config(provider: str):
             "recommended_middle": "gemini-1.5-flash",
             "recommended_small": "gemini-1.5-flash",
             "special_notes": "Uses GOOGLE_API_KEY - Google AI Studio",
-            "auto_config": True
+            "auto_config": True,
         },
         "vibeproxy": {
             "base_url": "http://127.0.0.1:8317/v1",
@@ -846,8 +1019,8 @@ async def get_auto_routing_config(provider: str):
             "recommended_middle": "(auto-detect from /v1/models)",
             "recommended_small": "(auto-detect from /v1/models)",
             "special_notes": "Local OAuth proxy - no API key needed for some models",
-            "auto_config": True
-        }
+            "auto_config": True,
+        },
     }
 
     config = routing_configs.get(provider.lower())
@@ -855,19 +1028,23 @@ async def get_auto_routing_config(provider: str):
         return {"error": "Unknown provider", "auto_config": False}
 
     # Get current config to show what will be overwritten
-    current_config = {
-        "openai_api_key": "***" if config.openai_api_key else "",
-        "openai_base_url": config.openai_base_url,
-        "big_model": config.big_model,
-        "middle_model": config.middle_model,
-        "small_model": config.small_model
-    } if hasattr(config, 'openai_api_key') else {}
+    current_config = (
+        {
+            "openai_api_key": "***" if config.openai_api_key else "",
+            "openai_base_url": config.openai_base_url,
+            "big_model": config.big_model,
+            "middle_model": config.middle_model,
+            "small_model": config.small_model,
+        }
+        if hasattr(config, "openai_api_key")
+        else {}
+    )
 
     return {
         "provider": provider,
         "routing": config,
         "current": current_config,
-        "status": "ready"
+        "status": "ready",
     }
 
 
@@ -915,8 +1092,8 @@ async def apply_auto_routing(provider: str):
                 "base_url": routing["base_url"],
                 "big_model": routing["recommended_big"],
                 "middle_model": routing["recommended_middle"],
-                "small_model": routing["recommended_small"]
-            }
+                "small_model": routing["recommended_small"],
+            },
         }
 
     except Exception as e:
@@ -942,7 +1119,7 @@ async def save_api_key(provider: str, api_key: str):
             "openrouter": "OPENROUTER_API_KEY",
             "openai": "OPENAI_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
-            "google": "GOOGLE_API_KEY"
+            "google": "GOOGLE_API_KEY",
         }
 
         env_var = env_vars.get(provider.lower())
@@ -954,6 +1131,7 @@ async def save_api_key(provider: str, api_key: str):
 
         # Update config object
         from src.core.config import config
+
         if provider.lower() == "openrouter" or provider.lower() == "openai":
             config.openai_api_key = api_key
         elif provider.lower() == "anthropic":
@@ -964,7 +1142,7 @@ async def save_api_key(provider: str, api_key: str):
         if env_file.exists():
             content = env_file.read_text()
             # Update or add the key
-            lines = content.split('\n')
+            lines = content.split("\n")
             updated = False
             for i, line in enumerate(lines):
                 if line.strip().startswith(f"{env_var}="):
@@ -973,13 +1151,13 @@ async def save_api_key(provider: str, api_key: str):
                     break
             if not updated:
                 lines.append(f"{env_var}={api_key}")
-            env_file.write_text('\n'.join(lines))
+            env_file.write_text("\n".join(lines))
 
         logger.info(f"Updated API key for {provider}")
         return {
             "success": True,
             "message": f"API key saved for {getProviderDisplayName(provider)}",
-            "env_var": env_var
+            "env_var": env_var,
         }
 
     except Exception as e:
@@ -994,7 +1172,7 @@ def getProviderDisplayName(provider: str):
         "openai": "OpenAI",
         "anthropic": "Anthropic",
         "google": "Google",
-        "vibeproxy": "VibeProxy"
+        "vibeproxy": "VibeProxy",
     }
     return names.get(provider.lower(), provider)
 
@@ -1022,14 +1200,16 @@ async def get_stats():
                 """)
 
                 for row in cursor:
-                    recent.append({
-                        "model": row[0],
-                        "tokens": row[1],
-                        "duration": int(row[2]),
-                        "cost": f"{row[3]:.4f}",
-                        "timestamp": row[4],
-                        "status": row[5]
-                    })
+                    recent.append(
+                        {
+                            "model": row[0],
+                            "tokens": row[1],
+                            "duration": int(row[2]),
+                            "cost": f"{row[3]:.4f}",
+                            "timestamp": row[4],
+                            "status": row[5],
+                        }
+                    )
 
             return {
                 "requests_today": summary.get("total_requests", 0),
@@ -1062,16 +1242,15 @@ async def get_stats():
         }
 
 
-
 @router.get("/api/stats/requests")
 async def get_recent_requests():
     """Get recent requests list for dashboard"""
     try:
         from src.services.usage.usage_tracker import usage_tracker
-        
+
         if not usage_tracker.enabled:
             return []
-            
+
         recent = []
         with usage_tracker.get_connection() as conn:
             cursor = conn.execute("""
@@ -1081,18 +1260,20 @@ async def get_recent_requests():
                 ORDER BY timestamp DESC
                 LIMIT 50
             """)
-            
+
             for row in cursor:
-                recent.append({
-                    "model": row[0],
-                    "tokens": row[1],
-                    "duration": int(row[2]),
-                    "cost": f"{row[3]:.4f}",
-                    "timestamp": row[4],
-                    "status": row[5],
-                    "endpoint": row[6],
-                    "id": row[7]
-                })
+                recent.append(
+                    {
+                        "model": row[0],
+                        "tokens": row[1],
+                        "duration": int(row[2]),
+                        "cost": f"{row[3]:.4f}",
+                        "timestamp": row[4],
+                        "status": row[5],
+                        "endpoint": row[6],
+                        "id": row[7],
+                    }
+                )
         return recent
 
     except Exception as e:
@@ -1103,6 +1284,7 @@ async def get_recent_requests():
 # ═══════════════════════════════════════════════════════════════════════════════
 # ADVANCED ANALYTICS & VISUALIZATION ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @router.get("/api/analytics/dashboard")
 async def get_dashboard_analytics(days: int = 7):
@@ -1124,7 +1306,7 @@ async def get_dashboard_analytics(days: int = 7):
             return {
                 "enabled": False,
                 "message": "Usage tracking is disabled. Set TRACK_USAGE=true to enable.",
-                "data": {}
+                "data": {},
             }
 
         data = usage_tracker.get_dashboard_summary(days)
@@ -1135,41 +1317,37 @@ async def get_dashboard_analytics(days: int = 7):
             import json
             from pathlib import Path
 
-            enriched_path = Path(__file__).parent.parent.parent / "data" / "openrouter_models_enriched.json"
+            enriched_path = (
+                Path(__file__).parent.parent.parent
+                / "data"
+                / "openrouter_models_enriched.json"
+            )
             if enriched_path.exists():
-                with open(enriched_path, 'r') as f:
+                with open(enriched_path, "r") as f:
                     enriched_data = json.load(f)
                     model_metadata = {}
-                    for model in enriched_data.get('models', []):
-                        model_metadata[model['id']] = {
-                            "name": model.get('name'),
-                            "provider": model.get('provider'),
-                            "pricing": model.get('pricing'),
+                    for model in enriched_data.get("models", []):
+                        model_metadata[model["id"]] = {
+                            "name": model.get("name"),
+                            "provider": model.get("provider"),
+                            "pricing": model.get("pricing"),
                             "capabilities": {
-                                "tools": model.get('supports_tools', False),
-                                "vision": model.get('supports_vision', False),
-                                "reasoning": model.get('supports_reasoning', False),
-                                "audio": model.get('supports_audio', False)
+                                "tools": model.get("supports_tools", False),
+                                "vision": model.get("supports_vision", False),
+                                "reasoning": model.get("supports_reasoning", False),
+                                "audio": model.get("supports_audio", False),
                             },
-                            "context_length": model.get('context_length', 0)
+                            "context_length": model.get("context_length", 0),
                         }
                     data["model_metadata"] = model_metadata
         except Exception:
             pass  # Metadata is optional
 
-        return {
-            "enabled": True,
-            "days": days,
-            "data": data
-        }
+        return {"enabled": True, "days": days, "data": data}
 
     except Exception as e:
         logger.error(f"Failed to get dashboard analytics: {e}")
-        return {
-            "enabled": False,
-            "error": str(e),
-            "data": {}
-        }
+        return {"enabled": False, "error": str(e), "data": {}}
 
 
 @router.get("/api/analytics/time-series")
@@ -1276,7 +1454,7 @@ async def export_analytics(format: str = "json", days: int = 30):
 
             if success:
                 # Read and return content
-                with open(path, 'r') as f:
+                with open(path, "r") as f:
                     content = f.read()
 
                 # Clean up
@@ -1286,7 +1464,7 @@ async def export_analytics(format: str = "json", days: int = 30):
                     "success": True,
                     "format": format,
                     "content": content,
-                    "message": f"Exported {days} days of data in {format.upper()} format"
+                    "message": f"Exported {days} days of data in {format.upper()} format",
                 }
             else:
                 os.unlink(path)
@@ -1312,8 +1490,8 @@ async def refresh_model_metadata():
         result = await fetch_and_cache_models()
         return {
             "success": True,
-            "models_fetched": len(result.get('models', [])),
-            "message": "Model metadata refreshed successfully"
+            "models_fetched": len(result.get("models", [])),
+            "message": "Model metadata refreshed successfully",
         }
 
     except Exception as e:
@@ -1332,7 +1510,7 @@ async def get_analytics_health():
             return {
                 "enabled": False,
                 "message": "Usage tracking disabled",
-                "data_available": False
+                "data_available": False,
             }
 
         # Check what tables have data
@@ -1360,18 +1538,14 @@ async def get_analytics_health():
                 "api_requests": api_count,
                 "daily_model_stats": daily_count,
                 "savings_tracking": savings_count,
-                "token_breakdown": breakdown_count
+                "token_breakdown": breakdown_count,
             },
-            "health": "healthy" if api_count > 0 else "no_data"
+            "health": "healthy" if api_count > 0 else "no_data",
         }
 
     except Exception as e:
         logger.error(f"Analytics health check failed: {e}")
-        return {
-            "enabled": False,
-            "error": str(e),
-            "health": "error"
-        }
+        return {"enabled": False, "error": str(e), "health": "error"}
 
 
 @router.post("/api/test-connection")
@@ -1382,56 +1556,44 @@ async def test_provider_connection():
         provider_key = os.getenv("PROVIDER_API_KEY") or config.openai_api_key
 
         if not provider_url or not provider_key:
-            return {
-                "success": False,
-                "error": "Provider URL or API key not configured"
-            }
+            return {"success": False, "error": "Provider URL or API key not configured"}
 
         # Test by calling the /models endpoint
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 f"{provider_url.rstrip('/')}/models",
-                headers={"Authorization": f"Bearer {provider_key}"}
+                headers={"Authorization": f"Bearer {provider_key}"},
             )
 
             if response.status_code == 200:
                 return {
                     "success": True,
                     "message": "Connection successful",
-                    "provider": provider_url
+                    "provider": provider_url,
                 }
             elif response.status_code == 401:
-                return {
-                    "success": False,
-                    "error": "Invalid API key (401 Unauthorized)"
-                }
+                return {"success": False, "error": "Invalid API key (401 Unauthorized)"}
             elif response.status_code == 403:
                 return {
                     "success": False,
-                    "error": "API key valid but insufficient permissions (403 Forbidden)"
+                    "error": "API key valid but insufficient permissions (403 Forbidden)",
                 }
             else:
                 return {
                     "success": False,
-                    "error": f"Unexpected response: {response.status_code}"
+                    "error": f"Unexpected response: {response.status_code}",
                 }
 
     except httpx.TimeoutException:
         return {
             "success": False,
-            "error": "Connection timeout - provider may be slow or unreachable"
+            "error": "Connection timeout - provider may be slow or unreachable",
         }
     except httpx.ConnectError:
-        return {
-            "success": False,
-            "error": "Cannot connect to provider - check URL"
-        }
+        return {"success": False, "error": "Cannot connect to provider - check URL"}
     except Exception as e:
         logger.error(f"Connection test failed: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1449,15 +1611,19 @@ async def list_crosstalk_presets():
         presets = []
         if CROSSTALK_PRESETS_DIR.exists():
             for preset_file in CROSSTALK_PRESETS_DIR.glob("*.json"):
-                with open(preset_file, 'r') as f:
+                with open(preset_file, "r") as f:
                     preset_data = json.load(f)
-                    presets.append({
-                        "filename": preset_file.stem,
-                        "name": preset_data.get("name", preset_file.stem),
-                        "description": preset_data.get("description", ""),
-                        "models": len(preset_data.get("models", [])),
-                        "topology": preset_data.get("topology", {}).get("type", "ring")
-                    })
+                    presets.append(
+                        {
+                            "filename": preset_file.stem,
+                            "name": preset_data.get("name", preset_file.stem),
+                            "description": preset_data.get("description", ""),
+                            "models": len(preset_data.get("models", [])),
+                            "topology": preset_data.get("topology", {}).get(
+                                "type", "ring"
+                            ),
+                        }
+                    )
         return presets
     except Exception as e:
         logger.error(f"Failed to list presets: {e}")
@@ -1471,8 +1637,8 @@ async def get_crosstalk_preset(preset_name: str):
         preset_file = CROSSTALK_PRESETS_DIR / f"{preset_name}.json"
         if not preset_file.exists():
             raise HTTPException(status_code=404, detail="Preset not found")
-        
-        with open(preset_file, 'r') as f:
+
+        with open(preset_file, "r") as f:
             return json.load(f)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Preset not found")
@@ -1483,6 +1649,7 @@ async def get_crosstalk_preset(preset_name: str):
 
 class CrosstalkSessionCreate(BaseModel):
     """Crosstalk session configuration"""
+
     name: Optional[str] = None
     models: List[Dict[str, Any]]
     topology: Dict[str, Any] = {"type": "ring"}
@@ -1499,10 +1666,10 @@ async def save_crosstalk_preset(preset: CrosstalkSessionCreate):
     """Save a Crosstalk preset"""
     try:
         CROSSTALK_PRESETS_DIR.mkdir(parents=True, exist_ok=True)
-        
+
         name = preset.name or f"custom_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         preset_file = CROSSTALK_PRESETS_DIR / f"{name}.json"
-        
+
         preset_data = {
             "name": name,
             "models": preset.models,
@@ -1512,12 +1679,12 @@ async def save_crosstalk_preset(preset: CrosstalkSessionCreate):
             "infinite": preset.infinite,
             "stop_conditions": preset.stop_conditions,
             "summarize_every": preset.summarize_every,
-            "initial_prompt": preset.initial_prompt
+            "initial_prompt": preset.initial_prompt,
         }
-        
-        with open(preset_file, 'w') as f:
+
+        with open(preset_file, "w") as f:
             json.dump(preset_data, f, indent=2)
-        
+
         return {"status": "success", "filename": name}
     except Exception as e:
         logger.error(f"Failed to save preset: {e}")
@@ -1530,16 +1697,22 @@ async def list_crosstalk_sessions():
     try:
         sessions = []
         if CROSSTALK_SESSIONS_DIR.exists():
-            for session_file in sorted(CROSSTALK_SESSIONS_DIR.glob("*.json"), reverse=True)[:20]:
-                with open(session_file, 'r') as f:
+            for session_file in sorted(
+                CROSSTALK_SESSIONS_DIR.glob("*.json"), reverse=True
+            )[:20]:
+                with open(session_file, "r") as f:
                     session_data = json.load(f)
-                    sessions.append({
-                        "filename": session_file.stem,
-                        "started_at": session_data.get("started_at", ""),
-                        "ended_at": session_data.get("ended_at", ""),
-                        "messages": len(session_data.get("messages", [])),
-                        "paradigm": session_data.get("config", {}).get("paradigm", "relay")
-                    })
+                    sessions.append(
+                        {
+                            "filename": session_file.stem,
+                            "started_at": session_data.get("started_at", ""),
+                            "ended_at": session_data.get("ended_at", ""),
+                            "messages": len(session_data.get("messages", [])),
+                            "paradigm": session_data.get("config", {}).get(
+                                "paradigm", "relay"
+                            ),
+                        }
+                    )
         return sessions
     except Exception as e:
         logger.error(f"Failed to list sessions: {e}")
@@ -1553,8 +1726,8 @@ async def get_crosstalk_session(session_name: str):
         session_file = CROSSTALK_SESSIONS_DIR / f"{session_name}.json"
         if not session_file.exists():
             raise HTTPException(status_code=404, detail="Session not found")
-        
-        with open(session_file, 'r') as f:
+
+        with open(session_file, "r") as f:
             return json.load(f)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1565,6 +1738,7 @@ async def get_crosstalk_session(session_name: str):
 
 class CrosstalkRunRequest(BaseModel):
     """Request to run a crosstalk session"""
+
     models: list = []
     topology: dict = {}
     paradigm: str = "relay"
@@ -1582,17 +1756,17 @@ async def run_crosstalk_session(request: CrosstalkRunRequest):
     """Run a Crosstalk session from the web UI"""
     import asyncio
     from datetime import datetime
-    
+
     try:
         # Validate minimum requirements
         if not request.initial_prompt:
             raise HTTPException(status_code=400, detail="Initial prompt is required")
         if len(request.models) < 2:
             raise HTTPException(status_code=400, detail="At least 2 models required")
-        
+
         # Generate session ID
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
+
         # Build session config for the engine
         session_config = {
             "session_id": session_id,
@@ -1603,21 +1777,21 @@ async def run_crosstalk_session(request: CrosstalkRunRequest):
             "infinite": request.infinite,
             "stop_conditions": request.stop_conditions,
             "initial_prompt": request.initial_prompt,
-            "messages": []
+            "messages": [],
         }
-        
+
         # For now, return the session config (real engine integration would be async)
         # Save session file
         CROSSTALK_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         session_file = CROSSTALK_SESSIONS_DIR / f"{session_id}.json"
-        with open(session_file, 'w') as f:
+        with open(session_file, "w") as f:
             json.dump(session_config, f, indent=2)
-        
+
         return {
             "status": "created",
             "session_id": session_id,
             "message": "Session created. Use CLI for full execution: python start_proxy.py --crosstalk-studio",
-            "config": session_config
+            "config": session_config,
         }
     except HTTPException:
         raise
@@ -1631,15 +1805,15 @@ async def health_check():
     """Health check endpoint for auto-wizard"""
     provider_url = os.getenv("PROVIDER_BASE_URL") or config.openai_base_url
     provider_key = os.getenv("PROVIDER_API_KEY") or config.openai_api_key
-    
+
     return {
         "status": "ok",
         "provider_configured": bool(provider_key),
         "provider_url": provider_url,
-        "cascade_enabled": getattr(config, 'model_cascade', False),
+        "cascade_enabled": getattr(config, "model_cascade", False),
         "big_model": config.big_model,
         "middle_model": config.middle_model,
-        "small_model": config.small_model
+        "small_model": config.small_model,
     }
 
 
@@ -1647,8 +1821,10 @@ async def health_check():
 # MODEL PLAYGROUND
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class PlaygroundRequest(BaseModel):
     """Model playground request"""
+
     model_tier: str = "big"  # "big", "middle", "small"
     system_prompt: str = ""
     user_message: str
@@ -1660,80 +1836,87 @@ class PlaygroundRequest(BaseModel):
 async def run_playground(request: PlaygroundRequest):
     """
     Run a test prompt through the proxy.
-    
+
     Returns the model response with token counts and latency.
     """
     import time
-    
+
     # Get model based on tier
     model_map = {
         "big": config.big_model,
         "middle": config.middle_model,
-        "small": config.small_model
+        "small": config.small_model,
     }
     model = model_map.get(request.model_tier, config.big_model)
-    
+
     if not model:
-        raise HTTPException(status_code=400, detail=f"No model configured for tier: {request.model_tier}")
-    
+        raise HTTPException(
+            status_code=400,
+            detail=f"No model configured for tier: {request.model_tier}",
+        )
+
     # Get API key
-    api_key = os.getenv("PROVIDER_API_KEY") or os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+    api_key = (
+        os.getenv("PROVIDER_API_KEY")
+        or os.getenv("OPENROUTER_API_KEY")
+        or os.getenv("OPENAI_API_KEY")
+    )
     if not api_key:
         raise HTTPException(status_code=400, detail="No API key configured")
-    
+
     # Build messages
     messages = []
     if request.system_prompt:
         messages.append({"role": "system", "content": request.system_prompt})
     messages.append({"role": "user", "content": request.user_message})
-    
+
     # Call API
     base_url = config.openai_base_url or "https://openrouter.ai/api/v1"
-    
+
     start_time = time.time()
-    
+
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{base_url}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
                 json={
                     "model": model,
                     "messages": messages,
                     "temperature": request.temperature,
-                    "max_tokens": request.max_tokens
-                }
+                    "max_tokens": request.max_tokens,
+                },
             )
-            
+
             latency_ms = int((time.time() - start_time) * 1000)
-            
+
             if response.status_code != 200:
                 return {
                     "success": False,
                     "error": f"API error: {response.status_code}",
-                    "latency_ms": latency_ms
+                    "latency_ms": latency_ms,
                 }
-            
+
             data = response.json()
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             usage = data.get("usage", {})
-            
+
             return {
                 "success": True,
                 "content": content,
                 "model": model,
                 "input_tokens": usage.get("prompt_tokens", 0),
                 "output_tokens": usage.get("completion_tokens", 0),
-                "latency_ms": latency_ms
+                "latency_ms": latency_ms,
             }
-            
+
     except Exception as e:
         logger.error(f"Playground error: {e}")
         return {
             "success": False,
             "error": str(e),
-            "latency_ms": int((time.time() - start_time) * 1000)
+            "latency_ms": int((time.time() - start_time) * 1000),
         }
