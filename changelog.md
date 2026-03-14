@@ -7,6 +7,19 @@
 ## Table of Contents
 
 1. [Current Session Fixes (March 2026)](#current-session-fixes-march-2026)
+   - Issue 1: 64000 Token Output Limit
+   - Issue 2: NoneType Error in endpoints.py
+   - Issue 3: Stream Parameter None Handling
+   - Issue 4: API Key None Handling
+   - Issue 5: Request Deduplication Blocking Different Sessions
+   - Issue 6: Alert Rule Conditions Parsing Error
+   - Issue 7: Missing Model Limits
+   - Issue 8: Invalid ModelManager Parameter
+   - Issue 9: DB Migration Duplicate Column
+   - Issue 10: Syntax Error - Duplicate Docstring
+   - Issue 11: Concurrent Sessions Still Blocking
+   - Issue 12: Database Migrations Failing on Fresh Install
+   - Issue 13: Model Catalog Service
 2. [Dynamic Model Discovery (February 2026)](#dynamic-model-discovery-february-2026)
 3. [Anthropic Tool Call Changes (Nov 2025 - Feb 2026)](#anthropic-tool-call-changes-nov-2025---feb-2026)
 4. [GIMP Debugging Session (February 2026)](#gimp-debugging-session-february-2026)
@@ -135,6 +148,85 @@
 
 **Files Modified:**
 - `src/main.py`
+
+---
+
+### Issue 10: Syntax Error - Duplicate Docstring
+
+**Symptom:** `SyntaxError: unterminated triple-quoted string literal` at line 1249 in endpoints.py.
+
+**Root Cause:** Duplicate docstring content in `check_duplicate` method - the docstring text was repeated twice, leaving an unclosed triple-quote.
+
+**Solution:** Removed duplicate docstring content.
+
+**Files Modified:**
+- `src/api/endpoints.py`
+
+---
+
+### Issue 11: Concurrent Sessions Still Blocking Each Other
+
+**Symptom:** Multiple concurrent Claude Code sessions (3+) would stop after a single operation without completing.
+
+**Root Cause:** While session ID was added to deduplication hash, Claude Code doesn't reliably send `metadata.user_id` in the expected format. All requests ended up with `session_id="none"`, making them appear as duplicates.
+
+**Solution:** 
+- Extract client IP address before deduplication check
+- Include client IP in hash computation alongside session ID
+- Different sessions from same or different IPs are now properly distinguished
+
+**Files Modified:**
+- `src/api/endpoints.py`
+
+**Tested:** 3 concurrent sessions - all completed successfully with unique outputs.
+
+---
+
+### Issue 12: Database Migrations Failing on Fresh Install
+
+**Symptom:** 
+- `Failed to run DB migrations: no such table: alert_rules`
+- `Alert check error: no such column: enabled` (repeating every second)
+
+**Root Cause:** 
+1. `main.py` tried to ADD COLUMNS to `alert_rules` and `scheduled_reports` tables BEFORE creating them
+2. `websocket_live.py` used `WHERE enabled = 1` but table has `is_active`, not `enabled`
+
+**Solution:**
+- Added `create_table_if_not_exists()` helper in main.py to create core tables BEFORE adding columns
+- Created tables: `api_requests`, `alert_rules` (with `muted_until` column), `alert_history`, `scheduled_reports`
+- Fixed `websocket_live.py` to use `WHERE is_active = 1` instead of `WHERE enabled = 1`
+
+**Files Modified:**
+- `src/main.py`
+- `src/api/websocket_live.py`
+
+---
+
+### Issue 13: Model Catalog Service
+
+**Symptom:** Users had to choose from 400+ OpenRouter models without curated recommendations.
+
+**Solution:** Created comprehensive model catalog system:
+- **Model Catalog Service** (`src/services/models/model_catalog.py`): Core service with:
+  - Curated model lists (free, smartest, coding, value) - 5 models each
+  - Recent models from selection history
+  - Daily usage tracking for cascade fallback
+  - Model specs (context length, throughput, pricing)
+  
+- **Catalog Sync Script** (`src/services/models/catalog_sync.py`): 
+  - Syncs model-scraper output into main proxy
+  - Run with: `python -m src.services.models.catalog_sync --run-scraper`
+  
+- **Web UI Endpoints**:
+  - `GET /api/models/catalog` - Returns curated lists + recent models
+  - `GET /api/models/specs/{model_id}` - Get specific model specs
+  - `POST /api/models/refresh-catalog` - Force refresh from scraper
+
+**Files Modified:**
+- `src/services/models/model_catalog.py` (NEW)
+- `src/services/models/catalog_sync.py` (NEW)
+- `src/api/web_ui.py`
 
 ---
 
