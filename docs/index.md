@@ -4,6 +4,31 @@
 
 ---
 
+## 🚀 Quick Start (New Users)
+
+**Fastest way to get started:**
+
+```bash
+# Clone the repository
+git clone https://github.com/holegots/claude-code-proxy.git
+cd claude-code-proxy
+
+# Run automated setup (handles everything!)
+python quickstart.py
+```
+
+This single command will:
+- ✅ Check Python version (3.9+ required)
+- ✅ Create virtual environment
+- ✅ Install all dependencies
+- ✅ Configure environment variables
+- ✅ Initialize the database
+- ✅ Launch the proxy
+
+📖 **See [QUICKSTART.md](../QUICKSTART.md) for the complete guide**
+
+---
+
 ## 📚 Documentation
 
 | Guide | Description |

@@ -40,11 +40,36 @@ Claude Code CLI  →  The Ultimate Proxy  →  Any Provider
 
 ## 🚀 Quick Start
 
+### Option 1: Automated Setup (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/holegots/claude-code-proxy.git
+cd claude-code-proxy
+
+# Run the automated setup
+python quickstart.py
+```
+
+This will:
+- ✅ Check Python version (3.9+ required)
+- ✅ Create virtual environment
+- ✅ Install all dependencies
+- ✅ Configure environment variables
+- ✅ Initialize the database
+- ✅ Launch the proxy
+
+### Option 2: Manual Setup
+
 ```bash
 # Clone & install
-git clone https://github.com/aaaronmiller/the-ultimate-proxy.git
-cd the-ultimate-proxy
-uv sync
+git clone https://github.com/holegots/claude-code-proxy.git
+cd claude-code-proxy
+
+# Install dependencies (choose one)
+uv sync                    # Recommended (faster)
+# OR
+pip install -r requirements.txt
 
 # Interactive setup wizard
 python start_proxy.py --setup
@@ -53,11 +78,17 @@ python start_proxy.py --setup
 python start_proxy.py
 ```
 
-Then in another terminal:
+### Using with Claude Code
+
+In a **new terminal**, run:
+
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:8082
+export ANTHROPIC_API_KEY=pass
 claude
 ```
+
+> 💡 **Pro Tip**: Add aliases to your `~/.zshrc` for easier access (see [Setup Guide](docs/setup.md))
 
 ---
 

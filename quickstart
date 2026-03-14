@@ -1,0 +1,45 @@
+#!/bin/bash
+# =============================================================================
+# The Ultimate Proxy - Quick Start Script
+# =============================================================================
+# This is a wrapper script that calls the Python quickstart.py
+# It provides a simple entry point for new users
+#
+# Usage:
+#   ./quickstart              # Interactive setup
+#   ./quickstart --help       # Show help
+# =============================================================================
+
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Check if Python is available
+if ! command -v python3 &> /dev/null; then
+    echo "❌ Error: Python 3 is not installed"
+    echo "   Please install Python 3.9 or higher"
+    echo "   Download from: https://www.python.org/downloads/"
+    exit 1
+fi
+
+# Check Python version
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
+PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
+
+if [[ $PYTHON_MAJOR -lt 3 ]] || [[ $PYTHON_MAJOR -eq 3 && $PYTHON_MINOR -lt 9 ]]; then
+    echo "❌ Error: Python 3.9+ is required (found: $PYTHON_VERSION)"
+    echo "   Please upgrade Python"
+    exit 1
+fi
+
+# Check if quickstart.py exists
+if [[ ! -f "$SCRIPT_DIR/quickstart.py" ]]; then
+    echo "❌ Error: quickstart.py not found"
+    echo "   Expected location: $SCRIPT_DIR/quickstart.py"
+    exit 1
+fi
+
+# Run the Python script
+python3 "$SCRIPT_DIR/quickstart.py" "$@"

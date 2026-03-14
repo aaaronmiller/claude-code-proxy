@@ -1,18 +1,71 @@
-# Setup Guide: Auto-Healing Wizard & Aliases
+# Setup Guide: Quick Start & Configuration
 
-This guide explains how to set up the Claude Code Proxy with the new Auto-Healing Wizard.
+This guide covers all setup methods for the Claude Code Proxy.
 
-## 1. Overview
+## 🚀 Quick Start (Recommended for New Users)
 
-Use these commands to start the respective software:
+For the fastest setup experience, use our automated script:
 
--   **Proxy Server (`ccproxy`)**: Runs the proxy. Needs your **REAL** API keys (e.g., `sk-ant-...`).
--   **Client (`cproxy-init` or 'cproxy-continue')**: Runs Claude Code. Sends a **DUMMY** key (`pass`) to the proxy.
--   **Swap Anthropic Keys ('cproxy')**: Toggles between Anthropic and Proxy (sets `ANTHROPIC_BASE_URL`)
--   **Wizard (`api_key_wizard.sh`)**: Interactive tool to fix your API keys in `~/.zshrc` when errors occur.
--   **Wrapper (`run_router.sh`)**: Automatically runs the Wizard if the client gets a 401 error.
+```bash
+# Clone the repository
+git clone https://github.com/holegots/claude-code-proxy.git
+cd claude-code-proxy
 
-## 2. Add Aliases to Profile
+# Run automated setup
+python quickstart.py
+```
+
+This will:
+- ✅ Check system requirements (Python 3.9+)
+- ✅ Create virtual environment
+- ✅ Install all dependencies
+- ✅ Configure environment variables interactively
+- ✅ Initialize the database
+- ✅ Launch the proxy
+
+📖 **See the full [QUICKSTART.md](../QUICKSTART.md) guide for detailed instructions.**
+
+---
+
+## 1. Manual Setup (Advanced)
+
+If you prefer manual control over the setup process:
+
+### Step 1: Install Dependencies
+
+```bash
+# Using uv (recommended)
+uv sync
+
+# OR using pip
+pip install -r requirements.txt
+```
+
+### Step 2: Configure Environment
+
+```bash
+# Copy example configuration
+cp .env.example .env
+
+# Edit with your values
+nano .env
+```
+
+### Step 3: Run Setup Wizard
+
+```bash
+python start_proxy.py --setup
+```
+
+### Step 4: Start the Proxy
+
+```bash
+python start_proxy.py
+```
+
+---
+
+## 3. Add Aliases to Profile
 
 Add the following aliases to your `~/.zshrc` (or `~/.bash_profile`):
 
@@ -36,7 +89,7 @@ cproxy() { # Toggle Claude Code proxy on/off
 # PROXY SERVER (Terminal A)
 # Sources profile to ensure REAL keys are loaded.
 # Sets PROXY_AUTH_KEY=pass so the proxy expects 'pass' from the client.
-alias ccproxy='cd $HOME/git/claude-code-proxy && uv run python start_proxy.py' # switch claude code proxy between anthropic account and proxy
+alias ccproxy='cd $HOME/code/claude-code-proxy && python quickstart.py --no-launch' # switch claude code proxy between anthropic account and proxy
 
 # CLIENT (Terminal B)
 # Uses the Python wrapper to auto-heal on 401 errors.
@@ -50,9 +103,9 @@ alias claude-continue='claude --continue --dangerously-skip-permissions --verbos
 alias claude-init='claude --dangerously-skip-permissions --verbose' # Initialize new Claude session with verbose output, anthropic account
 ```
 
-> **Note**: Adjust the path `$HOME/git/claude-code-proxy` if your repository is located elsewhere.
+> **Note**: Adjust the path `$HOME/code/claude-code-proxy` if your repository is located elsewhere.
 
-## 3. Usage
+## 4. Usage
 
 ### Step 1: Start the Proxy
 Open **Terminal A** and run:
@@ -76,3 +129,40 @@ If your API key is invalid or missing, Claude Code Proxy will:
 4.  Update your `~/.zshrc`.
 5.  **Prompt you to restart the Proxy (Terminal A)**.
 6.  Once you restart the proxy, the client will retry automatically.
+
+---
+
+## 🆘 Troubleshooting
+
+### Common Issues
+
+**"No module named 'fastapi'"**
+```bash
+# Activate virtual environment and reinstall
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+**"Port 8082 already in use"**
+```bash
+# Change port in .env
+PORT=8083
+```
+
+**"401 Unauthorized"**
+```bash
+# Run health check
+python start_proxy.py --doctor
+
+# Or reconfigure
+python start_proxy.py --setup
+```
+
+**Database errors (missing columns)**
+```bash
+# Delete old database (will recreate on startup)
+rm usage_tracking.db
+python start_proxy.py
+```
+
+For more help, see [QUICKSTART.md](../QUICKSTART.md#troubleshooting)

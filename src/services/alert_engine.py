@@ -113,7 +113,8 @@ class AlertEngine:
                     last_triggered TEXT,
                     trigger_count INTEGER,
                     created_at TEXT,
-                    created_by TEXT
+                    created_by TEXT,
+                    muted_until TEXT
                 )""")
 
             # Create alert_history table if not exists

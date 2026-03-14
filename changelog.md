@@ -21,6 +21,8 @@
    - Issue 12: Database Migrations Failing on Fresh Install
    - Issue 13: Model Catalog Service
    - Issue 14: Overly Aggressive Tool Call Deduplication
+   - **Issue 15: Database Schema Mismatch - muted_until Column**
+   - **Issue 16: Quick Start Automation**
 2. [Dynamic Model Discovery (February 2026)](#dynamic-model-discovery-february-2026)
 3. [Anthropic Tool Call Changes (Nov 2025 - Feb 2026)](#anthropic-tool-call-changes-nov-2025---feb-2026)
 4. [GIMP Debugging Session (February 2026)](#gimp-debugging-session-february-2026)
@@ -207,6 +209,82 @@
 - Simple queries work
 - Tool calls (Bash, Read) work
 - 3 concurrent sessions all complete successfully with unique outputs
+
+---
+
+### Issue 15: Database Schema Mismatch - muted_until Column
+
+**Symptom:**
+- Error on startup: `sqlite3.OperationalError: no such column: muted_until`
+- Alert engine failing to start
+- Error message: `sec.core.loging alert1 no such column1 muted_until`
+
+**Root Cause:**
+- `src/main.py` created `alert_rules` table WITH `muted_until` column (line 112)
+- `src/services/alert_engine.py` ALSO created `alert_rules` table WITHOUT `muted_until` column (line 102-125)
+- When proxy started, `alert_engine.py` ran first and created table without the column
+- Later code in `websocket_live.py` tried to query `WHERE muted_until IS NULL` - column didn't exist
+
+**Solution:**
+- Added `muted_until TEXT` column to the `CREATE TABLE` statement in `alert_engine.py`
+- Schema now matches between `main.py` and `alert_engine.py`
+
+**Files Modified:**
+- `src/services/alert_engine.py` (line 117 - added `muted_until TEXT`)
+
+**Tested:**
+- Fresh database creation works
+- No more "no such column" errors
+- Alert engine starts successfully
+
+---
+
+### Issue 16: Quick Start Automation
+
+**Symptom:**
+- New users struggled with manual setup steps
+- Multiple dependencies to install (Python, uv/pip, venv)
+- Environment configuration was confusing
+- Database setup errors (see Issue 15)
+
+**Root Cause:**
+- No automated setup process
+- Users had to manually:
+  - Check Python version
+  - Create virtual environment
+  - Install dependencies
+  - Configure .env file
+  - Initialize database
+  - Handle errors at each step
+
+**Solution:**
+- Created `quickstart.py` - comprehensive automated setup script
+- Added shell wrapper `quickstart` for Unix users
+- Created `QUICKSTART.md` guide with detailed instructions
+- Updated README.md, docs/setup.md, and docs/index.md
+
+**Features:**
+- ✅ Automatic Python version check (3.9+)
+- ✅ Virtual environment creation
+- ✅ Dependency installation (uv or pip)
+- ✅ Interactive environment configuration
+- ✅ Provider selection (OpenRouter, OpenAI, Google, VibeProxy)
+- ✅ Database initialization
+- ✅ Optional proxy launch
+
+**Files Modified/Created:**
+- `quickstart.py` (new - main automation script)
+- `quickstart` (new - shell wrapper)
+- `QUICKSTART.md` (new - comprehensive guide)
+- `README.md` (updated quickstart section)
+- `docs/setup.md` (added quickstart reference)
+- `docs/index.md` (added quickstart section)
+- `changelog.md` (this entry)
+
+**Tested:**
+- Fresh clone setup works end-to-end
+- Both interactive and non-interactive modes
+- Multiple provider configurations
 
 ---
 
