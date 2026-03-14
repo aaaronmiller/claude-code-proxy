@@ -204,12 +204,34 @@ def setup_environment(project_root: Path, non_interactive: bool = False) -> bool
 
     if env_file.exists():
         print_info(".env file already exists")
+        
+        # Check if .env has actual configuration (not just placeholders)
+        has_valid_config = False
+        with open(env_file, "r") as f:
+            content = f.read()
+            # Check for actual API keys or endpoints
+            if (
+                "OPENROUTER_API_KEY=" in content
+                or "OPENAI_API_KEY=" in content
+                or "OPENAI_BASE_URL=" in content
+                or "PROVIDER_API_KEY=" in content
+                or "BIG_MODEL=" in content
+            ):
+                has_valid_config = True
+        
+        if has_valid_config:
+            print_success("Existing configuration detected - preserving it")
+            print_info("To reconfigure, delete .env and run again")
+            return True
+        
         if non_interactive:
             return True
 
         # Ask if user wants to reconfigure
         try:
-            response = input("\n⚙️  .env exists. Reconfigure? [y/N]: ").strip().lower()
+            response = input(
+                "\n⚙️  .env exists but appears incomplete. Reconfigure? [y/N]: "
+            ).strip().lower()
             if response not in ["y", "yes"]:
                 return True
         except (EOFError, KeyboardInterrupt):
