@@ -59,6 +59,93 @@ async def lifespan(app: FastAPI):
         conn = sqlite3.connect(config.usage_tracking_db_path)
         cursor = conn.cursor()
 
+        # Helper function to create table if not exists (defensive: creates tables before adding columns)
+        def create_table_if_not_exists(table_name: str, columns: dict):
+            cursor.execute(
+                f"SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table_name,),
+            )
+            if not cursor.fetchone():
+                col_defs = ", ".join(f"{k} {v}" for k, v in columns.items())
+                cursor.execute(f"CREATE TABLE {table_name} ({col_defs})")
+                conn.commit()
+                print(f"✅ Created table: {table_name}")
+
+        # Phase 1: Create core tables BEFORE adding columns
+        # These tables are referenced by multiple services, so create them first
+
+        # api_requests - core usage tracking table
+        create_table_if_not_exists(
+            "api_requests",
+            {
+                "id": "INTEGER PRIMARY KEY",
+                "timestamp": "TEXT",
+                "model": "TEXT",
+                "input_tokens": "INTEGER",
+                "output_tokens": "INTEGER",
+                "cost": "REAL",
+                "duration_ms": "INTEGER",
+                "status": "TEXT",
+                "error": "TEXT",
+                "request_count": "INTEGER DEFAULT 1",
+            },
+        )
+
+        # alert_rules - core alert system table (with muted_until for mute functionality)
+        create_table_if_not_exists(
+            "alert_rules",
+            {
+                "id": "TEXT PRIMARY KEY",
+                "name": "TEXT",
+                "description": "TEXT",
+                "condition_json": "TEXT",
+                "condition_logic": "TEXT",
+                "actions_json": "TEXT",
+                "cooldown_minutes": "INTEGER",
+                "priority": "INTEGER",
+                "time_window": "INTEGER",
+                "is_active": "INTEGER",
+                "last_triggered": "TEXT",
+                "trigger_count": "INTEGER",
+                "created_at": "TEXT",
+                "created_by": "TEXT",
+                "muted_until": "TEXT",
+            },
+        )
+
+        # alert_history - alert execution log
+        create_table_if_not_exists(
+            "alert_history",
+            {
+                "id": "TEXT PRIMARY KEY",
+                "rule_id": "TEXT",
+                "rule_name": "TEXT",
+                "triggered_at": "TEXT",
+                "severity": "TEXT",
+                "alert_data_json": "TEXT",
+            },
+        )
+
+        # scheduled_reports - reporting system table
+        create_table_if_not_exists(
+            "scheduled_reports",
+            {
+                "id": "TEXT PRIMARY KEY",
+                "template_id": "TEXT",
+                "name": "TEXT",
+                "frequency": "TEXT",
+                "recipients": "TEXT",
+                "timezone": "TEXT",
+                "is_active": "INTEGER",
+                "next_run": "TEXT",
+                "last_run": "TEXT",
+                "delivery_method": "TEXT DEFAULT 'email'",
+                "config": "TEXT",
+            },
+        )
+
+        # Phase 2: Add columns to existing tables (for upgrades from older versions)
+
         # Helper function to add column if not exists
         def add_column_if_not_exists(table: str, column: str, definition: str):
             try:

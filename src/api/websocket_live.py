@@ -35,7 +35,7 @@ metrics_cache = {
     "active_requests": 0,
     "error_rate": 0.0,
     "model_distribution": {},
-    "timestamp": datetime.utcnow().isoformat()
+    "timestamp": datetime.utcnow().isoformat(),
 }
 
 # Request feed buffer (last 100 requests)
@@ -102,62 +102,80 @@ class LiveMetricsManager:
             cursor = conn.cursor()
 
             # Calculate from last 60 seconds
-            since = (datetime.utcnow().timestamp() - 60)
+            since = datetime.utcnow().timestamp() - 60
 
             # Requests per second
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT COUNT(*) FROM api_requests
                 WHERE timestamp >= datetime(?, 'unixepoch')
-            """, (since,))
+            """,
+                (since,),
+            )
             requests_60s = cursor.fetchone()[0]
             rps = requests_60s / 60.0
 
             # Tokens per second
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT SUM(total_tokens) FROM api_requests
                 WHERE timestamp >= datetime(?, 'unixepoch')
-            """, (since,))
+            """,
+                (since,),
+            )
             tokens_60s = cursor.fetchone()[0] or 0
             tps = tokens_60s / 60.0
 
             # Cost per second
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT SUM(estimated_cost) FROM api_requests
                 WHERE timestamp >= datetime(?, 'unixepoch')
-            """, (since,))
+            """,
+                (since,),
+            )
             cost_60s = cursor.fetchone()[0] or 0
             cps = cost_60s / 60.0
 
             # Active requests (last 5 seconds)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT COUNT(*) FROM api_requests
                 WHERE timestamp >= datetime(?, 'unixepoch')
                 AND status = 'active'
-            """, (time.time() - 5,))
+            """,
+                (time.time() - 5,),
+            )
             active = cursor.fetchone()[0]
 
             # Error rate (last 60 seconds)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as errors,
                     COUNT(*) as total
                 FROM api_requests
                 WHERE timestamp >= datetime(?, 'unixepoch')
-            """, (since,))
+            """,
+                (since,),
+            )
             result = cursor.fetchone()
             errors = result[0] or 0
             total = result[1] or 1
             error_rate = (errors / total) * 100
 
             # Model distribution (last 60 seconds)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT routed_model, COUNT(*) as count
                 FROM api_requests
                 WHERE timestamp >= datetime(?, 'unixepoch')
                 GROUP BY routed_model
                 ORDER BY count DESC
                 LIMIT 10
-            """, (since,))
+            """,
+                (since,),
+            )
             model_dist = {row[0]: row[1] for row in cursor.fetchall()}
 
             conn.close()
@@ -169,7 +187,7 @@ class LiveMetricsManager:
                 "active_requests": active,
                 "error_rate": round(error_rate, 2),
                 "model_distribution": model_dist,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             }
 
         except Exception as e:
@@ -184,7 +202,7 @@ class LiveMetricsManager:
         message = {
             "type": "metrics",
             "data": metrics_cache,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
         disconnected = set()
@@ -205,6 +223,7 @@ class LiveMetricsManager:
 
         try:
             import sqlite3
+
             conn = sqlite3.connect(usage_tracker.db_path)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
@@ -212,7 +231,7 @@ class LiveMetricsManager:
             # Get active alert rules
             cursor.execute("""
                 SELECT * FROM alert_rules
-                WHERE enabled = 1
+                WHERE is_active = 1
                 AND (muted_until IS NULL OR muted_until < datetime('now'))
             """)
 
@@ -248,44 +267,62 @@ class LiveMetricsManager:
 
         try:
             import sqlite3
+
             conn = sqlite3.connect(usage_tracker.db_path)
             cursor = conn.cursor()
 
             if metric == "cost":
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT SUM(estimated_cost) FROM api_requests
                     WHERE timestamp >= datetime(?, 'unixepoch')
-                """, (since,))
-                return (cursor.fetchone()[0] or 0) * (1440 / window_minutes)  # Project to daily
+                """,
+                    (since,),
+                )
+                return (cursor.fetchone()[0] or 0) * (
+                    1440 / window_minutes
+                )  # Project to daily
 
             elif metric == "latency":
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT AVG(duration_ms) FROM api_requests
                     WHERE timestamp >= datetime(?, 'unixepoch')
-                """, (since,))
+                """,
+                    (since,),
+                )
                 return cursor.fetchone()[0] or 0
 
             elif metric == "error_rate":
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT
                         SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)
                     FROM api_requests
                     WHERE timestamp >= datetime(?, 'unixepoch')
-                """, (since,))
+                """,
+                    (since,),
+                )
                 return cursor.fetchone()[0] or 0
 
             elif metric == "token_count":
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT SUM(total_tokens) FROM api_requests
                     WHERE timestamp >= datetime(?, 'unixepoch')
-                """, (since,))
+                """,
+                    (since,),
+                )
                 return cursor.fetchone()[0] or 0
 
             elif metric == "request_count":
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT COUNT(*) FROM api_requests
                     WHERE timestamp >= datetime(?, 'unixepoch')
-                """, (since,))
+                """,
+                    (since,),
+                )
                 return cursor.fetchone()[0] or 0
 
             conn.close()
@@ -295,7 +332,9 @@ class LiveMetricsManager:
 
         return 0
 
-    def _evaluate_condition(self, value: float, operator: str, threshold: float) -> bool:
+    def _evaluate_condition(
+        self, value: float, operator: str, threshold: float
+    ) -> bool:
         """Evaluate alert condition"""
         if operator == ">":
             return value > threshold
@@ -325,48 +364,69 @@ class LiveMetricsManager:
         alert_id = f"alert_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{rule['id']}"
 
         # Update rule
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE alert_rules
             SET last_triggered = ?, trigger_count = trigger_count + 1
             WHERE id = ?
-        """, (datetime.utcnow().isoformat(), rule["id"]))
+        """,
+            (datetime.utcnow().isoformat(), rule["id"]),
+        )
 
         # Log to history
         alert_data = {
             "metric_value": value,
             "threshold": json.loads(rule["condition_json"])["threshold"],
-            "window_minutes": json.loads(rule["condition_json"]).get("window_minutes", 5)
+            "window_minutes": json.loads(rule["condition_json"]).get(
+                "window_minutes", 5
+            ),
         }
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO alert_history
             (id, rule_id, rule_name, triggered_at, alert_data_json, severity)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (alert_id, rule["id"], rule["name"], datetime.utcnow().isoformat(),
-              json.dumps(alert_data), rule["priority"]))
+        """,
+            (
+                alert_id,
+                rule["id"],
+                rule["name"],
+                datetime.utcnow().isoformat(),
+                json.dumps(alert_data),
+                rule["priority"],
+            ),
+        )
 
         # Send notifications
         actions = json.loads(rule["actions_json"])
 
         # In-app notification (broadcast via WebSocket)
         if actions.get("in_app"):
-            await self._broadcast_alert({
-                "type": "alert",
-                "alert_id": alert_id,
-                "rule_name": rule["name"],
-                "severity": rule["priority"],
-                "message": f"{rule['name']}: {value} (threshold: {alert_data['threshold']})",
-                "timestamp": datetime.utcnow().isoformat()
-            })
+            await self._broadcast_alert(
+                {
+                    "type": "alert",
+                    "alert_id": alert_id,
+                    "rule_name": rule["name"],
+                    "severity": rule["priority"],
+                    "message": f"{rule['name']}: {value} (threshold: {alert_data['threshold']})",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
 
         # Webhook (async)
         if actions.get("webhook"):
-            asyncio.create_task(self._send_webhook(actions["webhook"], {
-                "alert_id": alert_id,
-                "rule": rule["name"],
-                "value": value,
-                "timestamp": datetime.utcnow().isoformat()
-            }))
+            asyncio.create_task(
+                self._send_webhook(
+                    actions["webhook"],
+                    {
+                        "alert_id": alert_id,
+                        "rule": rule["name"],
+                        "value": value,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    },
+                )
+            )
 
         logger.info(f"Alert triggered: {rule['name']} - {value}")
 
@@ -386,6 +446,7 @@ class LiveMetricsManager:
         """Send webhook notification"""
         try:
             import aiohttp
+
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=payload) as response:
                     if response.status != 200:
@@ -417,19 +478,23 @@ async def websocket_live_metrics(websocket: WebSocket):
 
     try:
         # Send initial metrics
-        await websocket.send_json({
-            "type": "metrics",
-            "data": metrics_cache,
-            "timestamp": datetime.utcnow().isoformat()
-        })
+        await websocket.send_json(
+            {
+                "type": "metrics",
+                "data": metrics_cache,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
 
         # Send recent request feed
         if request_feed_buffer:
-            await websocket.send_json({
-                "type": "request_feed",
-                "data": request_feed_buffer[-10:],  # Last 10 requests
-                "timestamp": datetime.utcnow().isoformat()
-            })
+            await websocket.send_json(
+                {
+                    "type": "request_feed",
+                    "data": request_feed_buffer[-10:],  # Last 10 requests
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
 
         # Listen for client messages
         while True:
@@ -437,16 +502,20 @@ async def websocket_live_metrics(websocket: WebSocket):
                 data = await websocket.receive_json()
 
                 if data.get("type") == "ping":
-                    await websocket.send_json({"type": "pong", "timestamp": datetime.utcnow().isoformat()})
+                    await websocket.send_json(
+                        {"type": "pong", "timestamp": datetime.utcnow().isoformat()}
+                    )
 
                 elif data.get("type") == "subscribe":
                     # Handle subscription to specific feeds
                     feeds = data.get("feeds", ["metrics"])
-                    await websocket.send_json({
-                        "type": "subscribed",
-                        "feeds": feeds,
-                        "timestamp": datetime.utcnow().isoformat()
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "subscribed",
+                            "feeds": feeds,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    )
 
             except TimeoutError:
                 continue
@@ -486,7 +555,7 @@ async def websocket_crosstalk_session(websocket: WebSocket, session_id: str):
             "last_update": None,
             "cost": 0,
             "tokens": 0,
-            "round": 0
+            "round": 0,
         }
 
     crosstalk_sessions[session_id]["connections"].add(websocket)
@@ -495,11 +564,13 @@ async def websocket_crosstalk_session(websocket: WebSocket, session_id: str):
         # Send current session state if available
         session_data = crosstalk_sessions.get(session_id)
         if session_data:
-            await websocket.send_json({
-                "type": "session_status",
-                "data": session_data,
-                "timestamp": datetime.utcnow().isoformat()
-            })
+            await websocket.send_json(
+                {
+                    "type": "session_status",
+                    "data": session_data,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
 
         # Listen for updates
         while True:
@@ -524,10 +595,9 @@ async def websocket_crosstalk_session(websocket: WebSocket, session_id: str):
 async def broadcast_request_event(request_data: Dict):
     """Broadcast new request event to all live feed subscribers"""
     # Add to buffer
-    request_feed_buffer.append({
-        **request_data,
-        "timestamp": datetime.utcnow().isoformat()
-    })
+    request_feed_buffer.append(
+        {**request_data, "timestamp": datetime.utcnow().isoformat()}
+    )
 
     # Keep buffer size manageable
     if len(request_feed_buffer) > 100:
@@ -537,7 +607,7 @@ async def broadcast_request_event(request_data: Dict):
     message = {
         "type": "request_event",
         "data": request_data,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
     disconnected = set()
@@ -559,7 +629,7 @@ async def update_crosstalk_session(session_id: str, round_data: Dict):
             "last_update": None,
             "cost": 0,
             "tokens": 0,
-            "round": 0
+            "round": 0,
         }
 
     session = crosstalk_sessions[session_id]
@@ -575,9 +645,9 @@ async def update_crosstalk_session(session_id: str, round_data: Dict):
         "session_summary": {
             "round": session["round"],
             "total_cost": session["cost"],
-            "total_tokens": session["tokens"]
+            "total_tokens": session["tokens"],
         },
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
     disconnected = set()
@@ -609,5 +679,5 @@ __all__ = [
     "start_live_metrics",
     "stop_live_metrics",
     "broadcast_request_event",
-    "update_crosstalk_session"
+    "update_crosstalk_session",
 ]
