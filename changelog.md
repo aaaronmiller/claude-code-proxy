@@ -288,6 +288,34 @@
 
 ---
 
+### Issue 17: Missing Python Dependencies (dotenv)
+
+**Symptom:** 
+```
+ModuleNotFoundError: No module named 'dotenv'
+```
+Proxy failed to start due to missing Python packages.
+
+**Root Cause:**
+- Virtual environment existed but dependencies were not installed
+- `.venv` was present but `requirements.txt` had never been installed
+- `uv.lock` was out of sync with actual installed packages
+
+**Solution:**
+1. Activated virtual environment: `source .venv/bin/activate`
+2. Installed dependencies: `pip install -r requirements.txt`
+3. Verified `python-dotenv` and all other packages installed correctly
+
+**Files Modified:**
+- `uv.lock` (regenerated to match installed package versions)
+
+**Tested:**
+- `python3 start_proxy.py --dry-run` passed all checks
+- Proxy started successfully on port 8082
+- Health endpoint returned `{"status":"healthy"}`
+
+---
+
 ### Issue 12: Database Migrations Failing on Fresh Install
 
 **Symptom:** 
