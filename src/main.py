@@ -177,6 +177,9 @@ async def lifespan(app: FastAPI):
         # Add created_at column if it doesn't exist
         add_column_if_not_exists("alert_rules", "created_at", "TEXT")
 
+        # Add muted_until column if it doesn't exist (Issue 15 fix)
+        add_column_if_not_exists("alert_rules", "muted_until", "TEXT")
+
         conn.close()
     except Exception as e:
         print(f"❌  Failed to run DB migrations: {e}")
