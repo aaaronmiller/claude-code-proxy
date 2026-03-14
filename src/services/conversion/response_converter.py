@@ -17,9 +17,7 @@ sse_logger = logging.getLogger("sse_debug")
 
 # Compiled regex for fixing numeric params returned as strings in streaming JSON
 # Matches: "timeout":"120" and converts to "timeout":120
-_NUMERIC_PARAM_RE = re.compile(
-    r'"(timeout|offset|limit|cell_number)"\s*:\s*"(\d+)"'
-)
+_NUMERIC_PARAM_RE = re.compile(r'"(timeout|offset|limit|cell_number)"\s*:\s*"(\d+)"')
 
 
 def _coerce_int_fields(arguments: dict, fields: list) -> dict:
@@ -446,7 +444,7 @@ def streaming_transform_partial(
     # Fix numeric params for Read and NotebookEdit tools in streaming mode
     if tool_name.lower() in ["read", "readfile", "notebookedit"]:
         return _NUMERIC_PARAM_RE.sub(r'"\1":\2', partial_args)
-    
+
     return partial_args
 
 
@@ -719,23 +717,31 @@ async def convert_openai_streaming_to_claude(
                             # Process completed tool calls - normalize accumulated arguments
                             # This ensures arguments are properly transformed even though streaming uses raw partials
                             if DEBUG_SSE:
-                                sse_logger.info(f"Processing {len(current_tool_calls)} completed tool calls")
+                                sse_logger.info(
+                                    f"Processing {len(current_tool_calls)} completed tool calls"
+                                )
 
                             for tc_index, tool_call in current_tool_calls.items():
                                 if tool_call["started"] and tool_call["name"]:
                                     try:
                                         # Parse the accumulated args_buffer
                                         if tool_call["args_buffer"]:
-                                            complete_args = json.loads(tool_call["args_buffer"])
+                                            complete_args = json.loads(
+                                                tool_call["args_buffer"]
+                                            )
                                             normalized_args = normalize_tool_arguments(
-                                                tool_call["name"], complete_args, provider
+                                                tool_call["name"],
+                                                complete_args,
+                                                provider,
                                             )
                                             if DEBUG_SSE:
                                                 sse_logger.info(
                                                     f"Normalized args for '{tool_call['name']}': {normalized_args}"
                                                 )
                                             # Store normalized args back in the tool call for potential use
-                                            tool_call["normalized_args"] = normalized_args
+                                            tool_call["normalized_args"] = (
+                                                normalized_args
+                                            )
                                     except json.JSONDecodeError as e:
                                         if DEBUG_SSE:
                                             sse_logger.warning(
@@ -822,13 +828,15 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     # Map: stream_index -> tool_call_id
     stream_index_to_id = {}
 
-    # Content-based deduplication: (name, args_prefix) -> first_tool_id
-    # This catches duplicate tool calls with DIFFERENT IDs but SAME content
-    # (Gemini sometimes emits the same tool call multiple times with unique IDs)
-    content_fingerprints = {}
+    # Content-based deduplication: DISABLED
+    # This was causing false positives where different tool calls with similar names/args
+    # were incorrectly flagged as duplicates. The fingerprint was too weak (tool_name + first 50 chars of args).
+    # Gemini's "ghost streams" are now handled by the ID-based filter above (lines 956-966).
+    # content_fingerprints = {}
 
     # Set of tool_call IDs that were detected as duplicates and should be skipped
-    skipped_tool_ids = set()
+    # DISABLED - see above
+    # skipped_tool_ids = set()
 
     final_stop_reason = Constants.STOP_END_TURN
     usage_data = {"input_tokens": 0, "output_tokens": 0}
@@ -926,9 +934,9 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                             tc_index = tc_delta.get("index", 0)
                             tc_id = tc_delta.get("id")
 
-                            # EARLY SKIP: If this tool call ID was already marked as duplicate, skip all chunks
-                            if tc_id and tc_id in skipped_tool_ids:
-                                continue
+                            # Content-based duplicate detection DISABLED - was too aggressive
+                            # if tc_id and tc_id in skipped_tool_ids:
+                            #     continue
 
                             # Determine Target Claude Block Index
                             target_claude_index = None
@@ -973,28 +981,13 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                                     first_args = function_data.get("arguments", "")
 
                                     if tool_name:
-                                        # Create fingerprint from name + first 50 chars of args
-                                        fingerprint = f"{tool_name}:{first_args[:50]}"
-
-                                        if fingerprint in content_fingerprints:
-                                            # DUPLICATE DETECTED - skip this tool call entirely
-                                            original_id = content_fingerprints[
-                                                fingerprint
-                                            ]
-                                            logger.info(
-                                                f"DEDUP: Blocking duplicate tool call '{tool_name}' (id={tc_id}) - matches existing (id={original_id})"
-                                            )
-                                            # Mark in a skip set so we ignore all future chunks for this ID
-                                            if "skipped_ids" not in locals():
-                                                skipped_ids = set()
-                                            skipped_tool_ids.add(tc_id)
-                                            continue
-                                        else:
-                                            # First occurrence - register fingerprint
-                                            content_fingerprints[fingerprint] = tc_id
-                                            logger.debug(
-                                                f"DEDUP: Registered fingerprint '{fingerprint}' for tool '{tool_name}' (id={tc_id})"
-                                            )
+                                        # Create fingerprint from tool name + MORE of arguments (200 chars instead of 50)
+                                        # This prevents "Read:" from falsely matching all Read tool calls with similar empty/minimal args
+                                        # The previous 50 char limit was too short - many tool calls have empty or very similar initial args
+                                        # DISABLED: Content-based deduplication is too aggressive and causes false positives
+                                        # full_args = function_data.get("arguments", "")
+                                        # fingerprint = f"{tool_name}:{full_args[:200]}"
+                                        pass  # Content deduplication disabled
 
                                     # Not a duplicate - create new block
                                     current_block_index += 1
@@ -1109,23 +1102,31 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                             # Process completed tool calls - normalize accumulated arguments
                             # This ensures arguments are properly transformed even though streaming uses raw partials
                             if DEBUG_SSE:
-                                sse_logger.info(f"Processing {len(current_tool_calls)} completed tool calls (cancel version)")
+                                sse_logger.info(
+                                    f"Processing {len(current_tool_calls)} completed tool calls (cancel version)"
+                                )
 
                             for tc_index, tool_call in current_tool_calls.items():
                                 if tool_call.get("name"):
                                     try:
                                         # Parse the accumulated args_buffer
                                         if tool_call["args_buffer"]:
-                                            complete_args = json.loads(tool_call["args_buffer"])
+                                            complete_args = json.loads(
+                                                tool_call["args_buffer"]
+                                            )
                                             normalized_args = normalize_tool_arguments(
-                                                tool_call["name"], complete_args, provider
+                                                tool_call["name"],
+                                                complete_args,
+                                                provider,
                                             )
                                             if DEBUG_SSE:
                                                 sse_logger.info(
                                                     f"Normalized args for '{tool_call['name']}': {normalized_args}"
                                                 )
                                             # Store normalized args back in the tool call
-                                            tool_call["normalized_args"] = normalized_args
+                                            tool_call["normalized_args"] = (
+                                                normalized_args
+                                            )
                                     except json.JSONDecodeError as e:
                                         if DEBUG_SSE:
                                             sse_logger.warning(
