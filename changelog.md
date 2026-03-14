@@ -20,6 +20,7 @@
    - Issue 11: Concurrent Sessions Still Blocking
    - Issue 12: Database Migrations Failing on Fresh Install
    - Issue 13: Model Catalog Service
+   - Issue 14: Overly Aggressive Tool Call Deduplication
 2. [Dynamic Model Discovery (February 2026)](#dynamic-model-discovery-february-2026)
 3. [Anthropic Tool Call Changes (Nov 2025 - Feb 2026)](#anthropic-tool-call-changes-nov-2025---feb-2026)
 4. [GIMP Debugging Session (February 2026)](#gimp-debugging-session-february-2026)
@@ -179,6 +180,33 @@
 - `src/api/endpoints.py`
 
 **Tested:** 3 concurrent sessions - all completed successfully with unique outputs.
+
+---
+
+### Issue 14: Overly Aggressive Tool Call Deduplication
+
+**Symptom:** 
+- Tool calls being blocked as duplicates incorrectly
+- Logs showed: `DEDUP: Blocking duplicate tool call 'Read' (id=xxx) - matches existing (id=yyy)`
+- Different tool calls with same name (e.g., "Read") were flagged as duplicates
+
+**Root Cause:** 
+- Content-based tool call deduplication used fingerprint: `tool_name + first 50 chars of args`
+- During streaming, first chunk of arguments could be empty or just "{"
+- Made fingerprint too weak - all "Read" calls with empty args looked identical
+
+**Solution:** 
+- Disabled content-based tool call deduplication in response_converter.py
+- The ID-based duplicate detection (for actual ghost streams) is still active
+- Request-level deduplication with client IP continues to work for session isolation
+
+**Files Modified:**
+- `src/services/conversion/response_converter.py`
+
+**Tested:** 
+- Simple queries work
+- Tool calls (Bash, Read) work
+- 3 concurrent sessions all complete successfully with unique outputs
 
 ---
 
