@@ -82,8 +82,10 @@ class RequestDeduplicator:
         self._window_seconds = window_seconds
         self._max_cache_size = max_cache_size
 
-    def _compute_hash(self, request: "ClaudeMessagesRequest") -> str:
-        """Compute hash for request - includes session ID to avoid cross-session false duplicates."""
+    def _compute_hash(
+        self, request: "ClaudeMessagesRequest", client_ip: str = "unknown"
+    ) -> str:
+        """Compute hash for request - includes client IP to distinguish different sessions."""
         # Extract session ID from metadata if available
         session_id = "none"
         if request.metadata and isinstance(request.metadata, dict):
@@ -95,8 +97,8 @@ class RequestDeduplicator:
                 if len(parts) > 1:
                     session_id = parts[1].split("_")[0] if parts[1] else "none"
 
-        # Build content string including session ID
-        content_parts = [session_id]
+        # Build content string including client IP AND session ID for uniqueness
+        content_parts = [session_id, client_ip]
 
         # Include model and key fields
         content_parts.append(request.model)
@@ -120,16 +122,20 @@ class RequestDeduplicator:
         return hashlib.sha256(content_str.encode()).hexdigest()[:16]
 
     def check_duplicate(
-        self, request: "ClaudeMessagesRequest"
+        self, request: "ClaudeMessagesRequest", client_ip: str = "unknown"
     ) -> tuple[bool, str, Optional[Dict]]:
         """
         Check if request is a duplicate within the time window.
-        Now session-aware: only deduplicates requests from the same session.
+        Uses client IP to distinguish between different sessions.
+
+        Args:
+            request: The Claude messages request
+            client_ip: Client IP address to include in hash for session isolation
 
         Returns:
             (is_duplicate, request_hash, cached_response or None)
         """
-        request_hash = self._compute_hash(request)
+        request_hash = self._compute_hash(request, client_ip)
         current_time = time.time()
 
         with self._lock:
@@ -322,15 +328,19 @@ async def create_message(
     request_start_time = time.time()
     request_id = str(uuid.uuid4())
 
+    # Extract client IP for deduplication (before processing)
+    client_ip = http_request.client.host if http_request.client else "unknown"
+
     # ═══════════════════════════════════════════════════════════════════════════════
     # REQUEST DEDUPLICATION CHECK
     # ═══════════════════════════════════════════════════════════════════════════════
     # Detects and handles duplicate requests caused by client retries
+    # Uses client IP to distinguish between different Claude Code sessions
     # Only blocks if we have a cached response (non-streaming only)
     request_hash = None
     if ENABLE_DEDUP:
         is_duplicate, request_hash, cached_response = (
-            request_deduplicator.check_duplicate(request)
+            request_deduplicator.check_duplicate(request, client_ip)
         )
         if is_duplicate and cached_response:
             # Return cached response for duplicate non-streaming request
