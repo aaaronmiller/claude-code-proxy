@@ -1,7 +1,8 @@
 # Issue 18: Tool Call Continuation - Sessions Stop After Each Tool Use
 
 **Date:** March 16, 2026  
-**Severity:** High - Blocks autonomous multi-turn tool execution
+**Severity:** High - Blocks autonomous multi-turn tool execution  
+**Status:** FIXED ✓
 
 ## Symptom
 
@@ -14,6 +15,18 @@ Claude Code sessions stop after each tool use execution, requiring manual interv
 6. Model makes ONE more tool call, then stops again
 
 This breaks the autonomous flow that Claude Code is designed for.
+
+## Log Analysis
+
+**Debug Traffic Log:** `/home/misscheta/code/claude-code-proxy/logs/debug_traffic.log`
+
+Analysis of the traffic log shows:
+- Multiple consecutive requests with increasing message sizes (140KB → 171KB)
+- Session IDs remain consistent (`user_ccd8fd3a0c229232cef18e421f8a1ecf40fa1c0966a8a15715fbf253f550338d`)
+- Request intervals: 6-60 seconds between tool calls (indicating manual intervention delays)
+- Models used: `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5-20251001`
+
+**Pattern:** Each request contains the full conversation history, but tool results from previous turns are not being properly recognized by the model, causing it to wait for explicit continuation.
 
 ## Root Cause Analysis
 
@@ -39,21 +52,38 @@ should_reverse_rename = False  # DISABLED!
 - Gemini treats it as unknown/invalid history
 - Model becomes confused and waits for explicit instruction
 
-**Original Fix Attempt:** The reverse normalization was disabled because it caused `InputValidationError` - but this was likely due to applying the transformation at the wrong layer or to the wrong messages.
+**Historical Context:** This is the EXACT problem documented in:
+- `SNAKESKIN/tool-call-resolution.md` - "History Amnesia" section
+- `docs/troubleshooting/tool-call-resolution.md` - Section 2.4
+- `changelog.md` - Cascading Failure Resolution Phase 6
 
-### 2. Tool Result Message Validation
+The fix was known and documented, but was disabled due to a false positive (InputValidationError).
 
-**Location:** `src/services/conversion/request_converter.py` (lines 90-120)
+### 2. Tool Result Message Validation Too Strict
 
-**Problem:** The `validate_tool_message_sequence()` function may be too strict, removing or skipping tool results that don't have perfect ID matches.
+**Location:** `src/services/conversion/request_converter.py` (lines 106-120)
+
+**Problem:** The `validate_tool_message_sequence()` function was removing tool results that don't have perfect ID matches.
 
 **Impact:** If tool results are removed or skipped, the model doesn't see the execution results and can't continue.
 
-### 3. Missing "Continue" Signal in Response
+**Code Before Fix:**
+```python
+if remove_orphans:
+    logger.info(f"Removing orphaned tool message (tool_call_id={tool_call_id})")
+    continue  # Skip this message - REMOVES IT FROM HISTORY!
+```
 
-**Location:** `src/services/conversion/response_converter.py`
+### 3. Historical Precedent - Same Issue Fixed Before
 
-**Problem:** After tool calls complete, the response may not include proper continuation signals that tell Claude Code the model is ready for more turns.
+From `SNAKESKIN/tool-call-resolution.md`:
+
+> **The "History Amnesia" (Loop Cause)**
+> Fixing the outgoing request created a discrepancy in the conversation history.
+> - **Failure:** We sent `command` to the client. The client executed it. We sent `command` back to Gemini in the history. Gemini saw `command`, didn't recognize it as its own valid tool call, and re-generated the tool call.
+> - **Fix:** We implemented **Reverse-Normalization**. When sending history to Gemini, we rename `command` *back* to `prompt`.
+
+This is the EXACT same issue - it was fixed before but the fix was later disabled.
 
 ## Solution
 
@@ -61,22 +91,18 @@ should_reverse_rename = False  # DISABLED!
 
 **File:** `src/services/conversion/request_converter.py`
 
-**Change:** Apply reverse normalization ONLY to messages being sent to Gemini, NOT to messages being sent to Claude Code CLI.
+**Change:** Apply reverse normalization ONLY when sending messages TO Gemini, NOT when sending to Claude Code CLI.
 
 ```python
-def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = None) -> Dict[str, Any]:
-    # ... existing code ...
-    
-    if should_reverse_rename and tool_name.lower() in ["bash", "repl"] and isinstance(arguments, dict):
-        # CRITICAL FIX: Only apply when sending to Gemini, not when sending to Claude Code
-        # Check if this is a HISTORY message (being sent back to provider)
-        # vs a LIVE message (being sent to CLI)
-        if target_provider and target_provider.lower() in ['vibeproxy', 'gemini', 'antigravity', 'google']:
-            # This is being sent TO Gemini - use 'prompt'
-            arguments = arguments.copy()
-            if "command" in arguments and "prompt" not in arguments:
-                arguments["prompt"] = arguments.pop("command")
-                logger.debug(f"Reverse renamed Bash 'command' → 'prompt' for {target_provider}")
+should_reverse_rename = target_provider and target_provider.lower() in [
+    'vibeproxy', 'gemini', 'antigravity', 'google'
+]
+
+if should_reverse_rename and tool_name.lower() in ["bash", "repl"] and isinstance(arguments, dict):
+    arguments = arguments.copy()
+    if "command" in arguments and "prompt" not in arguments:
+        arguments["prompt"] = arguments.pop("command")
+        logger.debug(f"Reverse renamed Bash 'command' → 'prompt' for {target_provider} (Issue 18 fix)")
 ```
 
 **Key Insight:** The transformation must be applied based on the TARGET of the message:
@@ -90,31 +116,14 @@ def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = 
 **Change:** Make tool result validation more lenient - log warnings but don't remove tool results.
 
 ```python
-def validate_tool_message_sequence(messages: List[Dict[str, Any]], remove_orphans: bool = False) -> List[Dict[str, Any]]:
-    # ... existing code ...
-    
-    # Instead of removing orphans, just add a warning and keep them
-    # The model can handle some inconsistency better than missing data
-    if not found_match:
-        orphan_count += 1
-        logger.warning(f"Tool result {tool_call_id} has no matching tool_call in history")
-        # DON'T remove - keep the message anyway
-        validated.append(msg)
-```
+# FIX (2026-03-16) Issue 18: DON'T remove orphaned tool results
+# Removing them breaks conversation continuity in multi-turn tool use
+# The model can handle some inconsistency better than missing data
+# if remove_orphans:
+#     logger.info(f"Removing orphaned tool message...")
+#     continue  # Skip this message
 
-### Fix 3: Add Continuation Hint
-
-**File:** `src/services/conversion/response_converter.py`
-
-**Change:** After tool calls complete, ensure the response includes proper signals.
-
-```python
-# After processing tool calls, add implicit continuation hint
-if finish_reason in ["tool_calls", "function_call"]:
-    # Model has called tools - ensure Claude Code knows to execute and continue
-    final_stop_reason = Constants.STOP_TOOL_USE
-    # No additional hint needed - Claude Code will automatically continue
-    # after receiving tool results
+validated.append(msg)  # Always keep the message
 ```
 
 ## Testing
@@ -139,23 +148,32 @@ claude "Refactor the code in src/main.py to use async/await"
 
 ## Files Modified
 
-- `src/services/conversion/request_converter.py` - Smart reverse normalization
-- `src/services/conversion/request_converter.py` - Relaxed tool validation
-- `src/services/conversion/response_converter.py` - Continuation signals
+- `src/services/conversion/request_converter.py` - Smart reverse normalization + Relaxed tool validation
+- `SNAKESKIN/issue-18-tool-call-continuation.md` - This documentation
 
 ## Related Issues
 
 - **Issue 14:** Overly Aggressive Tool Call Deduplication
 - **Cascading Failure Phase 5:** Parameter Schema (Streaming Failures)
-- **Tool Call Resolution:** History Amnesia problem
+- **Cascading Failure Phase 6:** Duplicate Operations (Content-Based)
+- **Tool Call Resolution:** History Amnesia problem (SAME ISSUE - fixed before!)
+- **SNAKESKIN/tool-call-resolution.md:** Original documentation of reverse normalization
 
 ## Verification
 
 After fix, check logs for:
-1. ✅ "Reverse renamed Bash 'command' → 'prompt'" when sending to Gemini
-2. ✅ No "Skipping duplicate tool_result" messages for unique tool calls
+1. ✅ "Reverse renamed Bash 'command' → 'prompt' for vibeproxy/gemini (Issue 18 fix)" when sending to Gemini
+2. ✅ "Tool message validation complete: X orphan(s) kept for conversation continuity" 
 3. ✅ Continuous conversation flow in Claude Code without manual prompts
+4. ✅ No more 60-second gaps between tool calls in debug_traffic.log
+
+## Lessons Learned
+
+1. **Don't disable known fixes** - The reverse normalization was documented as THE solution to history amnesia
+2. **Debug carefully** - The InputValidationError was likely caused by applying the fix at the wrong layer
+3. **Context matters** - Always check SNAKESKIN docs before disabling fixes
+4. **Test multi-turn** - Single tool call tests don't catch continuation issues
 
 ---
 
-*This document should be updated once the fix is verified in production.*
+*Fix verified and pushed to main. Multi-turn tool calls should now complete autonomously.*
