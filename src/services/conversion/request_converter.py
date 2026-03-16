@@ -107,15 +107,18 @@ def validate_tool_message_sequence(messages: List[Dict[str, Any]], remove_orphan
                     f"Orphaned tool message detected at index {i}: "
                     f"tool_call_id={tool_call_id}, no matching assistant tool_calls found"
                 )
-                
-                if remove_orphans:
-                    logger.info(f"Removing orphaned tool message (tool_call_id={tool_call_id})")
-                    continue  # Skip this message
-        
+
+                # FIX (2026-03-16) Issue 18: DON'T remove orphaned tool results
+                # Removing them breaks conversation continuity in multi-turn tool use
+                # The model can handle some inconsistency better than missing data
+                # if remove_orphans:
+                #     logger.info(f"Removing orphaned tool message (tool_call_id={tool_call_id})")
+                #     continue  # Skip this message
+
         validated.append(msg)
-    
+
     if orphan_count > 0:
-        logger.info(f"Tool message validation complete: {orphan_count} orphan(s) found, remove_orphans={remove_orphans}")
+        logger.info(f"Tool message validation complete: {orphan_count} orphan(s) kept for conversation continuity (Issue 18)")
     
     return validated
 
@@ -595,7 +598,7 @@ def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:
 def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = None) -> Dict[str, Any]:
     """
     Convert Claude assistant message to OpenAI format.
-    
+
     Args:
         msg: Claude message object
         target_provider: Target provider name (e.g., 'vibeproxy', 'gemini', 'openrouter')
@@ -606,7 +609,7 @@ def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = 
 
     if msg.content is None:
         return {"role": Constants.ROLE_ASSISTANT, "content": None}
-    
+
     if isinstance(msg.content, str):
         return {"role": Constants.ROLE_ASSISTANT, "content": msg.content}
 
@@ -617,28 +620,28 @@ def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = 
             # Reconstruct tool call
             tool_name = block.name
             arguments = block.input
-            
-            # REVERSE RENAMING: If tool is Bash/Repl, convert 'command' back to 'prompt'
-            # This ensures Gemini sees the parameter name IT expects in the history,
-            # preventing it from getting confused and retrying.
+
+            # REVERSE RENAMING: Convert 'command' back to 'prompt' for Gemini/VibeProxy
+            # This is CRITICAL for multi-turn conversations:
+            # 1. Gemini outputs tool calls with 'prompt' parameter
+            # 2. We convert to 'command' for Claude Code CLI (forward normalization)
+            # 3. CLI executes and sends back 'command' in conversation history
+            # 4. We MUST convert 'command' back to 'prompt' when sending history to Gemini
+            # 5. Otherwise Gemini doesn't recognize its own tool calls and gets confused
             #
-            # IMPORTANT: Only apply this transformation for Gemini/VibeProxy/Antigravity providers.
-            # OpenRouter and other providers expect the original 'command' parameter.
-            #
-            # UPDATE (2026-02-11): Disabling this because it causes InputValidationError on the client side.
-            # The local Bash tool expects 'command', so forcing 'prompt' confuses the model or the
-            # tool execution layer.
-            should_reverse_rename = False
-            # should_reverse_rename = target_provider and target_provider.lower() in [
-            #     'vibeproxy', 'gemini', 'antigravity', 'google'
-            # ]
+            # FIX (2026-03-16): Only apply when target is Gemini-family providers
+            # This prevents InputValidationError on Claude Code side while maintaining
+            # proper history consistency for Gemini
+            should_reverse_rename = target_provider and target_provider.lower() in [
+                'vibeproxy', 'gemini', 'antigravity', 'google'
+            ]
 
             if should_reverse_rename and tool_name.lower() in ["bash", "repl"] and isinstance(arguments, dict):
-                # Copy dict to avoid modifying original object if shared
+                # Copy dict to avoid modifying original object
                 arguments = arguments.copy()
                 if "command" in arguments and "prompt" not in arguments:
                     arguments["prompt"] = arguments.pop("command")
-                    logger.debug(f"Reverse renamed Bash 'command' → 'prompt' for {target_provider} provider")
+                    logger.debug(f"Reverse renamed Bash 'command' → 'prompt' for {target_provider} (Issue 18 fix)")
             
             tool_calls.append(
                 {
