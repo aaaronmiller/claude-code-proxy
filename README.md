@@ -88,6 +88,9 @@ export ANTHROPIC_API_KEY=pass
 claude
 ```
 
+If you want the proxy itself to require a client key, set `PROXY_AUTH_KEY`.
+`ANTHROPIC_API_KEY` is for the Claude Code client side and no longer enables proxy auth by default.
+
 > 💡 **Pro Tip**: Add aliases to your `~/.zshrc` for easier access (see [Setup Guide](docs/setup.md))
 
 ---

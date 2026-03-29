@@ -250,11 +250,13 @@ class ModelCatalogService:
         """Get default models when catalog is not available."""
         defaults = {
             "free": [
-                "qwen/qwen3-next-80b-a3b-instruct:free",
-                "stepfun/step-3.5-flash:free",
-                "openrouter/free",
-                "google/gemini-2.0-flash-exp:free",
-                "deepseek/deepseek-chat-v3-0324:free",
+                # Best free models with tool calling (verified via API + benchmarks - March 2026)
+                # MiniMax M2.5: BEST benchmarks - Intelligence 41.9, Coding 37.4, Agentic 55.6
+                "minimax/minimax-m2.5:free",  # 197K ctx - BEST (better than 91%!)
+                "nvidia/nemotron-3-super-120b-a12b:free",  # 1M ctx - best context, good benchmarks
+                "stepfun/step-3.5-flash:free",  # 256K ctx - excellent benchmarks
+                "qwen/qwen3-next-80b-a3b-instruct:free",  # 262K ctx
+                "openrouter/free",  # Router (unpredictable)
             ],
             "smartest": [
                 "anthropic/claude-3.5-sonnet-20241022",

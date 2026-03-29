@@ -1,48 +1,63 @@
-// Claude Code Proxy - Web UI JavaScript
-// Cyberpunk Terminal Theme
+// Claude Code Proxy - Modern Web UI JavaScript
 
 // ═══════════════════════════════════════════════════════════════
-// TAB SWITCHING
+// PAGE NAVIGATION
 // ═══════════════════════════════════════════════════════════════
 
-function switchTab(tabName, buttonEl = null) {
-    // Hide all tabs
-    document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.classList.remove('active');
+const pageNames = {
+    dashboard: 'Dashboard',
+    monitor: 'Monitor',
+    core: 'Provider',
+    models: 'Models',
+    routing: 'Routing',
+    terminal: 'Terminal',
+    profiles: 'Profiles',
+    logs: 'Logs'
+};
+
+function switchPage(pageName, buttonEl) {
+    // Hide all pages
+    document.querySelectorAll('.page-section').forEach(page => {
+        page.style.display = 'none';
     });
-    document.querySelectorAll('.tab-button').forEach(btn => {
+    
+    // Show selected page
+    const pageEl = document.getElementById(`page-${pageName}`);
+    if (pageEl) {
+        pageEl.style.display = 'block';
+        pageEl.classList.add('animate-slide-up');
+    }
+    
+    // Update nav items
+    document.querySelectorAll('.nav-item').forEach(btn => {
         btn.classList.remove('active');
     });
-
-    // Show selected tab
-    const tabEl = document.getElementById(`${tabName}-tab`);
-    if (tabEl) tabEl.classList.add('active');
-
-    // Activate the clicked button (handle both direct calls and event-based)
+    
     if (buttonEl) {
         buttonEl.classList.add('active');
-    } else if (event && event.target) {
-        event.target.classList.add('active');
+    } else {
+        const btn = document.querySelector(`[data-page="${pageName}"]`);
+        if (btn) btn.classList.add('active');
     }
-
-    // Load data for the tab
-    if (tabName === 'profiles') {
+    
+    // Update title
+    document.getElementById('page-title').textContent = pageNames[pageName] || pageName;
+    
+    // Load data for page
+    if (pageName === 'profiles') {
         loadProfiles();
-    } else if (tabName === 'models') {
+    } else if (pageName === 'models') {
         loadModels();
-        loadSelectionHistory();
-    } else if (tabName === 'monitor') {
+        loadFreeRecommended();
+    } else if (pageName === 'monitor') {
         refreshStats();
-    } else if (tabName === 'logs') {
+    } else if (pageName === 'logs') {
         connectWebSocket();
     }
 }
 
-// HTML entity escape helper to prevent XSS
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -50,13 +65,24 @@ function escapeHtml(text) {
 // ═══════════════════════════════════════════════════════════════
 
 function showToast(message, type = 'success') {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
+    const container = document.getElementById('toast');
+    const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.classList.add('show');
-
+    toast.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            ${type === 'success' ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>' : 
+              type === 'error' ? '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>' :
+              type === 'warning' ? '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>' :
+              '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'}
+        </svg>
+        <span>${message}</span>
+    `;
+    container.appendChild(toast);
+    
     setTimeout(() => {
-        toast.classList.remove('show');
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
 
@@ -68,24 +94,21 @@ async function checkProxyStatus() {
     try {
         const response = await fetch('/health');
         const data = await response.json();
-
+        
         const indicator = document.getElementById('proxy-status');
         const statusText = document.getElementById('proxy-status-text');
-
+        
         if (data.status === 'healthy') {
-            indicator.classList.add('online');
             indicator.classList.remove('offline');
             statusText.textContent = 'Online';
         } else {
             indicator.classList.add('offline');
-            indicator.classList.remove('online');
             statusText.textContent = 'Unhealthy';
         }
     } catch (error) {
         const indicator = document.getElementById('proxy-status');
         const statusText = document.getElementById('proxy-status-text');
         indicator.classList.add('offline');
-        indicator.classList.remove('online');
         statusText.textContent = 'Offline';
     }
 }
@@ -95,69 +118,26 @@ async function checkProxyStatus() {
 // ═══════════════════════════════════════════════════════════════
 
 const providerPresets = {
-    vibeproxy: {
-        apiKey: 'dummy',
-        baseUrl: 'http://127.0.0.1:8317/v1',
-        bigModel: '',
-        middleModel: '',
-        smallModel: '',
-        reasoningMaxTokens: '128000'
-    },
-    openrouter: {
-        apiKey: '',
-        baseUrl: 'https://openrouter.ai/api/v1',
-        bigModel: 'anthropic/claude-sonnet-4',
-        middleModel: 'anthropic/claude-sonnet-4',
-        smallModel: 'google/gemini-flash-1.5'
-    },
-    gemini: {
-        apiKey: '',
-        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-        bigModel: 'gemini-2.5-pro-preview-03-25',
-        middleModel: 'gemini-2.5-flash-preview-04-17',
-        smallModel: 'gemini-2.5-flash-preview-04-17'
-    },
-    openai: {
-        apiKey: '',
-        baseUrl: 'https://api.openai.com/v1',
-        bigModel: 'gpt-4o',
-        middleModel: 'gpt-4o',
-        smallModel: 'gpt-4o-mini'
-    },
-    ollama: {
-        apiKey: 'dummy',
-        baseUrl: 'http://localhost:11434/v1',
-        bigModel: 'qwen2.5:72b',
-        middleModel: 'qwen2.5:72b',
-        smallModel: 'qwen2.5:7b'
-    },
-    lmstudio: {
-        apiKey: 'dummy',
-        baseUrl: 'http://127.0.0.1:1234/v1',
-        bigModel: 'local-model',
-        middleModel: 'local-model',
-        smallModel: 'local-model'
-    }
+    vibeproxy: { apiKey: 'dummy', baseUrl: 'http://127.0.0.1:8317/v1', bigModel: '', middleModel: '', smallModel: '' },
+    openrouter: { apiKey: '', baseUrl: 'https://openrouter.ai/api/v1', bigModel: 'anthropic/claude-sonnet-4', middleModel: 'anthropic/claude-sonnet-4', smallModel: 'google/gemini-flash-1.5' },
+    gemini: { apiKey: '', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/', bigModel: 'gemini-2.5-pro-preview-03-25', middleModel: 'gemini-2.5-flash-preview-04-17', smallModel: 'gemini-2.5-flash-preview-04-17' },
+    openai: { apiKey: '', baseUrl: 'https://api.openai.com/v1', bigModel: 'gpt-4o', middleModel: 'gpt-4o', smallModel: 'gpt-4o-mini' },
+    ollama: { apiKey: 'dummy', baseUrl: 'http://localhost:11434/v1', bigModel: 'qwen2.5:72b', middleModel: 'qwen2.5:72b', smallModel: 'qwen2.5:7b' },
+    lmstudio: { apiKey: 'dummy', baseUrl: 'http://127.0.0.1:1234/v1', bigModel: 'local-model', middleModel: 'local-model', smallModel: 'local-model' }
 };
 
 function applyProviderPreset() {
     const preset = document.getElementById('provider-preset').value;
     if (!preset || !providerPresets[preset]) return;
-
+    
     const p = providerPresets[preset];
     document.getElementById('provider-api-key').value = p.apiKey;
     document.getElementById('provider-base-url').value = p.baseUrl;
     document.getElementById('big-model').value = p.bigModel || '';
     document.getElementById('middle-model').value = p.middleModel || '';
     document.getElementById('small-model').value = p.smallModel || '';
-
-    if (p.reasoningMaxTokens) {
-        document.getElementById('reasoning-max-tokens').value = p.reasoningMaxTokens;
-    }
-
-    // Update provider display
+    
     document.getElementById('current-provider').textContent = preset.charAt(0).toUpperCase() + preset.slice(1);
-
     showToast(`Applied ${preset} preset`, 'success');
 }
 
@@ -169,73 +149,33 @@ async function loadConfig() {
     try {
         const response = await fetch('/api/config');
         const config = await response.json();
-
+        
         // Core settings
         document.getElementById('provider-api-key').value = config.provider_api_key || config.openai_api_key || '';
         document.getElementById('provider-base-url').value = config.provider_base_url || config.openai_base_url || '';
         document.getElementById('proxy-auth-key').value = config.proxy_auth_key || config.anthropic_api_key || '';
-
+        
         // Server settings
-        if (document.getElementById('server-host')) {
-            document.getElementById('server-host').value = config.host || '0.0.0.0';
-        }
-        if (document.getElementById('server-port')) {
-            document.getElementById('server-port').value = config.port || '8082';
-        }
-        if (document.getElementById('log-level')) {
-            document.getElementById('log-level').value = config.log_level || 'INFO';
-        }
-
+        const hostEl = document.getElementById('server-host');
+        if (hostEl) hostEl.value = config.host || '0.0.0.0';
+        const portEl = document.getElementById('server-port');
+        if (portEl) portEl.value = config.port || '8082';
+        const logLevelEl = document.getElementById('log-level');
+        if (logLevelEl) logLevelEl.value = config.log_level || 'INFO';
+        
         // Model settings
         document.getElementById('big-model').value = config.big_model || '';
         document.getElementById('middle-model').value = config.middle_model || '';
         document.getElementById('small-model').value = config.small_model || '';
-
+        
         // Reasoning settings
         document.getElementById('reasoning-effort').value = config.reasoning_effort || '';
-        document.getElementById('reasoning-max-tokens').value = config.reasoning_max_tokens || '';
-        if (document.getElementById('reasoning-exclude')) {
-            document.getElementById('reasoning-exclude').checked = config.reasoning_exclude === 'true';
-        }
-
-        // Token limits
-        if (document.getElementById('max-tokens-limit')) {
-            document.getElementById('max-tokens-limit').value = config.max_tokens_limit || '65536';
-        }
-        if (document.getElementById('min-tokens-limit')) {
-            document.getElementById('min-tokens-limit').value = config.min_tokens_limit || '4096';
-        }
-        if (document.getElementById('request-timeout')) {
-            document.getElementById('request-timeout').value = config.request_timeout || '120';
-        }
-
+        const reasoningTokensEl = document.getElementById('reasoning-max-tokens');
+        if (reasoningTokensEl) reasoningTokensEl.value = config.reasoning_max_tokens || '';
+        const reasoningExcludeEl = document.getElementById('reasoning-exclude');
+        if (reasoningExcludeEl) reasoningExcludeEl.checked = config.reasoning_exclude === 'true';
+        
         // Terminal settings
-        if (document.getElementById('terminal-display-mode')) {
-            document.getElementById('terminal-display-mode').value = config.terminal_display_mode || 'detailed';
-        }
-        if (document.getElementById('terminal-color-scheme')) {
-            document.getElementById('terminal-color-scheme').value = config.terminal_color_scheme || 'auto';
-        }
-        if (document.getElementById('log-style')) {
-            document.getElementById('log-style').value = config.log_style || 'rich';
-        }
-
-        // Cascade settings
-        setCheckbox('model-cascade', config.model_cascade);
-        if (document.getElementById('big-cascade')) {
-            document.getElementById('big-cascade').value = config.big_cascade || '';
-        }
-        if (document.getElementById('middle-cascade')) {
-            document.getElementById('middle-cascade').value = config.middle_cascade || '';
-        }
-        if (document.getElementById('small-cascade')) {
-            document.getElementById('small-cascade').value = config.small_cascade || '';
-        }
-        if (document.getElementById('model-cascade-daily-limit')) {
-            document.getElementById('model-cascade-daily-limit').value = config.model_cascade_daily_limit || '1000';
-        }
-
-        // Checkboxes
         setCheckbox('terminal-show-workspace', config.terminal_show_workspace);
         setCheckbox('terminal-show-context-pct', config.terminal_show_context_pct);
         setCheckbox('terminal-show-task-type', config.terminal_show_task_type);
@@ -246,23 +186,32 @@ async function loadConfig() {
         setCheckbox('compact-logger', config.compact_logger || config.use_compact_logger);
         setCheckbox('track-usage', config.track_usage);
         setCheckbox('enable-dashboard', config.enable_dashboard);
-
-        // Dashboard settings
-        if (document.getElementById('dashboard-layout')) {
-            document.getElementById('dashboard-layout').value = config.dashboard_layout || 'default';
-        }
-        if (document.getElementById('dashboard-refresh')) {
-            document.getElementById('dashboard-refresh').value = config.dashboard_refresh || '0.5';
-        }
-
+        
+        const displayModeEl = document.getElementById('terminal-display-mode');
+        if (displayModeEl) displayModeEl.value = config.terminal_display_mode || 'detailed';
+        const colorSchemeEl = document.getElementById('terminal-color-scheme');
+        if (colorSchemeEl) colorSchemeEl.value = config.terminal_color_scheme || 'auto';
+        const logStyleEl = document.getElementById('log-style');
+        if (logStyleEl) logStyleEl.value = config.log_style || 'rich';
+        const dashboardLayoutEl = document.getElementById('dashboard-layout');
+        if (dashboardLayoutEl) dashboardLayoutEl.value = config.dashboard_layout || 'default';
+        const dashboardRefreshEl = document.getElementById('dashboard-refresh');
+        if (dashboardRefreshEl) dashboardRefreshEl.value = config.dashboard_refresh || '0.5';
+        
+        // Cascade settings
+        setCheckbox('model-cascade', config.model_cascade);
+        const bigCascadeEl = document.getElementById('big-cascade');
+        if (bigCascadeEl) bigCascadeEl.value = config.big_cascade || '';
+        const middleCascadeEl = document.getElementById('middle-cascade');
+        if (middleCascadeEl) middleCascadeEl.value = config.middle_cascade || '';
+        const smallCascadeEl = document.getElementById('small-cascade');
+        if (smallCascadeEl) smallCascadeEl.value = config.small_cascade || '';
+        const cascadeLimitEl = document.getElementById('model-cascade-daily-limit');
+        if (cascadeLimitEl) cascadeLimitEl.value = config.model_cascade_daily_limit || '1000';
+        
         // Hybrid mode
         loadHybridConfig(config);
-
-        // Update mode indicator
-        const modeText = config.passthrough_mode ? 'Passthrough' : 'Proxy';
-        document.getElementById('current-mode').textContent = modeText;
-        document.getElementById('current-mode').style.color = config.passthrough_mode ? 'var(--accent-amber)' : 'var(--accent-green)';
-
+        
         // Update provider display
         const providerUrl = config.provider_base_url || config.openai_base_url || '';
         let providerName = 'Unknown';
@@ -273,93 +222,75 @@ async function loadConfig() {
         else if (providerUrl.includes('11434')) providerName = 'Ollama';
         else if (providerUrl.includes('1234')) providerName = 'LM Studio';
         document.getElementById('current-provider').textContent = providerName;
-
+        
+        // Update routing visualizer
+        updateRoutingVisualizer(config);
+        
     } catch (error) {
-        showToast('Failed to load configuration', 'error');
-        console.error(error);
+        console.error('Failed to load config:', error);
     }
 }
 
 function setCheckbox(id, value) {
     const el = document.getElementById(id);
-    if (el) {
-        el.checked = value === 'true' || value === true;
-    }
+    if (el) el.checked = value === 'true' || value === true;
 }
 
 function loadHybridConfig(config) {
-    // BIG endpoint
     const bigEnabled = config.enable_big_endpoint === 'true';
     setCheckbox('enable-big-endpoint', bigEnabled);
     toggleHybridSection('big', bigEnabled);
-    if (document.getElementById('big-endpoint')) {
-        document.getElementById('big-endpoint').value = config.big_endpoint || '';
-    }
-    if (document.getElementById('big-api-key')) {
-        document.getElementById('big-api-key').value = config.big_api_key || '';
-    }
-
-    // MIDDLE endpoint
+    if (document.getElementById('big-endpoint')) document.getElementById('big-endpoint').value = config.big_endpoint || '';
+    if (document.getElementById('big-api-key')) document.getElementById('big-api-key').value = config.big_api_key || '';
+    
     const middleEnabled = config.enable_middle_endpoint === 'true';
     setCheckbox('enable-middle-endpoint', middleEnabled);
     toggleHybridSection('middle', middleEnabled);
-    if (document.getElementById('middle-endpoint')) {
-        document.getElementById('middle-endpoint').value = config.middle_endpoint || '';
-    }
-    if (document.getElementById('middle-api-key')) {
-        document.getElementById('middle-api-key').value = config.middle_api_key || '';
-    }
-
-    // SMALL endpoint
+    if (document.getElementById('middle-endpoint')) document.getElementById('middle-endpoint').value = config.middle_endpoint || '';
+    if (document.getElementById('middle-api-key')) document.getElementById('middle-api-key').value = config.middle_api_key || '';
+    
     const smallEnabled = config.enable_small_endpoint === 'true';
     setCheckbox('enable-small-endpoint', smallEnabled);
     toggleHybridSection('small', smallEnabled);
-    if (document.getElementById('small-endpoint')) {
-        document.getElementById('small-endpoint').value = config.small_endpoint || '';
-    }
-    if (document.getElementById('small-api-key')) {
-        document.getElementById('small-api-key').value = config.small_api_key || '';
-    }
+    if (document.getElementById('small-endpoint')) document.getElementById('small-endpoint').value = config.small_endpoint || '';
+    if (document.getElementById('small-api-key')) document.getElementById('small-api-key').value = config.small_api_key || '';
 }
 
 function toggleHybridSection(tier, forceState = null) {
     const checkbox = document.getElementById(`enable-${tier}-endpoint`);
     const section = document.getElementById(`${tier}-hybrid-section`);
-
     if (section) {
         const isEnabled = forceState !== null ? forceState : checkbox.checked;
         section.style.display = isEnabled ? 'block' : 'none';
     }
 }
 
+function updateRoutingVisualizer(config) {
+    const bigEl = document.getElementById('route-big');
+    const middleEl = document.getElementById('route-middle');
+    const smallEl = document.getElementById('route-small');
+    const modeEl = document.getElementById('routing-mode');
+    
+    if (bigEl) bigEl.textContent = config.big_model || 'Not set';
+    if (middleEl) middleEl.textContent = config.middle_model || 'Not set';
+    if (smallEl) smallEl.textContent = config.small_model || 'Not set';
+    if (modeEl) modeEl.textContent = config.passthrough_mode ? 'Passthrough Mode' : 'Proxy Mode';
+}
+
 async function saveConfig() {
     const config = {
-        // Core
         provider_api_key: document.getElementById('provider-api-key').value,
         provider_base_url: document.getElementById('provider-base-url').value,
         proxy_auth_key: document.getElementById('proxy-auth-key').value,
-
-        // Server
         host: document.getElementById('server-host')?.value || '0.0.0.0',
         port: document.getElementById('server-port')?.value || '8082',
         log_level: document.getElementById('log-level')?.value || 'INFO',
-
-        // Models
         big_model: document.getElementById('big-model').value,
         middle_model: document.getElementById('middle-model').value,
         small_model: document.getElementById('small-model').value,
-
-        // Reasoning
         reasoning_effort: document.getElementById('reasoning-effort').value,
-        reasoning_max_tokens: document.getElementById('reasoning-max-tokens').value,
+        reasoning_max_tokens: document.getElementById('reasoning-max-tokens')?.value,
         reasoning_exclude: document.getElementById('reasoning-exclude')?.checked ? 'true' : 'false',
-
-        // Token limits
-        max_tokens_limit: document.getElementById('max-tokens-limit')?.value || '65536',
-        min_tokens_limit: document.getElementById('min-tokens-limit')?.value || '4096',
-        request_timeout: document.getElementById('request-timeout')?.value || '120',
-
-        // Terminal
         terminal_display_mode: document.getElementById('terminal-display-mode')?.value || 'detailed',
         terminal_color_scheme: document.getElementById('terminal-color-scheme')?.value || 'auto',
         log_style: document.getElementById('log-style')?.value || 'rich',
@@ -371,14 +302,10 @@ async function saveConfig() {
         terminal_show_duration_colors: document.getElementById('terminal-show-duration-colors')?.checked ? 'true' : 'false',
         terminal_session_colors: document.getElementById('terminal-session-colors')?.checked ? 'true' : 'false',
         compact_logger: document.getElementById('compact-logger')?.checked ? 'true' : 'false',
-
-        // Dashboard
         track_usage: document.getElementById('track-usage')?.checked ? 'true' : 'false',
         enable_dashboard: document.getElementById('enable-dashboard')?.checked ? 'true' : 'false',
         dashboard_layout: document.getElementById('dashboard-layout')?.value || 'default',
         dashboard_refresh: document.getElementById('dashboard-refresh')?.value || '0.5',
-
-        // Hybrid mode
         enable_big_endpoint: document.getElementById('enable-big-endpoint')?.checked ? 'true' : 'false',
         big_endpoint: document.getElementById('big-endpoint')?.value || '',
         big_api_key: document.getElementById('big-api-key')?.value || '',
@@ -388,33 +315,29 @@ async function saveConfig() {
         enable_small_endpoint: document.getElementById('enable-small-endpoint')?.checked ? 'true' : 'false',
         small_endpoint: document.getElementById('small-endpoint')?.value || '',
         small_api_key: document.getElementById('small-api-key')?.value || '',
-
-        // Cascade
         model_cascade: document.getElementById('model-cascade')?.checked ? 'true' : 'false',
         big_cascade: document.getElementById('big-cascade')?.value || '',
         middle_cascade: document.getElementById('middle-cascade')?.value || '',
         small_cascade: document.getElementById('small-cascade')?.value || '',
         model_cascade_daily_limit: document.getElementById('model-cascade-daily-limit')?.value || '1000'
     };
-
+    
     try {
         const response = await fetch('/api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config)
         });
-
+        
         if (response.ok) {
             showToast('Configuration saved!', 'success');
             loadConfig();
-            loadSelectionHistory();
         } else {
             const error = await response.json();
-            showToast(`Failed to save: ${error.detail}`, 'error');
+            showToast(`Failed: ${error.detail}`, 'error');
         }
     } catch (error) {
         showToast('Failed to save configuration', 'error');
-        console.error(error);
     }
 }
 
@@ -429,7 +352,6 @@ async function reloadConfig() {
         }
     } catch (error) {
         showToast('Failed to reload', 'error');
-        console.error(error);
     }
 }
 
@@ -438,224 +360,14 @@ async function testConnection() {
     try {
         const response = await fetch('/api/test-connection', { method: 'POST' });
         const result = await response.json();
-
+        
         if (result.success) {
             showToast('Connection successful!', 'success');
         } else {
-            showToast(`Connection failed: ${result.error}`, 'error');
+            showToast(`Failed: ${result.error}`, 'error');
         }
     } catch (error) {
         showToast('Connection test failed', 'error');
-        console.error(error);
-    }
-}
-
-function exportConfig() {
-    const fields = [
-        ['PROVIDER_API_KEY', 'provider-api-key'],
-        ['PROVIDER_BASE_URL', 'provider-base-url'],
-        ['PROXY_AUTH_KEY', 'proxy-auth-key'],
-        ['BIG_MODEL', 'big-model'],
-        ['MIDDLE_MODEL', 'middle-model'],
-        ['SMALL_MODEL', 'small-model'],
-        ['MODEL_CASCADE', 'model-cascade'],
-        ['BIG_CASCADE', 'big-cascade'],
-        ['MIDDLE_CASCADE', 'middle-cascade'],
-        ['SMALL_CASCADE', 'small-cascade'],
-        ['MODEL_CASCADE_DAILY_LIMIT', 'model-cascade-daily-limit'],
-        ['REASONING_EFFORT', 'reasoning-effort'],
-        ['REASONING_MAX_TOKENS', 'reasoning-max-tokens'],
-        ['HOST', 'server-host'],
-        ['PORT', 'server-port'],
-        ['LOG_LEVEL', 'log-level']
-    ];
-
-    const envContent = fields
-        .map(([key, id]) => {
-            const el = document.getElementById(id);
-            const value = el ? (el.type === 'checkbox' ? (el.checked ? 'true' : 'false') : el.value) : '';
-            return value ? `${key}="${value}"` : null;
-        })
-        .filter(Boolean)
-        .join('\n');
-
-    const blob = new Blob([envContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'config.env';
-    a.click();
-    URL.revokeObjectURL(url);
-
-    showToast('Configuration exported', 'success');
-}
-
-function importConfig() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.env,.txt';
-    input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const text = await file.text();
-        const lines = text.split('\n');
-
-        lines.forEach(line => {
-            const match = line.match(/^([A-Z_]+)="?([^"]*)"?$/);
-            if (match) {
-                const [, key, value] = match;
-                const fieldMap = {
-                    'PROVIDER_API_KEY': 'provider-api-key',
-                    'PROVIDER_BASE_URL': 'provider-base-url',
-                    'PROXY_AUTH_KEY': 'proxy-auth-key',
-                    'BIG_MODEL': 'big-model',
-                    'MIDDLE_MODEL': 'middle-model',
-                    'SMALL_MODEL': 'small-model',
-                    'MODEL_CASCADE': 'model-cascade',
-                    'BIG_CASCADE': 'big-cascade',
-                    'MIDDLE_CASCADE': 'middle-cascade',
-                    'SMALL_CASCADE': 'small-cascade',
-                    'MODEL_CASCADE_DAILY_LIMIT': 'model-cascade-daily-limit'
-                };
-                const fieldId = fieldMap[key];
-                if (fieldId) {
-                    const el = document.getElementById(fieldId);
-                    if (el) {
-                        if (el.type === 'checkbox') el.checked = value.toLowerCase() === 'true';
-                        else el.value = value;
-                    }
-                }
-            }
-        });
-
-        showToast('Configuration imported', 'success');
-    };
-    input.click();
-}
-
-// ═══════════════════════════════════════════════════════════════
-// PROFILES
-// ═══════════════════════════════════════════════════════════════
-
-async function loadProfiles() {
-    try {
-        const response = await fetch('/api/profiles');
-        const profiles = await response.json();
-
-        const listDiv = document.getElementById('profiles-list');
-        if (profiles.length === 0) {
-            listDiv.innerHTML = '<p style="color: var(--text-muted); padding: 1rem;">No profiles saved yet</p>';
-            return;
-        }
-
-        listDiv.innerHTML = profiles.map(profile => {
-            const safeName = escapeHtml(profile.name);
-            const safeNameAttr = safeName.replace(/'/g, "\\'");
-            return `
-            <div class="profile-item">
-                <div>
-                    <strong style="color: var(--accent-cyan);">${safeName}</strong>
-                    <span style="color: var(--text-muted); font-size: 0.8rem; margin-left: 1rem;">
-                        ${escapeHtml(profile.big_model || 'No model')} / ${escapeHtml(profile.middle_model || '-')} / ${escapeHtml(profile.small_model || '-')}
-                    </span>
-                </div>
-                <div>
-                    <button class="btn btn-secondary" style="padding: 0.25rem 0.75rem; font-size: 0.8rem;" onclick="loadProfile('${safeNameAttr}')">Load</button>
-                    <button class="btn btn-danger" style="padding: 0.25rem 0.75rem; font-size: 0.8rem; margin-left: 0.5rem;" onclick="deleteProfile('${safeNameAttr}')">Delete</button>
-                </div>
-            </div>
-        `}).join('');
-    } catch (error) {
-        showToast('Failed to load profiles', 'error');
-        console.error(error);
-    }
-}
-
-async function saveProfile() {
-    const profileName = document.getElementById('new-profile-name').value.trim();
-    if (!profileName) {
-        showToast('Enter a profile name', 'warning');
-        return;
-    }
-
-    const config = {
-        provider_api_key: document.getElementById('provider-api-key').value,
-        provider_base_url: document.getElementById('provider-base-url').value,
-        big_model: document.getElementById('big-model').value,
-        middle_model: document.getElementById('middle-model').value,
-        small_model: document.getElementById('small-model').value,
-        reasoning_effort: document.getElementById('reasoning-effort').value,
-        reasoning_max_tokens: document.getElementById('reasoning-max-tokens').value,
-        model_cascade: document.getElementById('model-cascade')?.checked ? 'true' : 'false',
-        big_cascade: document.getElementById('big-cascade')?.value || '',
-        middle_cascade: document.getElementById('middle-cascade')?.value || '',
-        small_cascade: document.getElementById('small-cascade')?.value || '',
-        model_cascade_daily_limit: document.getElementById('model-cascade-daily-limit')?.value || '1000'
-    };
-
-    try {
-        const response = await fetch('/api/profiles', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: profileName, config })
-        });
-
-        if (response.ok) {
-            showToast(`Profile "${profileName}" saved`, 'success');
-            document.getElementById('new-profile-name').value = '';
-            loadProfiles();
-        } else {
-            showToast('Failed to save profile', 'error');
-        }
-    } catch (error) {
-        showToast('Failed to save profile', 'error');
-        console.error(error);
-    }
-}
-
-async function loadProfile(name) {
-    try {
-        const response = await fetch(`/api/profiles/${encodeURIComponent(name)}`);
-        const profile = await response.json();
-
-        document.getElementById('provider-api-key').value = profile.config.provider_api_key || '';
-        document.getElementById('provider-base-url').value = profile.config.provider_base_url || '';
-        document.getElementById('big-model').value = profile.config.big_model || '';
-        document.getElementById('middle-model').value = profile.config.middle_model || '';
-        document.getElementById('small-model').value = profile.config.small_model || '';
-        document.getElementById('reasoning-effort').value = profile.config.reasoning_effort || '';
-        document.getElementById('reasoning-max-tokens').value = profile.config.reasoning_max_tokens || '';
-        setCheckbox('model-cascade', profile.config.model_cascade || 'false');
-        if (document.getElementById('big-cascade')) document.getElementById('big-cascade').value = profile.config.big_cascade || '';
-        if (document.getElementById('middle-cascade')) document.getElementById('middle-cascade').value = profile.config.middle_cascade || '';
-        if (document.getElementById('small-cascade')) document.getElementById('small-cascade').value = profile.config.small_cascade || '';
-        if (document.getElementById('model-cascade-daily-limit')) document.getElementById('model-cascade-daily-limit').value = profile.config.model_cascade_daily_limit || '1000';
-
-        // Switch to config tab (find and pass the button element)
-        const configBtn = document.querySelector('.tab-button');
-        switchTab('config', configBtn);
-        showToast(`Profile "${name}" loaded`, 'success');
-    } catch (error) {
-        showToast('Failed to load profile', 'error');
-        console.error(error);
-    }
-}
-
-async function deleteProfile(name) {
-    if (!confirm(`Delete profile "${name}"?`)) return;
-
-    try {
-        const response = await fetch(`/api/profiles/${encodeURIComponent(name)}`, { method: 'DELETE' });
-        if (response.ok) {
-            showToast(`Profile "${name}" deleted`, 'success');
-            loadProfiles();
-        } else {
-            showToast('Failed to delete profile', 'error');
-        }
-    } catch (error) {
-        showToast('Failed to delete profile', 'error');
-        console.error(error);
     }
 }
 
@@ -668,42 +380,42 @@ async function loadModels() {
         const response = await fetch('/api/models');
         const payload = await response.json();
         const models = payload.models || payload || [];
-
+        
         const listDiv = document.getElementById('models-list');
         if (!Array.isArray(models) || models.length === 0) {
-            listDiv.innerHTML = '<p style="color: var(--text-muted);">No models available. Check provider connection.</p>';
+            listDiv.innerHTML = '<div class="text-muted">No models available</div>';
             return;
         }
-
-        listDiv.innerHTML = models.slice(0, 50).map(model => {
-            const safeId = escapeHtml(model.id);
-            const safeIdAttr = safeId.replace(/'/g, "\\'");
-            return `
-            <div class="model-item" data-provider="${escapeHtml(model.provider || '')}" onclick="selectModel('${safeIdAttr}')">
-                <div>
-                    <strong style="color: var(--text-primary);">${safeId}</strong>
-                    ${model.context_length ? `<span style="color: var(--text-muted); font-size: 0.8rem; margin-left: 0.5rem;">${(model.context_length / 1000).toFixed(0)}k ctx</span>` : ''}
+        
+        listDiv.innerHTML = models.slice(0, 50).map(model => `
+            <div class="model-item" data-provider="${model.provider || ''}" onclick="selectModel('${escapeHtml(model.id)}')">
+                <div class="model-card-header">
+                    <div class="model-name">${escapeHtml(model.id)}</div>
+                    ${model.pricing && (model.pricing.is_free === true || model.pricing.prompt === '0') ? '<span class="model-badge free">FREE</span>' : ''}
                 </div>
-                <div>
-                    ${model.pricing && (model.pricing.is_free === true || model.pricing.prompt === '0') ? '<span style="color: var(--accent-green); font-size: 0.75rem;">FREE</span>' : ''}
-                </div>
+                ${model.context_length ? `<div class="model-context">${(model.context_length / 1000).toFixed(0)}k context</div>` : ''}
             </div>
-        `}).join('');
+        `).join('');
     } catch (error) {
-        document.getElementById('models-list').innerHTML = '<p style="color: var(--accent-red);">Failed to load models</p>';
-        console.error(error);
+        console.error('Failed to load models:', error);
     }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function filterModels() {
     const searchTerm = document.getElementById('model-search').value.toLowerCase();
     const providerFilter = document.getElementById('model-provider-filter').value.toLowerCase();
-
+    
     document.querySelectorAll('.model-item').forEach(item => {
-        const modelName = item.querySelector('strong').textContent.toLowerCase();
+        const modelName = item.querySelector('.model-name').textContent.toLowerCase();
         const matchesSearch = modelName.includes(searchTerm);
         const matchesProvider = !providerFilter || modelName.includes(providerFilter);
-        item.style.display = (matchesSearch && matchesProvider) ? 'flex' : 'none';
+        item.style.display = (matchesSearch && matchesProvider) ? 'block' : 'none';
     });
 }
 
@@ -713,80 +425,264 @@ function selectModel(modelId) {
 }
 
 async function loadFreeRecommended() {
-    const preview = document.getElementById('free-ranked-preview');
-    if (preview) preview.textContent = 'Loading ranked free models...';
     try {
         const response = await fetch('/api/models/free-recommended?limit=15');
         const payload = await response.json();
         const models = payload.models || [];
-        if (!models.length) {
-            if (preview) preview.textContent = 'No ranked free models available.';
-            return;
-        }
-        if (preview) {
-            preview.innerHTML = models.map((m, i) => {
-                const cls = m.class_type === 'stealth_free' ? 'STEALTH' : 'EVERGREEN';
-                return `${i + 1}. ${escapeHtml(m.id)} [${cls}] score=${m.score}`;
-            }).join('<br/>');
-        }
+        if (!models.length) return;
+        
+        window._freeModels = models.map(m => m.id);
     } catch (error) {
-        if (preview) preview.textContent = 'Failed to load ranked free models.';
-        console.error(error);
-    }
-}
-
-async function loadSelectionHistory() {
-    const preview = document.getElementById('selection-history-preview');
-    if (preview) preview.textContent = 'Loading selection history...';
-    try {
-        const response = await fetch('/api/models/selection-history?limit=15');
-        const payload = await response.json();
-        const events = payload.events || [];
-        if (!events.length) {
-            if (preview) preview.textContent = 'No model selections recorded yet.';
-            return;
-        }
-        if (preview) {
-            preview.innerHTML = events.map((event, i) => {
-                const when = new Date(event.timestamp).toLocaleString();
-                const tier = (event.slot || '').toUpperCase();
-                const source = (event.source || 'unknown').toUpperCase();
-                return `${i + 1}. ${escapeHtml(event.model_id)} [${tier}] (${source}) at ${escapeHtml(when)}`;
-            }).join('<br/>');
-        }
-    } catch (error) {
-        if (preview) preview.textContent = 'Failed to load selection history.';
-        console.error(error);
+        console.error('Failed to load free models:', error);
     }
 }
 
 async function applyFreeCascadeTemplate() {
+    if (!window._freeModels || !window._freeModels.length) {
+        showToast('No free models loaded', 'warning');
+        return;
+    }
+    
+    const models = window._freeModels;
+    if (document.getElementById('model-cascade')) document.getElementById('model-cascade').checked = true;
+    if (document.getElementById('big-cascade')) document.getElementById('big-cascade').value = models.slice(0, 6).join(',');
+    if (document.getElementById('middle-cascade')) document.getElementById('middle-cascade').value = models.slice(0, 6).join(',');
+    if (document.getElementById('small-cascade')) document.getElementById('small-cascade').value = models.slice(0, 6).join(',');
+    
+    showToast('Applied free cascade template', 'success');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODEL SCOUT
+// ═══════════════════════════════════════════════════════════════
+
+async function loadScoutStatus() {
     try {
-        const response = await fetch('/api/models/free-recommended?limit=12');
-        const payload = await response.json();
-        const models = (payload.models || []).map(m => m.id);
-        if (!models.length) {
-            showToast('No free models available for cascade template', 'warning');
+        const response = await fetch('/api/models/scout-status');
+        const status = await response.json();
+        
+        // Update scout status UI if it exists
+        const statusEl = document.getElementById('scout-status');
+        if (statusEl) {
+            if (status.last_sync) {
+                const lastSync = new Date(status.last_sync).toLocaleString();
+                statusEl.innerHTML = `
+                    <div class="text-xs text-muted">
+                        Last sync: ${lastSync}<br>
+                        Free models: ${status.free_models_count || 0}<br>
+                        Total: ${status.total_models_count || 0}
+                    </div>
+                `;
+            } else {
+                statusEl.innerHTML = '<div class="text-xs text-muted">Never synced</div>';
+            }
+        }
+        
+        return status;
+    } catch (error) {
+        console.error('Failed to load scout status:', error);
+        return null;
+    }
+}
+
+async function runScoutSync(force = false) {
+    showToast('Running model scout sync...', 'info');
+    try {
+        const response = await fetch(`/api/models/scout-sync?force=${force}`, { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            showToast(`Synced ${result.models_count} models!`, 'success');
+            loadScoutStatus();
+            loadModels();
+        } else if (result.status === 'skipped') {
+            showToast('Sync skipped (recently synced)', 'info');
+        } else {
+            showToast(`Sync failed: ${result.error}`, 'error');
+        }
+        
+        return result;
+    } catch (error) {
+        showToast('Model scout sync failed', 'error');
+        console.error('Scout sync error:', error);
+        return null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PROFILES
+// ═══════════════════════════════════════════════════════════════
+
+async function loadProfiles() {
+    try {
+        const response = await fetch('/api/profiles');
+        const profiles = await response.json();
+        
+        const listDiv = document.getElementById('profiles-list');
+        if (profiles.length === 0) {
+            listDiv.innerHTML = '<div class="text-muted">No profiles saved yet</div>';
             return;
         }
-        const big = document.getElementById('big-model')?.value || '';
-        const middle = document.getElementById('middle-model')?.value || '';
-        const small = document.getElementById('small-model')?.value || '';
-        const bigChain = models.filter(m => m !== big).slice(0, 6);
-        const midChain = models.filter(m => m !== middle).slice(0, 6);
-        const smallChain = models.filter(m => m !== small).slice(0, 6);
-
-        if (document.getElementById('model-cascade')) document.getElementById('model-cascade').checked = true;
-        if (document.getElementById('big-cascade')) document.getElementById('big-cascade').value = bigChain.join(',');
-        if (document.getElementById('middle-cascade')) document.getElementById('middle-cascade').value = midChain.join(',');
-        if (document.getElementById('small-cascade')) document.getElementById('small-cascade').value = smallChain.join(',');
-
-        showToast('Applied free cascade template', 'success');
-        loadFreeRecommended();
+        
+        listDiv.innerHTML = profiles.map(profile => `
+            <div class="profile-card">
+                <div class="profile-header">
+                    <div class="profile-name">${escapeHtml(profile.name)}</div>
+                    <div class="profile-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="loadProfile('${escapeHtml(profile.name)}')">Load</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteProfile('${escapeHtml(profile.name)}')">×</button>
+                    </div>
+                </div>
+                <div class="profile-models">
+                    <div class="profile-model-item">
+                        <span class="profile-model-tier big">BIG</span>
+                        <span class="profile-model-name">${escapeHtml(profile.config?.big_model || '—')}</span>
+                    </div>
+                    <div class="profile-model-item">
+                        <span class="profile-model-tier middle">MID</span>
+                        <span class="profile-model-name">${escapeHtml(profile.config?.middle_model || '—')}</span>
+                    </div>
+                    <div class="profile-model-item">
+                        <span class="profile-model-tier small">SML</span>
+                        <span class="profile-model-name">${escapeHtml(profile.config?.small_model || '—')}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
     } catch (error) {
-        showToast('Failed to apply free cascade template', 'error');
-        console.error(error);
+        console.error('Failed to load profiles:', error);
     }
+}
+
+async function saveProfile() {
+    const profileName = document.getElementById('new-profile-name').value.trim();
+    if (!profileName) {
+        showToast('Enter a profile name', 'warning');
+        return;
+    }
+    
+    const config = {
+        provider_api_key: document.getElementById('provider-api-key').value,
+        provider_base_url: document.getElementById('provider-base-url').value,
+        big_model: document.getElementById('big-model').value,
+        middle_model: document.getElementById('middle-model').value,
+        small_model: document.getElementById('small-model').value
+    };
+    
+    try {
+        const response = await fetch('/api/profiles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: profileName, config })
+        });
+        
+        if (response.ok) {
+            showToast(`Profile "${profileName}" saved`, 'success');
+            document.getElementById('new-profile-name').value = '';
+            loadProfiles();
+        } else {
+            showToast('Failed to save profile', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to save profile', 'error');
+    }
+}
+
+async function loadProfile(name) {
+    try {
+        const response = await fetch(`/api/profiles/${encodeURIComponent(name)}`);
+        const profile = await response.json();
+        
+        document.getElementById('provider-api-key').value = profile.config.provider_api_key || '';
+        document.getElementById('provider-base-url').value = profile.config.provider_base_url || '';
+        document.getElementById('big-model').value = profile.config.big_model || '';
+        document.getElementById('middle-model').value = profile.config.middle_model || '';
+        document.getElementById('small-model').value = profile.config.small_model || '';
+        
+        showToast(`Profile "${name}" loaded`, 'success');
+    } catch (error) {
+        showToast('Failed to load profile', 'error');
+    }
+}
+
+async function deleteProfile(name) {
+    if (!confirm(`Delete profile "${name}"?`)) return;
+    
+    try {
+        const response = await fetch(`/api/profiles/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        if (response.ok) {
+            showToast(`Profile "${name}" deleted`, 'success');
+            loadProfiles();
+        } else {
+            showToast('Failed to delete profile', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to delete profile', 'error');
+    }
+}
+
+function exportConfig() {
+    const fields = [
+        ['PROVIDER_API_KEY', 'provider-api-key'],
+        ['PROVIDER_BASE_URL', 'provider-base-url'],
+        ['BIG_MODEL', 'big-model'],
+        ['MIDDLE_MODEL', 'middle-model'],
+        ['SMALL_MODEL', 'small-model']
+    ];
+    
+    const envContent = fields
+        .map(([key, id]) => {
+            const el = document.getElementById(id);
+            const value = el ? el.value : '';
+            return value ? `${key}="${value}"` : null;
+        })
+        .filter(Boolean)
+        .join('\n');
+    
+    const blob = new Blob([envContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'config.env';
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showToast('Configuration exported', 'success');
+}
+
+function importConfig() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.env,.txt';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const text = await file.text();
+        const lines = text.split('\n');
+        
+        lines.forEach(line => {
+            const match = line.match(/^([A-Z_]+)="?([^"]*)"?$/);
+            if (match) {
+                const [, key, value] = match;
+                const fieldMap = {
+                    'PROVIDER_API_KEY': 'provider-api-key',
+                    'PROVIDER_BASE_URL': 'provider-base-url',
+                    'BIG_MODEL': 'big-model',
+                    'MIDDLE_MODEL': 'middle-model',
+                    'SMALL_MODEL': 'small-model'
+                };
+                const fieldId = fieldMap[key];
+                if (fieldId) {
+                    const el = document.getElementById(fieldId);
+                    if (el) el.value = value;
+                }
+            }
+        });
+        
+        showToast('Configuration imported', 'success');
+    };
+    input.click();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -797,71 +693,114 @@ async function refreshStats() {
     try {
         const response = await fetch('/api/stats');
         const stats = await response.json();
-
-        document.getElementById('requests-today').textContent = stats.requests_today || '0';
-        document.getElementById('total-tokens').textContent = stats.total_tokens ? stats.total_tokens.toLocaleString() : '0';
-        document.getElementById('est-cost').textContent = stats.est_cost ? `$${stats.est_cost.toFixed(2)}` : '$0.00';
-        document.getElementById('avg-latency').textContent = stats.avg_latency ? `${stats.avg_latency}ms` : '-';
+        
+        // Dashboard page
+        const dashRequests = document.getElementById('dash-requests');
+        if (dashRequests) dashRequests.textContent = stats.requests_today || '0';
+        
+        const dashLatency = document.getElementById('dash-latency');
+        if (dashLatency) dashLatency.textContent = stats.avg_latency || '—';
+        
+        const dashCost = document.getElementById('dash-cost');
+        if (dashCost) dashCost.textContent = stats.est_cost ? `$${stats.est_cost.toFixed(2)}` : '$0.00';
+        
+        const dashSuccess = document.getElementById('dash-success');
+        if (dashSuccess) dashSuccess.textContent = '100%';
+        
+        // Monitor page
+        const monRequests = document.getElementById('mon-requests');
+        if (monRequests) monRequests.textContent = stats.requests_today || '0';
+        
+        const monTokens = document.getElementById('mon-tokens');
+        if (monTokens) monTokens.textContent = stats.total_tokens ? stats.total_tokens.toLocaleString() : '0';
+        
+        const monCost = document.getElementById('mon-cost');
+        if (monCost) monCost.textContent = stats.est_cost ? `$${stats.est_cost.toFixed(2)}` : '$0.00';
+        
+        const monLatency = document.getElementById('mon-latency');
+        if (monLatency) monLatency.textContent = stats.avg_latency ? `${stats.avg_latency}ms` : '—';
+        
         const cascade = stats.cascade || {};
         const switches = cascade.switches ?? 0;
         const successRate = cascade.success_rate ?? 0;
-        if (document.getElementById('cascade-switches')) {
-            document.getElementById('cascade-switches').textContent = String(switches);
+        
+        const monSwitches = document.getElementById('mon-cascade-switches');
+        if (monSwitches) monSwitches.textContent = String(switches);
+        
+        const monSuccess = document.getElementById('mon-cascade-success');
+        if (monSuccess) monSuccess.textContent = `${successRate}%`;
+        
+        const monSummary = document.getElementById('mon-cascade-summary');
+        if (monSummary) {
+            monSummary.textContent = cascade.total_events ? 
+                `Cascade: ${cascade.total_events} events, ${switches} switches` : 
+                'No cascade events yet';
         }
-        if (document.getElementById('cascade-success-rate')) {
-            document.getElementById('cascade-success-rate').textContent = `${successRate}%`;
-        }
-
-        const summaryEl = document.getElementById('cascade-summary');
-        if (summaryEl) {
-            const reasons = cascade.reasons || {};
-            const reasonRows = Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 3);
-            if (!cascade.total_events) {
-                summaryEl.textContent = 'Cascade telemetry: no events yet.';
-            } else if (!reasonRows.length) {
-                summaryEl.textContent = `Cascade telemetry: ${cascade.total_events} events, ${switches} switches.`;
-            } else {
-                const topReasons = reasonRows.map(([reason, count]) => `${reason}(${count})`).join(', ');
-                summaryEl.textContent = `Cascade telemetry: ${cascade.total_events} events, ${switches} switches. Top reasons: ${topReasons}`;
+        
+        // Recent requests
+        if (stats.recent_requests) {
+            const requestsDiv = document.getElementById('mon-recent-requests');
+            if (requestsDiv) {
+                requestsDiv.innerHTML = stats.recent_requests.map(req => `
+                    <div class="activity-item">
+                        <div class="activity-icon ${req.status === 'success' ? 'success' : 'error'}">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                ${req.status === 'success' ? '<polyline points="20 6 9 17 4 12"/>' : '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'}
+                            </svg>
+                        </div>
+                        <div class="activity-content">
+                            <div class="activity-title">${escapeHtml(req.model || 'Unknown')}</div>
+                            <div class="activity-meta">${req.tokens || 0} tokens · ${req.duration || 0}ms</div>
+                        </div>
+                    </div>
+                `).join('');
             }
         }
-
-        if (stats.recent_requests) {
-            const requestsDiv = document.getElementById('recent-requests');
-            requestsDiv.innerHTML = stats.recent_requests.map(req => `
-                <div class="request-item">
-                    <span style="color: var(--accent-cyan);">${req.model}</span>
-                    <span style="color: ${req.status === 'success' ? 'var(--accent-green)' : 'var(--accent-red)'};">
-                        ${req.tokens || '-'} tokens | ${req.duration || '-'}ms
-                    </span>
-                </div>
-            `).join('');
-        }
+        
+        // Update activity feed
+        updateActivityFeed(stats.recent_requests || []);
+        
     } catch (error) {
         console.error('Failed to load stats:', error);
     }
 }
 
-async function checkProviderHealth() {
-    const healthEl = document.getElementById('main-provider-health');
-    healthEl.textContent = '⏳ Checking...';
-    healthEl.style.color = 'var(--accent-amber)';
-
-    try {
-        const response = await fetch('/api/test-connection', { method: 'POST' });
-        const result = await response.json();
-
-        if (result.success) {
-            healthEl.textContent = '● Healthy';
-            healthEl.style.color = 'var(--accent-green)';
-        } else {
-            healthEl.textContent = '● Unhealthy';
-            healthEl.style.color = 'var(--accent-red)';
-        }
-    } catch (error) {
-        healthEl.textContent = '● Error';
-        healthEl.style.color = 'var(--accent-red)';
+function updateActivityFeed(requests) {
+    const feed = document.getElementById('activity-feed');
+    if (!feed) return;
+    
+    if (!requests || requests.length === 0) {
+        feed.innerHTML = `
+            <div class="activity-item">
+                <div class="activity-icon pending">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div class="activity-content">
+                    <div class="activity-title">No recent activity</div>
+                    <div class="activity-meta">Waiting for requests...</div>
+                </div>
+            </div>
+        `;
+        return;
     }
+    
+    feed.innerHTML = requests.slice(0, 5).map(req => `
+        <div class="activity-item">
+            <div class="activity-icon ${req.status === 'success' ? 'success' : 'error'}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    ${req.status === 'success' ? '<polyline points="20 6 9 17 4 12"/>' : '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'}
+                </svg>
+            </div>
+            <div class="activity-content">
+                <div class="activity-title">${escapeHtml(req.model || 'Unknown')}</div>
+                <div class="activity-meta">${req.tokens || 0} tokens · ${req.duration || 0}ms</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function refreshActivity() {
+    refreshStats();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -874,33 +813,31 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 
 function connectWebSocket() {
     if (logsWebSocket && logsWebSocket.readyState === WebSocket.OPEN) return;
-
+    
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
-
+    
     try {
         logsWebSocket = new WebSocket(wsUrl);
-
+        
         logsWebSocket.onopen = () => {
             wsReconnectAttempts = 0;
             addLogEntry('[Connected to log stream]', 'success');
         };
-
+        
         logsWebSocket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             addLogEntry(data.message, data.level || 'info');
         };
-
+        
         logsWebSocket.onclose = () => {
             addLogEntry('[Disconnected from log stream]', 'warning');
-            // Auto-reconnect with exponential backoff
             if (wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                 wsReconnectAttempts++;
-                const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000);
-                setTimeout(connectWebSocket, delay);
+                setTimeout(connectWebSocket, Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000));
             }
         };
-
+        
         logsWebSocket.onerror = () => {
             addLogEntry('[WebSocket error - logs unavailable]', 'error');
         };
@@ -911,23 +848,28 @@ function connectWebSocket() {
 
 function addLogEntry(message, level = 'info') {
     const logsDiv = document.getElementById('live-logs');
+    if (!logsDiv) return;
+    
     const colors = {
-        info: 'var(--accent-cyan)',
-        warning: 'var(--accent-amber)',
-        error: 'var(--accent-red)',
-        success: 'var(--accent-green)'
+        info: 'var(--info)',
+        warning: 'var(--warning)',
+        error: 'var(--error)',
+        success: 'var(--success)'
     };
-
+    
     const timestamp = new Date().toLocaleTimeString();
     const entry = document.createElement('div');
-    entry.style.color = colors[level] || 'var(--text-primary)';
-    entry.textContent = `[${timestamp}] ${message}`;
+    entry.className = 'log-entry';
+    entry.innerHTML = `
+        <span class="log-timestamp">${timestamp}</span>
+        <span class="log-level ${level}" style="color: ${colors[level]}">${level.toUpperCase()}</span>
+        <span class="log-message">${escapeHtml(message)}</span>
+    `;
     entry.dataset.level = level;
-
+    
     logsDiv.appendChild(entry);
     logsDiv.scrollTop = logsDiv.scrollHeight;
-
-    // Limit to 100 entries
+    
     while (logsDiv.children.length > 100) {
         logsDiv.removeChild(logsDiv.firstChild);
     }
@@ -935,18 +877,20 @@ function addLogEntry(message, level = 'info') {
 
 function clearLogs() {
     const logsDiv = document.getElementById('live-logs');
-    logsDiv.innerHTML = '<div style="color: var(--text-muted);">[Logs cleared]</div>';
+    if (logsDiv) {
+        logsDiv.innerHTML = '<div class="log-entry"><span class="log-timestamp">—</span><span class="log-level info">INFO</span><span class="log-message">[Logs cleared]</span></div>';
+    }
 }
 
 function filterLogs() {
-    const filterText = document.getElementById('log-filter').value.toLowerCase();
-    const levelFilter = document.getElementById('log-level-filter').value.toLowerCase();
-
-    document.querySelectorAll('#live-logs > div').forEach(entry => {
+    const filterText = document.getElementById('log-filter')?.value.toLowerCase() || '';
+    const levelFilter = document.getElementById('log-level-filter')?.value.toLowerCase() || '';
+    
+    document.querySelectorAll('#live-logs > .log-entry').forEach(entry => {
         const text = entry.textContent.toLowerCase();
         const matchesText = !filterText || text.includes(filterText);
         const matchesLevel = !levelFilter || entry.dataset.level === levelFilter;
-        entry.style.display = (matchesText && matchesLevel) ? 'block' : 'none';
+        entry.style.display = (matchesText && matchesLevel) ? 'flex' : 'none';
     });
 }
 
@@ -957,7 +901,12 @@ function filterLogs() {
 window.addEventListener('DOMContentLoaded', () => {
     checkProxyStatus();
     loadConfig();
-
+    refreshStats();
+    loadScoutStatus();
+    
     // Refresh status every 30 seconds
     setInterval(checkProxyStatus, 30000);
+    
+    // Refresh stats every 10 seconds
+    setInterval(refreshStats, 10000);
 });

@@ -10,6 +10,7 @@ from src.services.providers.provider_detector import (
     NormalizationLevel,
     get_normalization_level,
 )
+from src.services.conversion.tool_behavior_cache import record_tool_argument_style
 
 # Debug flag for SSE tracing - enable to diagnose tool call streaming issues
 DEBUG_SSE = os.getenv("DEBUG_SSE", "false").lower() == "true"
@@ -18,6 +19,11 @@ sse_logger = logging.getLogger("sse_debug")
 # Compiled regex for fixing numeric params returned as strings in streaming JSON
 # Matches: "timeout":"120" and converts to "timeout":120
 _NUMERIC_PARAM_RE = re.compile(r'"(timeout|offset|limit|cell_number)"\s*:\s*"(\d+)"')
+
+# Tool-call text extraction (models that emit tool calls as plain text)
+_TOOL_CALL_BLOCK_RE = re.compile(
+    r"<tool_call>(.*?)</tool_call>", re.IGNORECASE | re.DOTALL
+)
 
 
 def _coerce_int_fields(arguments: dict, fields: list) -> dict:
@@ -85,6 +91,94 @@ def _normalize_tool_name(tool_name: str, provider: str = "gemini") -> str:
     return name_mappings.get(tool_name_lower, tool_name)
 
 
+def _extract_tool_calls_from_text(
+    buffer: str,
+) -> tuple[str, list[dict]]:
+    """
+    Extract tool calls from text-based tool_call markup.
+
+    Returns:
+        (remaining_text, tool_calls)
+        tool_calls: list of {name: str, arguments: dict}
+    """
+    tool_calls = []
+    remaining = buffer
+
+    for match in _TOOL_CALL_BLOCK_RE.finditer(buffer):
+        block = match.group(1)
+
+        # Extract tool name
+        name = None
+        name_match = re.search(
+            r'<function\s*=\s*"?([A-Za-z0-9_ -]+)"?\s*>',
+            block,
+            re.IGNORECASE,
+        )
+        if not name_match:
+            name_match = re.search(
+                r"<function\s+name=\"([^\"]+)\"\s*>",
+                block,
+                re.IGNORECASE,
+            )
+        if not name_match:
+            name_match = re.search(
+                r"<function>\s*([^<]+)\s*</function>",
+                block,
+                re.IGNORECASE,
+            )
+        if name_match:
+            name = name_match.group(1).strip()
+
+        if not name:
+            continue
+
+        # Extract arguments
+        args_text = None
+        params_match = re.search(
+            r"<parameters>\s*(.*?)\s*</parameters>",
+            block,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if params_match:
+            args_text = params_match.group(1)
+        else:
+            json_match = re.search(r"({.*})", block, re.DOTALL)
+            if json_match:
+                args_text = json_match.group(1)
+
+        if not args_text:
+            continue
+
+        try:
+            arguments = json.loads(args_text)
+        except json.JSONDecodeError:
+            continue
+
+        tool_calls.append({"name": name, "arguments": arguments})
+
+    # Strip extracted blocks from buffer
+    if tool_calls:
+        remaining = _TOOL_CALL_BLOCK_RE.sub("", buffer)
+
+    return remaining, tool_calls
+
+
+def _build_tool_use_delta_event(index: int, arguments: dict) -> str:
+    """Build a Claude input_json_delta SSE event for a parsed tool call."""
+    payload = {
+        "type": Constants.EVENT_CONTENT_BLOCK_DELTA,
+        "index": index,
+        "delta": {
+            "type": Constants.DELTA_INPUT_JSON,
+            "partial_json": json.dumps(arguments, ensure_ascii=False),
+        },
+    }
+    return (
+        f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\n"
+        f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+    )
+
+
 def normalize_tool_arguments(
     tool_name: str, arguments: dict, provider: str = "gemini"
 ) -> dict:
@@ -145,6 +239,11 @@ def _light_normalize(tool_name: str, arguments: dict) -> dict:
     if tool_name_lower in ["bash", "repl"]:
         if "prompt" in arguments and "command" not in arguments:
             arguments["command"] = arguments.pop("prompt")
+            import logging
+
+            logging.getLogger("response_converter").warning(
+                f"⚠️ NORMALIZED {tool_name}: prompt -> command"
+            )
         _coerce_int_fields(arguments, ["timeout"])
 
     # Read: Common path variants
@@ -465,7 +564,21 @@ def convert_openai_to_claude_response(
     # Extract response data with validation
     choices = openai_response.get("choices", [])
     if not choices:
-        raise HTTPException(status_code=500, detail="No choices in OpenAI response")
+        # Check for error fields in response
+        error_msg = openai_response.get("error", {})
+        if error_msg:
+            detail = error_msg.get("message", "No choices in OpenAI response")
+            raise HTTPException(status_code=500, detail=f"OpenAI error: {detail}")
+        # Log full response for debugging
+        import logging
+
+        logging.getLogger("response_converter").warning(
+            f"Empty choices in OpenAI response: {openai_response.get('id', 'unknown')}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="No choices in OpenAI response - possible rate limiting. Try again.",
+        )
 
     if not isinstance(choices, list):
         raise HTTPException(
@@ -501,6 +614,7 @@ def convert_openai_to_claude_response(
             # Normalize tool name first, then arguments
             original_tool_name = function_data.get("name", "")
             tool_name = _normalize_tool_name(original_tool_name, provider)
+            record_tool_argument_style(provider, tool_name, arguments)
             arguments = normalize_tool_arguments(tool_name, arguments, provider)
 
             content_blocks.append(
@@ -582,6 +696,9 @@ async def convert_openai_streaming_to_claude(
 
     # Track usage if available
     usage_data = {"input_tokens": 0, "output_tokens": 0}
+    tool_text_buffer = ""
+    tool_text_mode = False
+    tool_text_parsed_any = False
 
     try:
         async for line in openai_stream:
@@ -626,16 +743,52 @@ async def convert_openai_streaming_to_claude(
                     # Handle standard text content
                     text_content = delta.get("content")
                     if text_content is not None:
-                        # Switch to text block if not already
-                        if current_block_type != "text":
-                            if current_block_index >= 0:
-                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+                        if tool_text_mode or "<tool_call>" in text_content:
+                            tool_text_mode = True
+                            tool_text_buffer += text_content
+                            tool_text_buffer, extracted_calls = (
+                                _extract_tool_calls_from_text(tool_text_buffer)
+                            )
+                            if extracted_calls:
+                                tool_text_parsed_any = True
+                                if current_block_type in ["thinking", "text"]:
+                                    if current_block_index >= 0:
+                                        yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+                                    current_block_index = -1
+                                    current_block_type = None
 
-                            current_block_index += 1
-                            current_block_type = "text"
-                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"
+                                for call in extracted_calls:
+                                    tool_name = _normalize_tool_name(
+                                        call["name"], provider
+                                    )
+                                    record_tool_argument_style(
+                                        provider, tool_name, call["arguments"]
+                                    )
+                                    normalized_args = normalize_tool_arguments(
+                                        tool_name, call["arguments"], provider
+                                    )
+                                    current_block_index += 1
+                                    tool_call_id = f"tool_{uuid.uuid4().hex[:24]}"
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call_id, 'name': tool_name}}, ensure_ascii=False)}\n\n"
+                                    yield _build_tool_use_delta_event(
+                                        current_block_index, normalized_args
+                                    )
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+                                    current_block_index = -1
+                                    current_block_type = None
 
-                        yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': text_content}}, ensure_ascii=False)}\n\n"
+                                final_stop_reason = Constants.STOP_TOOL_USE
+                        else:
+                            # Switch to text block if not already
+                            if current_block_type != "text":
+                                if current_block_index >= 0:
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+
+                                current_block_index += 1
+                                current_block_type = "text"
+                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"
+
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': text_content}}, ensure_ascii=False)}\n\n"
 
                     # Handle tool call deltas - SIMPLIFIED LOGIC (Restored from working version)
                     if "tool_calls" in delta and delta["tool_calls"]:
@@ -709,7 +862,9 @@ async def convert_openai_streaming_to_claude(
                                 f"SSE: finish_reason={finish_reason} current_block_index={current_block_index} current_block_type={current_block_type}"
                             )
 
-                        if finish_reason == "length":
+                        if tool_text_parsed_any:
+                            final_stop_reason = Constants.STOP_TOOL_USE
+                        elif finish_reason == "length":
                             final_stop_reason = Constants.STOP_MAX_TOKENS
                         elif finish_reason in ["tool_calls", "function_call"]:
                             final_stop_reason = Constants.STOP_TOOL_USE
@@ -724,24 +879,27 @@ async def convert_openai_streaming_to_claude(
                             for tc_index, tool_call in current_tool_calls.items():
                                 if tool_call["started"] and tool_call["name"]:
                                     try:
-                                        # Parse the accumulated args_buffer
-                                        if tool_call["args_buffer"]:
-                                            complete_args = json.loads(
-                                                tool_call["args_buffer"]
+                                        if not tool_call["args_buffer"]:
+                                            continue
+                                        complete_args = json.loads(
+                                            tool_call["args_buffer"]
+                                        )
+                                        tool_name = _normalize_tool_name(
+                                            tool_call["name"], provider
+                                        )
+                                        record_tool_argument_style(
+                                            provider, tool_name, complete_args
+                                        )
+                                        normalized_args = normalize_tool_arguments(
+                                            tool_name,
+                                            complete_args,
+                                            provider,
+                                        )
+                                        if DEBUG_SSE:
+                                            sse_logger.info(
+                                                f"Normalized args for '{tool_name}': {normalized_args}"
                                             )
-                                            normalized_args = normalize_tool_arguments(
-                                                tool_call["name"],
-                                                complete_args,
-                                                provider,
-                                            )
-                                            if DEBUG_SSE:
-                                                sse_logger.info(
-                                                    f"Normalized args for '{tool_call['name']}': {normalized_args}"
-                                                )
-                                            # Store normalized args back in the tool call for potential use
-                                            tool_call["normalized_args"] = (
-                                                normalized_args
-                                            )
+                                        tool_call["normalized_args"] = normalized_args
                                     except json.JSONDecodeError as e:
                                         if DEBUG_SSE:
                                             sse_logger.warning(
@@ -778,12 +936,23 @@ async def convert_openai_streaming_to_claude(
         return
 
     # Send final SSE events
+    if tool_text_mode and not tool_text_parsed_any and tool_text_buffer.strip():
+        # Fallback: emit buffered text if we never parsed a tool call
+        if current_block_type != "text":
+            if current_block_index >= 0:
+                yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+            current_block_index += 1
+            current_block_type = "text"
+            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"
+
+        yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': tool_text_buffer}}, ensure_ascii=False)}\n\n"
+
     if current_block_index >= 0 and current_block_type is not None:
         yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
 
     if DEBUG_SSE:
         sse_logger.info(
-            f"SSE: message_delta stop_reason={final_stop_reason} usage={usage_data}"
+            f"SSE: Stream ended normally. stop_reason={final_stop_reason} usage={usage_data}"
         )
 
     yield f"event: {Constants.EVENT_MESSAGE_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_MESSAGE_DELTA, 'delta': {'stop_reason': final_stop_reason, 'stop_sequence': None}, 'usage': usage_data}, ensure_ascii=False)}\n\n"
@@ -840,6 +1009,9 @@ async def convert_openai_streaming_to_claude_with_cancellation(
 
     final_stop_reason = Constants.STOP_END_TURN
     usage_data = {"input_tokens": 0, "output_tokens": 0}
+    tool_text_buffer = ""
+    tool_text_mode = False
+    tool_text_parsed_any = False
 
     try:
         async for line in openai_stream:
@@ -853,6 +1025,10 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                 if line.startswith("data: "):
                     chunk_data = line[6:]
                     if chunk_data.strip() == "[DONE]":
+                        if DEBUG_SSE:
+                            sse_logger.info(
+                                "SSE: Received [DONE] signal, stream ending normally"
+                            )
                         break
 
                     try:
@@ -907,21 +1083,57 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                     text_content = delta.get("content")
                     # Only process if content is non-empty (skip null/empty during tool calls)
                     if text_content:
-                        # Switch to text block if not already
-                        if current_block_type != "text":
-                            if current_block_index >= 0:
-                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
-
-                            current_block_index += 1
-                            current_block_type = "text"
-                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"
-
-                        yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': text_content}}, ensure_ascii=False)}\n\n"
-                        # Only log non-empty text content to avoid spam
-                        if text_content.strip():
-                            logger.debug(
-                                f"STREAM: text delta idx={current_block_index}, text='{text_content[:30]}'"
+                        if tool_text_mode or "<tool_call>" in text_content:
+                            tool_text_mode = True
+                            tool_text_buffer += text_content
+                            tool_text_buffer, extracted_calls = (
+                                _extract_tool_calls_from_text(tool_text_buffer)
                             )
+                            if extracted_calls:
+                                tool_text_parsed_any = True
+                                if current_block_type in ["thinking", "text"]:
+                                    if current_block_index >= 0:
+                                        yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+                                    current_block_index = -1
+                                    current_block_type = None
+
+                                for call in extracted_calls:
+                                    tool_name = _normalize_tool_name(
+                                        call["name"], provider
+                                    )
+                                    record_tool_argument_style(
+                                        provider, tool_name, call["arguments"]
+                                    )
+                                    normalized_args = normalize_tool_arguments(
+                                        tool_name, call["arguments"], provider
+                                    )
+                                    current_block_index += 1
+                                    tool_call_id = f"tool_{uuid.uuid4().hex[:24]}"
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call_id, 'name': tool_name}}, ensure_ascii=False)}\n\n"
+                                    yield _build_tool_use_delta_event(
+                                        current_block_index, normalized_args
+                                    )
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+                                    current_block_index = -1
+                                    current_block_type = None
+
+                                final_stop_reason = Constants.STOP_TOOL_USE
+                        else:
+                            # Switch to text block if not already
+                            if current_block_type != "text":
+                                if current_block_index >= 0:
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+
+                                current_block_index += 1
+                                current_block_type = "text"
+                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"
+
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': text_content}}, ensure_ascii=False)}\n\n"
+                            # Only log non-empty text content to avoid spam
+                            if text_content.strip():
+                                logger.debug(
+                                    f"STREAM: text delta idx={current_block_index}, text='{text_content[:30]}'"
+                                )
 
                     # Handle tool call deltas - ID-BASED DEDUPLICATION LOGIC
                     if "tool_calls" in delta and delta["tool_calls"]:
@@ -1094,7 +1306,9 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                                 f"SSE[cancel]: finish_reason={finish_reason} current_block_index={current_block_index}"
                             )
 
-                        if finish_reason == "length":
+                        if tool_text_parsed_any:
+                            final_stop_reason = Constants.STOP_TOOL_USE
+                        elif finish_reason == "length":
                             final_stop_reason = Constants.STOP_MAX_TOKENS
                         elif finish_reason in ["tool_calls", "function_call"]:
                             final_stop_reason = Constants.STOP_TOOL_USE
@@ -1109,24 +1323,27 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                             for tc_index, tool_call in current_tool_calls.items():
                                 if tool_call.get("name"):
                                     try:
-                                        # Parse the accumulated args_buffer
-                                        if tool_call["args_buffer"]:
-                                            complete_args = json.loads(
-                                                tool_call["args_buffer"]
+                                        if not tool_call["args_buffer"]:
+                                            continue
+                                        complete_args = json.loads(
+                                            tool_call["args_buffer"]
+                                        )
+                                        tool_name = _normalize_tool_name(
+                                            tool_call["name"], provider
+                                        )
+                                        record_tool_argument_style(
+                                            provider, tool_name, complete_args
+                                        )
+                                        normalized_args = normalize_tool_arguments(
+                                            tool_name,
+                                            complete_args,
+                                            provider,
+                                        )
+                                        if DEBUG_SSE:
+                                            sse_logger.info(
+                                                f"Normalized args for '{tool_name}': {normalized_args}"
                                             )
-                                            normalized_args = normalize_tool_arguments(
-                                                tool_call["name"],
-                                                complete_args,
-                                                provider,
-                                            )
-                                            if DEBUG_SSE:
-                                                sse_logger.info(
-                                                    f"Normalized args for '{tool_call['name']}': {normalized_args}"
-                                                )
-                                            # Store normalized args back in the tool call
-                                            tool_call["normalized_args"] = (
-                                                normalized_args
-                                            )
+                                        tool_call["normalized_args"] = normalized_args
                                     except json.JSONDecodeError as e:
                                         if DEBUG_SSE:
                                             sse_logger.warning(
@@ -1189,12 +1406,23 @@ async def convert_openai_streaming_to_claude_with_cancellation(
         return
 
     # Send final SSE events
+    if tool_text_mode and not tool_text_parsed_any and tool_text_buffer.strip():
+        # Fallback: emit buffered text if we never parsed a tool call
+        if current_block_type != "text":
+            if current_block_index >= 0:
+                yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+            current_block_index += 1
+            current_block_type = "text"
+            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"
+
+        yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': tool_text_buffer}}, ensure_ascii=False)}\n\n"
+
     if current_block_index >= 0:
         yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
 
     if DEBUG_SSE:
         sse_logger.info(
-            f"SSE[cancel]: message_delta stop_reason={final_stop_reason} usage={usage_data}"
+            f"SSE[cancel]: Stream ended normally. stop_reason={final_stop_reason} usage={usage_data}"
         )
 
     yield f"event: {Constants.EVENT_MESSAGE_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_MESSAGE_DELTA, 'delta': {'stop_reason': final_stop_reason, 'stop_sequence': None}, 'usage': usage_data}, ensure_ascii=False)}\n\n"

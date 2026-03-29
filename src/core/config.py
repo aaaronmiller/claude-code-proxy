@@ -111,6 +111,7 @@ class Config:
         legacy_openai_key = os.environ.get("OPENAI_API_KEY")
         legacy_openai_url = os.environ.get("OPENAI_BASE_URL")
         legacy_anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        enable_legacy_proxy_auth = os.environ.get("ENABLE_LEGACY_PROXY_AUTH", "false").lower() == "true"
 
         # Determine which values to use (new takes precedence)
         if provider_api_key:
@@ -132,7 +133,7 @@ class Config:
 
         if proxy_auth_key:
             self.anthropic_api_key = proxy_auth_key
-        elif legacy_anthropic_key:
+        elif legacy_anthropic_key and enable_legacy_proxy_auth:
             self.anthropic_api_key = legacy_anthropic_key
             # print("⚠️  DEPRECATION WARNING: ANTHROPIC_API_KEY is deprecated. Use PROXY_AUTH_KEY instead.")
             # print("   This variable is for proxy authentication, NOT for Anthropic's API.")

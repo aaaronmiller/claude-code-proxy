@@ -1,0 +1,43 @@
+{
+  "generated_at": "2026-03-24T20:10:38.246022+00:00",
+  "smartest": [],
+  "coding": [],
+  "free": [
+    {
+      "id": "nvidia/nemotron-3-super-120b-a12b:free",
+      "name": "NVIDIA: Nemotron 3 Super (free)",
+      "intelligence_score": 0.0,
+      "context_length": 262144,
+      "throughput_tps": null
+    },
+    {
+      "id": "qwen/qwen3-next-80b-a3b-instruct:free",
+      "name": "Qwen: Qwen3 Next 80B A3B Instruct (free)",
+      "intelligence_score": 0.0,
+      "context_length": 262144,
+      "throughput_tps": null
+    },
+    {
+      "id": "qwen/qwen3-coder:free",
+      "name": "Qwen: Qwen3 Coder 480B A35B (free)",
+      "intelligence_score": 0.0,
+      "context_length": 262000,
+      "throughput_tps": null
+    },
+    {
+      "id": "stepfun/step-3.5-flash:free",
+      "name": "StepFun: Step 3.5 Flash (free)",
+      "intelligence_score": 0.0,
+      "context_length": 256000,
+      "throughput_tps": null
+    },
+    {
+      "id": "nvidia/nemotron-3-nano-30b-a3b:free",
+      "name": "NVIDIA: Nemotron 3 Nano 30B A3B (free)",
+      "intelligence_score": 0.0,
+      "context_length": 256000,
+      "throughput_tps": null
+    }
+  ],
+  "value": []
+}

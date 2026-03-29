@@ -768,6 +768,58 @@ async def refresh_model_catalog():
         return {"success": False, "error": str(e)}
 
 
+@router.post("/api/models/scout-sync")
+async def scout_sync_models(force: bool = False):
+    """
+    Run model-scraper to sync OpenRouter models.
+
+    Args:
+        force: Force sync even if recently synced
+
+    Returns:
+        Sync status and results
+    """
+    try:
+        from src.services.openrouter_model_scout.integration import get_model_scout
+
+        scout = get_model_scout()
+        result = await scout.run_sync(force=force)
+
+        # Reload proxy catalog
+        from src.services.models.model_catalog import model_catalog
+
+        model_catalog.reload()
+
+        return result
+    except Exception as e:
+        logger.error(f"Model scout sync failed: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+@router.get("/api/models/scout-status")
+async def get_scout_status():
+    """
+    Get model-scraper status and cached data.
+    """
+    try:
+        from src.services.openrouter_model_scout.integration import get_model_scout
+
+        scout = get_model_scout()
+
+        return {
+            "last_sync": scout.get_last_sync_time().isoformat()
+            if scout.get_last_sync_time()
+            else None,
+            "is_sync_needed": scout.is_sync_needed(),
+            "free_models_count": len(scout.get_free_models()),
+            "smartest_models_count": len(scout.get_smartest_models()),
+            "total_models_count": len(scout.get_all_models()),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get scout status: {e}")
+        return {"error": str(e)}
+
+
 @router.post("/api/models/refresh")
 async def refresh_models():
     """

@@ -19,6 +19,17 @@
 
 ---
 
+## Engineering Principle: Behavior-Driven Normalization (No Model Hardcoding)
+
+**Goal:** Avoid model-specific or provider-specific hacks. Normalize and repair tool-call flows based on observed behavior at runtime.
+
+**Policy:**
+- Detect tool-call format from live responses (structured tool_calls vs. text-encoded tool calls).
+- Learn parameter styles per provider/tool (e.g., `prompt` vs `command`) from observed responses, then apply reverse normalization only when needed.
+- Prefer behavior-based adapters over static allowlists; only add hardcoded exceptions as a last resort and document the reason.
+
+**Why:** Model revisions and provider updates regularly change tool-call schemas. Behavior-driven adaptation keeps the proxy resilient without constant manual patches.
+
 ## Table of Contents
 
 1. [Current Session Fixes (March 2026)](#current-session-fixes-march-2026)
@@ -40,6 +51,8 @@
    - **Issue 16: Quick Start Automation**
    - **Issue 17: Missing Python Dependencies (dotenv)**
    - **Issue 18: Tool Call Continuation - Sessions Stop After Each Tool Use**
+   - **Issue 19: Behavior-Driven Tool Call Recovery and Stronger Session Fingerprinting**
+   - **Issue 20: Legacy Proxy Auth Regression and Free-Tier Default Model Throttling**
 2. [Dynamic Model Discovery (February 2026)](#dynamic-model-discovery-february-2026)
 3. [Anthropic Tool Call Changes (Nov 2025 - Feb 2026)](#anthropic-tool-call-changes-nov-2025---feb-2026)
 4. [GIMP Debugging Session (February 2026)](#gimp-debugging-session-february-2026)
@@ -412,6 +425,246 @@ This is the EXACT "History Amnesia" problem from December 2025:
 2. Check SNAKESKIN folder before making changes - historical context prevents regressions
 3. Debug carefully - InputValidationError was likely wrong layer application
 4. Test multi-turn scenarios - single tool call tests miss continuation issues
+
+**Follow-up Fix (March 16, 2026):**
+Issue 18 fix only applied to `vibeproxy/gemini` providers, but users running with OpenRouter
+(e.g., `openrouter/hunter-alpha`) still had the problem because:
+- Reverse normalization was not applied for OpenRouter targets
+- Many OpenRouter models expect `prompt` parameter (like Gemini) not `command`
+- Tool calls in conversation history were sent with wrong parameter name
+
+**Solution:**
+Added `openrouter` to the list of providers requiring reverse normalization:
+```python
+should_reverse_rename = target_provider and target_provider.lower() in [
+    'vibeproxy', 'gemini', 'antigravity', 'google', 'openrouter'
+]
+```
+
+**Files Modified:**
+- `src/services/conversion/request_converter.py` (line 638 - added 'openrouter')
+
+**Follow-up Fix (March 16, 2026):**
+Issue 18 regression surfaced again for OpenRouter (e.g., stepfun 3.5) where tool calls
+were emitted as text (`<tool_call>...</tool_call>`) and history keys oscillated between
+`prompt` and `command`. Hardcoding provider/model lists is brittle.
+
+**Solution (Behavior-Driven):**
+1. Implemented runtime detection of tool-call format:
+   - If a model emits text-encoded tool calls, parse and convert them into real tool_use blocks.
+2. Learned tool argument styles dynamically:
+   - Record whether a provider/tool uses `prompt` or `command` from observed responses.
+   - Apply reverse normalization only when observed style requires it.
+
+**Files Modified:**
+- `src/services/conversion/response_converter.py`
+- `src/services/conversion/request_converter.py`
+- `src/services/conversion/tool_behavior_cache.py` (new)
+
+---
+
+### Issue 19: Behavior-Driven Tool Call Recovery and Stronger Session Fingerprinting
+
+**Date:** March 17, 2026  
+**Severity:** High - Startup broken, and concurrent Claude Code sessions still risked cross-session interference
+
+**Symptoms:**
+1. Proxy failed to start with:
+   `SyntaxError: closing parenthesis '}' does not match opening parenthesis '('`
+2. Concurrent Claude Code sessions from the same host still risked dedup collisions because request fingerprints leaned too heavily on `client_ip` and a brittle session extraction path.
+3. Some models/providers may emit text-encoded tool calls rather than structured `tool_calls`, so the proxy must recover from behavior, not model identity.
+
+**Root Cause:**
+1. The new text-to-tool fallback path in `response_converter.py` had malformed inline JSON/event construction and one broken `try/except` indentation block.
+2. Request deduplication hashed `client_ip`, model, and a small slice of early message text. Different live sessions on the same machine can easily share those characteristics.
+3. Reverse normalization needed to be driven by observed provider/tool behavior rather than hardcoded model allowlists.
+
+**Solution:**
+1. Added `_build_tool_use_delta_event()` helper to generate valid SSE payloads for recovered tool calls.
+2. Fixed the malformed streaming blocks, repaired the tool-call normalization `try/except` flow, and corrected the text tool-call regex so `<tool_call><function="bash">...</tool_call>` markup parses instead of raising `re.error`.
+3. Strengthened request deduplication by fingerprinting on full Claude Code session metadata (`metadata.user_id`) when present, with richer message/tool state included in the hash.
+4. Kept the behavior-driven tool style cache so reverse normalization only happens after observing `prompt` vs `command` usage from real model responses.
+
+**Files Modified:**
+- `src/services/conversion/response_converter.py`
+- `src/api/endpoints.py`
+- `src/services/conversion/request_converter.py`
+- `src/services/conversion/tool_behavior_cache.py`
+- `changelog.md`
+
+**Verification (WSL/bash):**
+- `python -m py_compile ...` passed for the touched Python files
+- `python start_proxy.py --dry-run` passed
+- `pytest -q tests/test_tool_text_recovery.py tests/test_normalize_tool_arguments.py` passed
+- Proxy started successfully on port `8082`
+- Ran three concurrent headless Claude Code sessions through the proxy using the current `stepfun/step-3.5-flash:free` middle-tier path
+- All three StepFun sessions completed successfully with distinct session UUIDs and separate workdirs:
+  - `/tmp/ccproxy-step-s1`
+  - `/tmp/ccproxy-step-s2`
+  - `/tmp/ccproxy-step-s3`
+- Also ran three heavier concurrent `opus`-routed sessions (mapped to current BIG tier) to stress multi-session tool use; they progressed independently and created files in separate temp workdirs
+
+**Notes:**
+- The validated direction is behavior-driven recovery plus stronger session fingerprinting, not provider/model-specific hardcoding.
+- The current live tests did not reproduce duplicate-request warnings under the new March 17 concurrent runs.
+
+---
+
+### Issue 20: Legacy Proxy Auth Regression and Free-Tier Default Model Throttling
+
+**Date:** March 18, 2026  
+**Severity:** High - Claude Code could not authenticate cleanly, and local dev routing was effectively unusable under load
+
+**Symptoms:**
+1. Claude Code requests to `/v1/messages?beta=true` returned `401 Unauthorized` even when using the normal local proxy client setup (`ANTHROPIC_API_KEY=pass`).
+2. After the auth fix, live Claude Code requests still failed intermittently because the local free-tier OpenRouter defaults could hit upstream rate limits during verification runs.
+
+**Root Cause:**
+1. `Config` still treated legacy `ANTHROPIC_API_KEY` as the proxy's expected client auth secret whenever `PROXY_AUTH_KEY` was unset. In real Claude Code usage, `ANTHROPIC_API_KEY` is usually a client-side setting, so the proxy was accidentally enabling strict auth and rejecting `pass`.
+2. The local development config pointed BIG/MIDDLE/SMALL tiers at:
+   - `minimax/minimax-m2.5:free`
+   - `stepfun/step-3.5-flash:free`
+   - `openai/gpt-oss-120b:free`
+   Those models were returning upstream `429 Too Many Requests` during live Claude Code testing.
+
+**Solution:**
+1. Made `PROXY_AUTH_KEY` the only default mechanism that enables strict proxy auth.
+2. Added explicit opt-in compatibility via `ENABLE_LEGACY_PROXY_AUTH=true` for anyone who still needs the old `ANTHROPIC_API_KEY` behavior.
+3. Used a temporary stable-model override during verification to separate proxy/auth failures from upstream free-tier throttling, then restored the intended free-tier defaults in `.env`.
+4. Updated CLI/help docs to describe `PROXY_AUTH_KEY` as the supported proxy-auth variable and clarified that `ANTHROPIC_API_KEY` is client-side by default.
+
+**Files Modified:**
+- `src/core/config.py`
+- `tests/test_proxy_auth_config.py`
+- `tests/conftest.py`
+- `README.md`
+- `src/main.py`
+- `changelog.md`
+
+**Verification (WSL/bash):**
+- `pytest -q tests/test_proxy_auth_config.py tests/test_tool_text_recovery.py tests/test_normalize_tool_arguments.py` passed (`31 passed`)
+- `python -m py_compile src/core/config.py tests/test_proxy_auth_config.py src/services/conversion/response_converter.py tests/test_tool_text_recovery.py` passed
+- Live proxy smoke test on port `8093` showed:
+  - proxy startup with `Proxy Auth: Disabled`
+  - no `Invalid API key provided by client` log entries
+  - Claude Code successfully reaching `/v1/messages?beta=true` with `200 OK` at the proxy edge
+- Additional investigation showed remaining live failures were upstream OpenRouter `429` responses from free-tier defaults, not proxy auth failures
+- With a temporary stable-model override during testing, a fresh live run on port `8094` completed successfully:
+  - one single Claude Code headless session exited `0` and created `hello.txt`
+  - two parallel Claude Code headless sessions exited `0` and each created their own `session.txt`
+  - anchored log review found `0` real proxy-auth failures, `0` HTTP 401s, `0` HTTP 429s, and `0` duplicate-request warnings in that successful run
+
+**Notes:**
+- This separates two previously conflated failures: local proxy auth regression vs. upstream provider throttling.
+- The auth fix is independent of whichever free-tier routing mix ye want to keep in `.env`.
+- Middleware planning docs are now canonical in `specs/001-claude-code-middleware-gateway/`; `.claude/specs/...` copies are no longer the forward path.
+
+---
+
+### Issue: hunter-alpha Tool Calling Bug (March 16, 2026)
+
+**Date:** March 16, 2026  
+**Severity:** High - Blocks autonomous tool execution  
+**Model:** `openrouter/hunter-alpha`
+
+**Symptom:**
+After switching from Claude models (via VibeProxy) to `openrouter/hunter-alpha`, sessions stopped making tool calls. The model outputs text ("Let me check...") but never executes any tools. Session appears to hang after first response.
+
+**Root Cause Analysis:**
+1. Verified tools ARE being sent to the model (debug logs confirm)
+2. Model is NOT producing tool_calls in response
+3. **This is a known bug in hunter-alpha** - see OpenClaw issues:
+   - Issue #43942: "reply_to_current tag emitted inside thinking block instead of as message type=text with hunter-alpha model"
+   - Issue #45663: "Provider returned error from OpenRouter does not trigger model failover for hunter-alpha"
+
+**Research (March 2026):**
+Web search revealed hunter-alpha has known issues with proper tool call formatting. Content gets emitted inside thinking/reasoning blocks instead of as proper tool_calls.
+
+**Solution - Best Free Models with Working Tool Calling:**
+Based on OpenRouter API data and benchmark comparisons:
+
+| Rank | Model | Intelligence | Coding | Agentic | Context |
+|------|-------|-------------|--------|---------|---------|
+| 1 | **minimax/minimax-m2.5:free** | 41.9 | 37.4 | 55.6 | 197K |
+| 2 | nvidia/nemotron-3-super-120b-a12b:free | 36.0 | 31.2 | 40.2 | 1M |
+| 3 | stepfun/step-3.5-flash:free | - | - | - | 256K |
+
+**Recommendation:** Use `minimax/minimax-m2.5:free` as it has the highest benchmark scores.
+
+**Files Modified:**
+- `src/services/models/model_catalog.py` - Updated default free model list with working tool-calling models
+- `model-scraper/src/openrouter_model_scout/fetcher_api.py` - Fixed supports_tools mapping from API
+- `model-scraper/data/models.json` - Refreshed with 345 models, 242 with tool support
+
+---
+
+### Tool Calling Multi-Turn Fix (March 16, 2026)
+
+**Problem:** Multi-turn conversations with tool calls failing - "tool" role not recognized.
+
+**Root Cause:** `ClaudeMessage` model in `src/models/claude.py` only allowed "user" and "assistant" roles, but tool results use "tool" role.
+
+**Fix Applied:**
+- Added "tool" to allowed roles in `ClaudeMessage.role`: `Literal["user", "assistant", "tool"]`
+
+**Testing Results:**
+- Basic text: ✅ PASS
+- Single tool call: ✅ PASS  
+- Multi-turn chain: 19/50 tool calls (model stops after ~20 turns)
+- Root cause of early stop: Model behavior / rate limiting, not proxy bug
+
+**Files Modified:**
+- `src/models/claude.py` - Added "tool" role support
+
+---
+
+### Arcee Trinity Tool Calling Issue (March 16, 2026)
+
+**Finding:** Confirmed via web search that Arcee Trinity models have known issues with structured tool calling:
+- GitHub Issue #984: "Tool calling not detected for models with multi-token delimiters (e.g. Trinity)"
+- OpenRouter `:free` suffix causes tool use failures (GitHub #3054)
+
+**Recommendation:** Use `stepfun/step-3.5-flash:free` for reasoning, `openai/gpt-oss-120b:free` for tool calls.
+
+**Model Configuration (.env):**
+- BIG_MODEL="stepfun/step-3.5-flash:free"
+- SMALL_MODEL="openai/gpt-oss-120b:free"
+
+---
+
+### Model Scraper Fixes (March 16, 2026)
+
+**Issues Fixed:**
+1. `supports_tools` mapping - Now correctly maps from API's `supported_parameters`
+2. Pricing handling - Fixed handling of None, '-1', and string pricing values
+3. asyncio issue - Fixed event loop handling for deep scraping
+4. API sync working - Now fetches 345 models, 242 with tool support
+
+**Files Modified:**
+- `model-scraper/src/openrouter_model_scout/fetcher_api.py` - Multiple fixes for API parsing
+
+---
+
+### OpenRouter Rate Limiting & Empty Response Fix (March 24, 2026)
+
+**Problem:** 
+- 429 Too Many Requests from OpenRouter
+- After rate limit retry: 500 error "No choices in OpenAI response"
+- Config had typo: `BIg_MODEL` instead of `BIG_MODEL`
+
+**Root Cause:**
+1. minimax/minimax-m2.5:free hitting rate limits on OpenRouter
+2. After rate limit, response can be empty
+3. Config typo prevented fallback model from loading
+
+**Fix Applied:**
+1. Changed BIG_MODEL to `stepfun/step-3.5-flash:free` (known working)
+2. Fixed typo: removed invalid `BIg_MODEL` line
+3. Improved error handling in response_converter.py to detect and report OpenRouter errors better
+
+**Files Modified:**
+- `.env` - Fixed model config
+- `src/services/conversion/response_converter.py` - Better error messages
 
 ---
 

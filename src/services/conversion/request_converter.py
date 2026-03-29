@@ -9,18 +9,21 @@ from src.core.config import config
 from src.models.reasoning import (
     OpenAIReasoningConfig,
     AnthropicThinkingConfig,
-    GeminiThinkingConfig
+    GeminiThinkingConfig,
 )
 from src.services.models.model_filter import model_filter
 from src.core.constants import Constants
 from src.services.tools.tool_mapper import sanitize_tool_declarations
+from src.services.conversion.tool_behavior_cache import get_tool_argument_style
 
 logger = logging.getLogger(__name__)
 
 # Tool output truncation settings (inspired by Lynkr)
 # Large tool outputs waste tokens and can confuse models
 TOOL_OUTPUT_MAX_CHARS = int(os.getenv("TOOL_OUTPUT_MAX_CHARS", "50000"))
-TOOL_OUTPUT_TRUNCATION_ENABLED = os.getenv("TOOL_OUTPUT_TRUNCATION", "true").lower() == "true"
+TOOL_OUTPUT_TRUNCATION_ENABLED = (
+    os.getenv("TOOL_OUTPUT_TRUNCATION", "true").lower() == "true"
+)
 
 
 def truncate_tool_output(content: str, max_chars: int = None) -> Tuple[str, bool]:
@@ -55,52 +58,56 @@ def truncate_tool_output(content: str, max_chars: int = None) -> Tuple[str, bool
     truncated = content[:max_chars]
     truncated += f"\n\n... [OUTPUT TRUNCATED: {truncated_chars:,} chars removed, {original_len:,} total]"
 
-    logger.info(f"Tool output truncated: {original_len:,} -> {max_chars:,} chars (-{truncated_chars:,})")
+    logger.info(
+        f"Tool output truncated: {original_len:,} -> {max_chars:,} chars (-{truncated_chars:,})"
+    )
 
     return truncated, True
 
 
-def validate_tool_message_sequence(messages: List[Dict[str, Any]], remove_orphans: bool = False) -> List[Dict[str, Any]]:
+def validate_tool_message_sequence(
+    messages: List[Dict[str, Any]], remove_orphans: bool = False
+) -> List[Dict[str, Any]]:
     """
     Validate that tool role messages have matching tool_calls in preceding assistant messages.
-    
+
     Inspired by Lynkr's implementation, this prevents errors from orphaned tool messages
     that can occur when conversation history is truncated or corrupted.
-    
+
     Args:
         messages: List of OpenAI-format messages
         remove_orphans: If True, remove orphaned tool messages. If False, just log warnings.
-        
+
     Returns:
         Validated (and optionally cleaned) message list
     """
     if not messages:
         return messages
-    
+
     validated = []
     orphan_count = 0
-    
+
     for i, msg in enumerate(messages):
         role = msg.get("role", "")
-        
+
         if role == "tool":
             tool_call_id = msg.get("tool_call_id")
-            
+
             # Search backwards for matching assistant message with tool_calls
             found_match = False
             for j in range(len(validated) - 1, -1, -1):
                 prev_msg = validated[j]
-                
+
                 if prev_msg.get("role") == "assistant":
                     tool_calls = prev_msg.get("tool_calls", [])
                     if any(tc.get("id") == tool_call_id for tc in tool_calls):
                         found_match = True
                         break
-                    
+
                 # Stop searching if we hit a user message
                 if prev_msg.get("role") == "user":
                     break
-            
+
             if not found_match:
                 orphan_count += 1
                 logger.warning(
@@ -118,8 +125,10 @@ def validate_tool_message_sequence(messages: List[Dict[str, Any]], remove_orphan
         validated.append(msg)
 
     if orphan_count > 0:
-        logger.info(f"Tool message validation complete: {orphan_count} orphan(s) kept for conversation continuity (Issue 18)")
-    
+        logger.info(
+            f"Tool message validation complete: {orphan_count} orphan(s) kept for conversation continuity (Issue 18)"
+        )
+
     return validated
 
 
@@ -127,11 +136,11 @@ def _apply_reasoning_config(
     openai_request: Dict[str, Any],
     reasoning_config: Any,
     model_name: str,
-    model_manager
+    model_manager,
 ) -> None:
     """
     Apply reasoning configuration to OpenAI request based on provider type.
-    
+
     Args:
         openai_request: OpenAI request dictionary to modify
         reasoning_config: ReasoningConfig object (OpenAI/Anthropic/Gemini)
@@ -139,23 +148,23 @@ def _apply_reasoning_config(
         model_manager: ModelManager instance for config access
     """
     is_using_openrouter = "openrouter" in model_manager.config.openai_base_url.lower()
-    
+
     # OpenAI o-series reasoning effort or arbitrary token budget
     if isinstance(reasoning_config, OpenAIReasoningConfig):
         if is_using_openrouter:
             # OpenRouter requires reasoning params in extra_body
             if "extra_body" not in openai_request:
                 openai_request["extra_body"] = {}
-            
+
             reasoning_params = {}
             if reasoning_config.effort:
                 reasoning_params["effort"] = reasoning_config.effort
             if reasoning_config.max_tokens:
                 reasoning_params["max_tokens"] = reasoning_config.max_tokens
             reasoning_params["exclude"] = reasoning_config.exclude
-            
+
             openai_request["extra_body"]["reasoning"] = reasoning_params
-            
+
             log_msg = f"Applied OpenAI reasoning config for {model_name}: "
             if reasoning_config.effort:
                 log_msg += f"effort={reasoning_config.effort}"
@@ -168,22 +177,22 @@ def _apply_reasoning_config(
             # For now, we'll add it to extra_body as well
             if "extra_body" not in openai_request:
                 openai_request["extra_body"] = {}
-            
+
             reasoning_params = {}
             if reasoning_config.effort:
                 reasoning_params["effort"] = reasoning_config.effort
             if reasoning_config.max_tokens:
                 reasoning_params["max_tokens"] = reasoning_config.max_tokens
-            
+
             openai_request["extra_body"]["reasoning"] = reasoning_params
-            
+
             log_msg = f"Applied OpenAI reasoning config for {model_name}: "
             if reasoning_config.effort:
                 log_msg += f"effort={reasoning_config.effort}"
             if reasoning_config.max_tokens:
                 log_msg += f"max_tokens={reasoning_config.max_tokens}"
             logger.info(log_msg)
-    
+
     # Anthropic thinking tokens
     elif isinstance(reasoning_config, AnthropicThinkingConfig):
         # Anthropic uses 'thinking' parameter in request body
@@ -191,23 +200,23 @@ def _apply_reasoning_config(
         if is_using_openrouter:
             if "extra_body" not in openai_request:
                 openai_request["extra_body"] = {}
-            
+
             openai_request["extra_body"]["thinking"] = {
                 "type": reasoning_config.type,
-                "budget": reasoning_config.budget
+                "budget": reasoning_config.budget,
             }
         else:
             # For direct Anthropic API (if proxying), add to top level
             openai_request["thinking"] = {
                 "type": reasoning_config.type,
-                "budget": reasoning_config.budget
+                "budget": reasoning_config.budget,
             }
-        
+
         logger.info(
             f"Applied Anthropic thinking config for {model_name}: "
             f"budget={reasoning_config.budget}"
         )
-    
+
     # Gemini thinking budget
     elif isinstance(reasoning_config, GeminiThinkingConfig):
         # Gemini uses 'thinking_config' in generation_config
@@ -215,8 +224,11 @@ def _apply_reasoning_config(
             if "extra_body" not in openai_request:
                 openai_request["extra_body"] = {}
             openai_request["extra_body"]["generation_config"] = {}
-        
-        if "extra_body" in openai_request and "generation_config" in openai_request["extra_body"]:
+
+        if (
+            "extra_body" in openai_request
+            and "generation_config" in openai_request["extra_body"]
+        ):
             openai_request["extra_body"]["generation_config"]["thinking_config"] = {
                 "budget": reasoning_config.budget
             }
@@ -226,7 +238,7 @@ def _apply_reasoning_config(
             openai_request["generation_config"]["thinking_config"] = {
                 "budget": reasoning_config.budget
             }
-        
+
         logger.info(
             f"Applied Gemini thinking config for {model_name}: "
             f"budget={reasoning_config.budget}"
@@ -237,7 +249,7 @@ def convert_claude_to_openai(
     claude_request: ClaudeMessagesRequest, model_manager, target_provider: str = None
 ) -> Dict[str, Any]:
     """Convert Claude API request format to OpenAI format with enhanced validation.
-    
+
     Args:
         claude_request: The Claude API request
         model_manager: Model manager instance
@@ -256,11 +268,15 @@ def convert_claude_to_openai(
         raise ValueError("Claude request messages must be a list")
 
     if claude_request.max_tokens < 1:
-        raise ValueError(f"max_tokens must be at least 1, got {claude_request.max_tokens}")
+        raise ValueError(
+            f"max_tokens must be at least 1, got {claude_request.max_tokens}"
+        )
 
     # Parse model name and extract reasoning configuration
-    openai_model, reasoning_config = model_manager.parse_and_map_model(claude_request.model)
-    
+    openai_model, reasoning_config = model_manager.parse_and_map_model(
+        claude_request.model
+    )
+
     # Track model usage
     model_filter.track_model_usage(openai_model)
 
@@ -298,7 +314,9 @@ def convert_claude_to_openai(
             openai_message = convert_claude_user_message(msg)
             openai_messages.append(openai_message)
         elif msg.role == Constants.ROLE_ASSISTANT:
-            openai_message = convert_claude_assistant_message(msg, target_provider)
+            openai_message = convert_claude_assistant_message(
+                msg, target_provider, openai_model
+            )
             openai_messages.append(openai_message)
 
             # Check if next message contains tool results
@@ -322,7 +340,9 @@ def convert_claude_to_openai(
 
     # Validate tool message sequence - detect orphaned tool messages
     # Set remove_orphans=True to auto-fix, False (default) to just warn
-    openai_messages = validate_tool_message_sequence(openai_messages, remove_orphans=False)
+    openai_messages = validate_tool_message_sequence(
+        openai_messages, remove_orphans=False
+    )
 
     # Build OpenAI request
     # Check if this is a newer OpenAI model (o1, o3, o4, gpt-5)
@@ -339,7 +359,7 @@ def convert_claude_to_openai(
         "messages": openai_messages,
         "stream": claude_request.stream,
     }
-    
+
     # Log outgoing message summary (debug level to avoid noise)
     logger.debug(f"OUTGOING REQUEST: {len(openai_messages)} messages")
     if logger.isEnabledFor(logging.DEBUG):
@@ -349,21 +369,29 @@ def convert_claude_to_openai(
             tool_calls = "YES" if msg.get("tool_calls") else "NO"
             # Skip logging if content is empty or just placeholders to avoid token waste
             if content.strip() and "(no content)" not in content.lower():
-                logger.debug(f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content={content}...")
+                logger.debug(
+                    f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content={content}..."
+                )
             else:
-                logger.debug(f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content=[empty/placeholder]")
+                logger.debug(
+                    f"  MSG[{idx}] role={role}, tool_calls={tool_calls}, content=[empty/placeholder]"
+                )
 
     # Newer OpenAI models models (o1, o3, o4, gpt-5) require max_completion_tokens instead of max_tokens
     if is_newer_model:
         openai_request["max_completion_tokens"] = token_limit
         # Newer reasoning models require temperature=1
         openai_request["temperature"] = 1
-        logger.debug(f"Converted request (newer model): model={openai_model}, messages={len(openai_messages)}, max_completion_tokens={token_limit}, temperature=1")
+        logger.debug(
+            f"Converted request (newer model): model={openai_model}, messages={len(openai_messages)}, max_completion_tokens={token_limit}, temperature=1"
+        )
     else:
         openai_request["max_tokens"] = token_limit
         # Use client-requested temperature - no hardcoded overrides
         openai_request["temperature"] = claude_request.temperature
-        logger.debug(f"Converted request: model={openai_model}, messages={len(openai_messages)}, max_tokens={token_limit}, temp={claude_request.temperature}")
+        logger.debug(
+            f"Converted request: model={openai_model}, messages={len(openai_messages)}, max_tokens={token_limit}, temp={claude_request.temperature}"
+        )
     # Add optional parameters
     if claude_request.stop_sequences:
         openai_request["stop"] = claude_request.stop_sequences
@@ -373,13 +401,14 @@ def convert_claude_to_openai(
     # Convert tools
     if claude_request.tools:
         openai_tools = []
+        logger.debug(f"Converting {len(claude_request.tools)} tools to OpenAI format")
         for tool in claude_request.tools:
             if tool.name and tool.name.strip():
                 # Sanitize input schema to remove 'defer_loading' which causes Google API errors
                 input_schema = tool.input_schema.copy() if tool.input_schema else {}
                 if "defer_loading" in input_schema:
                     del input_schema["defer_loading"]
-                
+
                 openai_tools.append(
                     {
                         "type": Constants.TOOL_FUNCTION,
@@ -394,6 +423,9 @@ def convert_claude_to_openai(
             # Sanitize tool names for provider compatibility (e.g., lowercase for Google/Gemini)
             openai_tools = sanitize_tool_declarations(openai_tools)
             openai_request["tools"] = openai_tools
+            logger.debug(
+                f"Added {len(openai_tools)} tools to OpenAI request: {[t['function']['name'] for t in openai_tools]}"
+            )
 
     # Convert tool choice
     if claude_request.tool_choice:
@@ -412,27 +444,36 @@ def convert_claude_to_openai(
             }
         else:
             openai_request["tool_choice"] = "auto"
-        
+
         # Handle disable_parallel_tool_use
         if claude_request.tool_choice.get("disable_parallel_tool_use"):
             openai_request["parallel_tool_calls"] = False
 
     # Apply reasoning configuration if present
     if reasoning_config:
-        _apply_reasoning_config(openai_request, reasoning_config, openai_model, model_manager)
-    
+        _apply_reasoning_config(
+            openai_request, reasoning_config, openai_model, model_manager
+        )
+
     # Add verbosity if configured (for providers that support it)
     # Note: Not all models support verbosity, and some only support specific values
     # Skip verbosity to avoid compatibility issues - let the model use its default
-    if model_manager.config.verbosity and _model_supports_reasoning(openai_model, model_manager):
+    if model_manager.config.verbosity and _model_supports_reasoning(
+        openai_model, model_manager
+    ):
         # Only add verbosity for models that explicitly support it
         # Many models don't support this parameter or have restrictions
-        logger.debug(f"Verbosity configured but skipped for {openai_model} to avoid compatibility issues")
+        logger.debug(
+            f"Verbosity configured but skipped for {openai_model} to avoid compatibility issues"
+        )
 
     # Inject custom system prompt if configured
     from src.services.prompts.system_prompt_loader import inject_system_prompt
+
     model_size = _get_model_size_from_model_id(openai_model)
-    openai_messages = inject_system_prompt(openai_messages, model_size, model_manager.config)
+    openai_messages = inject_system_prompt(
+        openai_messages, model_size, model_manager.config
+    )
     openai_request["messages"] = openai_messages
 
     return openai_request
@@ -455,73 +496,84 @@ def _model_supports_reasoning(model_id: str, model_manager=None) -> bool:
 
     # Primary keyword patterns that indicate reasoning support
     # OpenAI models - support both "openai/gpt-5" and "gpt-5" formats
-    if any(keyword in model_lower for keyword in [
-        "openai/gpt-5", "gpt-5",
-        "openai/o1", "o1",
-        "openai/o3", "o3"
-    ]):
+    if any(
+        keyword in model_lower
+        for keyword in ["openai/gpt-5", "gpt-5", "openai/o1", "o1", "openai/o3", "o3"]
+    ):
         return True
 
     # Anthropic models (explicit support for all reasoning-capable variants)
-    if any(pattern in model_lower for pattern in [
-        "anthropic/claude-3.7",
-        "anthropic/claude-4",
-        "anthropic/claude-4.1",
-        "anthropic/claude-sonnet",
-        "anthropic/claude-opus",
-        "anthropic/claude-haiku"
-    ]):
+    if any(
+        pattern in model_lower
+        for pattern in [
+            "anthropic/claude-3.7",
+            "anthropic/claude-4",
+            "anthropic/claude-4.1",
+            "anthropic/claude-sonnet",
+            "anthropic/claude-opus",
+            "anthropic/claude-haiku",
+        ]
+    ):
         return True
 
     # xAI models
-    if "xai/" in model_lower and any(keyword in model_lower for keyword in ["reason", "thinking"]):
+    if "xai/" in model_lower and any(
+        keyword in model_lower for keyword in ["reason", "thinking"]
+    ):
         return True
 
     # Qwen thinking models
-    if any(keyword in model_lower for keyword in [
-        "qwen3",
-        "qwen2.5-thinking",
-        "qwen-2.5-thinking",
-        "qwen-thinking",
-        "qwen-reasoning"
-    ]):
+    if any(
+        keyword in model_lower
+        for keyword in [
+            "qwen3",
+            "qwen2.5-thinking",
+            "qwen-2.5-thinking",
+            "qwen-thinking",
+            "qwen-reasoning",
+        ]
+    ):
         return True
 
     # DeepSeek reasoning models
-    if any(keyword in model_lower for keyword in [
-        "deepseek-v3",
-        "deepseek-v3.1",
-        "deepseek-r1",
-        "deepseek-reasoning"
-    ]):
+    if any(
+        keyword in model_lower
+        for keyword in [
+            "deepseek-v3",
+            "deepseek-v3.1",
+            "deepseek-r1",
+            "deepseek-reasoning",
+        ]
+    ):
         return True
 
     # MiniMax and Kimi
-    if any(keyword in model_lower for keyword in [
-        "minimax/m2",
-        "minimax-thinking",
-        "kimi-k2",
-        "kimi-thinking"
-    ]):
+    if any(
+        keyword in model_lower
+        for keyword in ["minimax/m2", "minimax-thinking", "kimi-k2", "kimi-thinking"]
+    ):
         return True
 
     # Generic patterns
-    if any(keyword in model_lower for keyword in [
-        "thinking",
-        "-reasoning",
-        "-r1",
-        "-deepseek-r1",
-        "cognition",
-        "chain-of-thought"
-    ]):
+    if any(
+        keyword in model_lower
+        for keyword in [
+            "thinking",
+            "-reasoning",
+            "-r1",
+            "-deepseek-r1",
+            "cognition",
+            "chain-of-thought",
+        ]
+    ):
         return True
 
     # Check metadata if available (for OpenRouter models)
-    if model_manager and hasattr(model_manager, 'models_data'):
-        for category in ['reasoning_models', 'verbosity_models']:
+    if model_manager and hasattr(model_manager, "models_data"):
+        for category in ["reasoning_models", "verbosity_models"]:
             if category in model_manager.models_data:
                 for model in model_manager.models_data[category]:
-                    if model.get('id', '').lower() == model_lower:
+                    if model.get("id", "").lower() == model_lower:
                         return True
 
     return False
@@ -563,7 +615,7 @@ def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:
     """Convert Claude user message to OpenAI format."""
     if msg.content is None:
         return {"role": Constants.ROLE_USER, "content": ""}
-    
+
     if isinstance(msg.content, str):
         return {"role": Constants.ROLE_USER, "content": msg.content}
 
@@ -595,7 +647,11 @@ def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:
         return {"role": Constants.ROLE_USER, "content": openai_content}
 
 
-def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = None) -> Dict[str, Any]:
+def convert_claude_assistant_message(
+    msg: ClaudeMessage,
+    target_provider: str = None,
+    target_model: str = None,
+) -> Dict[str, Any]:
     """
     Convert Claude assistant message to OpenAI format.
 
@@ -603,6 +659,7 @@ def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = 
         msg: Claude message object
         target_provider: Target provider name (e.g., 'vibeproxy', 'gemini', 'openrouter')
                         Used to conditionally apply provider-specific transformations
+        target_model: Target model name (provider-specific, optional)
     """
     text_parts = []
     tool_calls = []
@@ -629,20 +686,34 @@ def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = 
             # 4. We MUST convert 'command' back to 'prompt' when sending history to Gemini
             # 5. Otherwise Gemini doesn't recognize its own tool calls and gets confused
             #
-            # FIX (2026-03-16): Only apply when target is Gemini-family providers
-            # This prevents InputValidationError on Claude Code side while maintaining
-            # proper history consistency for Gemini
-            should_reverse_rename = target_provider and target_provider.lower() in [
-                'vibeproxy', 'gemini', 'antigravity', 'google'
-            ]
+            # Behavior-driven reverse normalization:
+            # Avoid model-specific hardcoding. Learn whether this provider/tool expects
+            # "prompt" or "command" based on observed responses.
+            target_provider_lower = target_provider.lower() if target_provider else ""
+            observed_style = get_tool_argument_style(
+                target_provider_lower, tool_name
+            )
+            should_reverse_rename = observed_style == "prompt"
 
-            if should_reverse_rename and tool_name.lower() in ["bash", "repl"] and isinstance(arguments, dict):
+            # Debug logging
+            if target_provider:
+                logger.debug(
+                    f"Tool call: target_provider={target_provider}, should_reverse_rename={should_reverse_rename}"
+                )
+
+            if (
+                should_reverse_rename
+                and tool_name.lower() in ["bash", "repl"]
+                and isinstance(arguments, dict)
+            ):
                 # Copy dict to avoid modifying original object
                 arguments = arguments.copy()
                 if "command" in arguments and "prompt" not in arguments:
                     arguments["prompt"] = arguments.pop("command")
-                    logger.debug(f"Reverse renamed Bash 'command' → 'prompt' for {target_provider} (Issue 18 fix)")
-            
+                    logger.debug(
+                        f"Reverse renamed Bash 'command' → 'prompt' for {target_provider} (Issue 18 fix)"
+                    )
+
             tool_calls.append(
                 {
                     "id": block.id,
@@ -664,11 +735,11 @@ def convert_claude_assistant_message(msg: ClaudeMessage, target_provider: str = 
         openai_message["content"] = "".join(text_parts)
     elif tool_calls:
         # If we have tool calls, content should be None for most OpenAI-compatible models.
-        # This prevents Gemini from seeing an "interrupted" placeholder like "..." and 
+        # This prevents Gemini from seeing an "interrupted" placeholder like "..." and
         # autonomously repeating the previous forensic steps (Ghost Calls).
         openai_message["content"] = None
     else:
-        # If no text AND no tool calls (e.g. only thinking blocks), we MUST provide 
+        # If no text AND no tool calls (e.g. only thinking blocks), we MUST provide
         # some content to avoid a 400 error from the Google API.
         openai_message["content"] = "(thinking)"
 
@@ -690,7 +761,9 @@ def convert_claude_tool_results(msg: ClaudeMessage) -> List[Dict[str, Any]]:
                 tool_id = block.tool_use_id
                 # Skip duplicate tool results (same tool_use_id)
                 if tool_id in seen_tool_ids:
-                    logger.debug(f"DEDUP: Skipping duplicate tool_result for tool_use_id={tool_id}")
+                    logger.debug(
+                        f"DEDUP: Skipping duplicate tool_result for tool_use_id={tool_id}"
+                    )
                     continue
                 seen_tool_ids.add(tool_id)
 

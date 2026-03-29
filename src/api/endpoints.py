@@ -82,41 +82,80 @@ class RequestDeduplicator:
         self._window_seconds = window_seconds
         self._max_cache_size = max_cache_size
 
+    def _extract_session_fingerprint(self, request: "ClaudeMessagesRequest") -> str:
+        """Extract a stable per-session fingerprint from Claude Code metadata."""
+        if request.metadata and isinstance(request.metadata, dict):
+            user_id = request.metadata.get("user_id")
+            if user_id:
+                return str(user_id)
+
+        # Fallback: Claude Code often includes billing/session markers in system blocks.
+        system = getattr(request, "system", None)
+        if isinstance(system, list):
+            for block in system:
+                if isinstance(block, dict):
+                    text = block.get("text", "")
+                else:
+                    text = getattr(block, "text", "")
+                if text and "cc_version=" in text:
+                    return text[:256]
+
+        return "unknown-session"
+
     def _compute_hash(
         self, request: "ClaudeMessagesRequest", client_ip: str = "unknown"
     ) -> str:
-        """Compute hash for request - includes client IP to distinguish different sessions."""
-        # Extract session ID from metadata if available
-        session_id = "none"
-        if request.metadata and isinstance(request.metadata, dict):
-            # Try to find session ID in metadata
-            user_id = request.metadata.get("user_id", "")
-            if user_id and "session_" in str(user_id):
-                # Extract session ID from user_id field
-                parts = str(user_id).split("session_")
-                if len(parts) > 1:
-                    session_id = parts[1].split("_")[0] if parts[1] else "none"
+        """Compute a retry hash with strong session isolation."""
+        session_fingerprint = self._extract_session_fingerprint(request)
+        content_parts = [session_fingerprint, client_ip, request.model]
 
-        # Build content string including client IP AND session ID for uniqueness
-        content_parts = [session_id, client_ip]
-
-        # Include model and key fields
-        content_parts.append(request.model)
         if request.stream is not None:
             content_parts.append(str(request.stream))
+        if getattr(request, "max_tokens", None) is not None:
+            content_parts.append(str(request.max_tokens))
+        if getattr(request, "temperature", None) is not None:
+            content_parts.append(str(request.temperature))
 
-        # Include first few messages (truncated) for content-based matching
-        for msg in request.messages[:3]:
+        if getattr(request, "tool_choice", None):
+            content_parts.append(
+                json_module.dumps(request.tool_choice, sort_keys=True, default=str)
+            )
+        if getattr(request, "tools", None):
+            tool_names = [getattr(tool, "name", "") for tool in request.tools]
+            content_parts.append(",".join(tool_names))
+
+        for msg in request.messages:
+            content_parts.append(getattr(msg, "role", ""))
             if hasattr(msg, "content"):
                 content = msg.content
                 if isinstance(content, str):
-                    content_parts.append(content[:200])  # Truncate long content
+                    content_parts.append(content[:400])
                 elif isinstance(content, list):
-                    for block in content[:2]:
+                    for block in content:
                         if isinstance(block, dict):
-                            text = block.get("text", "")
-                            if text:
-                                content_parts.append(text[:100])
+                            block_type = block.get("type", "")
+                            content_parts.append(block_type)
+                            if block_type == "text":
+                                text = block.get("text", "")
+                                if text:
+                                    content_parts.append(text[:200])
+                            if block_type == "tool_use":
+                                content_parts.append(block.get("id", ""))
+                                content_parts.append(block.get("name", ""))
+                            if block_type == "tool_result":
+                                content_parts.append(block.get("tool_use_id", ""))
+                        else:
+                            block_type = getattr(block, "type", "")
+                            content_parts.append(block_type)
+                            if block_type == "text":
+                                text = getattr(block, "text", "")
+                                if text:
+                                    content_parts.append(text[:200])
+                            if block_type == "tool_use":
+                                content_parts.append(getattr(block, "id", ""))
+                                content_parts.append(getattr(block, "name", ""))
+                            if block_type == "tool_result":
+                                content_parts.append(getattr(block, "tool_use_id", ""))
 
         content_str = "|".join(str(x) for x in content_parts)
         return hashlib.sha256(content_str.encode()).hexdigest()[:16]

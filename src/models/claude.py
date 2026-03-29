@@ -44,7 +44,7 @@ class ClaudeContentBlockRedactedThinking(BaseModel):
 
 
 class ClaudeMessage(BaseModel):
-    role: Literal["user", "assistant"]
+    role: Literal["user", "assistant", "tool"]
     content: Union[
         str,
         List[
@@ -105,8 +105,8 @@ class ClaudeMessagesRequest(BaseModel):
     thinking: Optional[ClaudeThinkingConfig] = None
     effort: Optional[Literal["max", "high", "medium", "low"]] = None
     # Structured output support (GA Jan 2026+)
-    output_format: Optional[Dict[str, Any]] = None   # Deprecated legacy field
-    output_config: Optional[Dict[str, Any]] = None    # New GA format
+    output_format: Optional[Dict[str, Any]] = None  # Deprecated legacy field
+    output_config: Optional[Dict[str, Any]] = None  # New GA format
 
 
 class ClaudeTokenCountRequest(BaseModel):

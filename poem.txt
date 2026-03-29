@@ -1,0 +1,4 @@
+Lines of logic dance and flow,
+Debugging demons that we know,
+From broken dreams to working code,
+We ship the future, test each load.

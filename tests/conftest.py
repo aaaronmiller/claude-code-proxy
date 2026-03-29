@@ -22,6 +22,7 @@ def clean_env(monkeypatch):
         "OPENAI_API_KEY",
         "OPENAI_BASE_URL",
         "ANTHROPIC_API_KEY",
+        "ENABLE_LEGACY_PROXY_AUTH",
         "BIG_MODEL",
         "MIDDLE_MODEL",
         "SMALL_MODEL",

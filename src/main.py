@@ -416,8 +416,10 @@ def main(env_updates: dict = None, skip_validation: bool = False):
         print("  OPENAI_API_KEY - Your OpenAI API key")
         print("")
         print("Optional environment variables:")
-        print("  ANTHROPIC_API_KEY - Expected Anthropic API key for client validation")
-        print("                      If set, clients must provide this exact API key")
+        print("  PROXY_AUTH_KEY - Expected client API key for proxy validation")
+        print("                   If set, clients must provide this exact key")
+        print("  ENABLE_LEGACY_PROXY_AUTH=true")
+        print("                   Re-enable legacy ANTHROPIC_API_KEY proxy auth behavior")
         print(
             f"  OPENAI_BASE_URL - OpenAI API base URL (default: https://api.openai.com/v1)"
         )
