@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ParsedModel:
     """Parsed model name with reasoning parameters."""
-    
+
     base_model: str
     reasoning_type: Optional[str]  # 'effort', 'thinking_tokens', 'thinking_budget'
     reasoning_value: Optional[Union[str, int]]
@@ -34,81 +34,77 @@ class ParsedModel:
 # (no more version-specific regex patterns)
 
 # K-notation conversion mapping
-K_NOTATION_MAP = {
-    '1k': 1024,
-    '4k': 4096,
-    '8k': 8192,
-    '16k': 16384,
-    '24k': 24576
-}
+K_NOTATION_MAP = {"1k": 1024, "4k": 4096, "8k": 8192, "16k": 16384, "24k": 24576}
 
 
 def _convert_k_notation(value: str) -> int:
     """
     Convert k-notation to exact token count.
-    
+
     Args:
         value: String value like '1k', '4k', '8k', '16k'
-        
+
     Returns:
         Exact token count as integer
-        
+
     Raises:
         ValueError: If k-notation is not recognized
     """
     value_lower = value.lower()
     if value_lower in K_NOTATION_MAP:
         return K_NOTATION_MAP[value_lower]
-    
+
     # Try to parse as number with 'k' suffix
-    if value_lower.endswith('k'):
+    if value_lower.endswith("k"):
         try:
             num = int(value_lower[:-1])
             return num * 1024
         except ValueError:
             pass
-    
+
     raise ValueError(f"Invalid k-notation: {value}")
 
 
-def _detect_reasoning_type(base_model: str, suffix: Optional[str] = None) -> Optional[str]:
+def _detect_reasoning_type(
+    base_model: str, suffix: Optional[str] = None
+) -> Optional[str]:
     """
     Detect reasoning type based on model family and suffix.
-    
+
     Uses keyword-based detection from reasoning_validator so new model versions
     are automatically supported without code changes.
-    
+
     Args:
         base_model: Base model name without suffix
         suffix: Optional suffix to help determine type
-        
+
     Returns:
         Reasoning type: 'effort', 'thinking_tokens', 'thinking_budget', or None
     """
     model_lower = base_model.lower()
     # Strip provider prefix for matching
-    if '/' in model_lower:
-        model_lower = model_lower.split('/', 1)[1]
-    
+    if "/" in model_lower:
+        model_lower = model_lower.split("/", 1)[1]
+
     if _is_openai_reasoning_model(model_lower):
         # Check if suffix is numeric (token budget) or effort level
         if suffix and suffix.isdigit():
-            return 'thinking_tokens'  # Arbitrary token budget for OpenAI
-        return 'effort'
+            return "thinking_tokens"  # Arbitrary token budget for OpenAI
+        return "effort"
     elif _is_gemini_thinking_model(model_lower):
-        return 'thinking_budget'
+        return "thinking_budget"
     elif _is_anthropic_thinking_model(model_lower):
-        return 'thinking_tokens'
-    
+        return "thinking_tokens"
+
     return None
 
 
 def parse_model_name(model_name: str) -> ParsedModel:
     """
     Parse model name with optional reasoning suffix.
-    
+
     Suffix format: model_name:suffix
-    
+
     Examples:
         'claude-opus-4-20250514:4k' → ParsedModel(
             base_model='claude-opus-4-20250514',
@@ -128,82 +124,82 @@ def parse_model_name(model_name: str) -> ParsedModel:
             reasoning_value=None,
             original_model='gpt-4'
         )
-    
+
     Args:
         model_name: Model name with optional reasoning suffix
-        
+
     Returns:
         ParsedModel with extracted components
     """
     # Use regex to split model name and suffix
     # Pattern: ^(.+?)(?::([^:]+))?$
     # Captures: (base_model)(optional :suffix)
-    match = re.match(r'^(.+?)(?::([^:]+))?$', model_name)
-    
+    match = re.match(r"^(.+?)(?::([^:]+))?$", model_name)
+
     if not match:
         logger.warning(f"Failed to parse model name: {model_name}")
         return ParsedModel(
             base_model=model_name,
             reasoning_type=None,
             reasoning_value=None,
-            original_model=model_name
+            original_model=model_name,
         )
-    
+
     base_model = match.group(1)
     suffix = match.group(2)
-    
+
     # If no suffix, return base model only
     if not suffix:
         return ParsedModel(
             base_model=base_model,
             reasoning_type=None,
             reasoning_value=None,
-            original_model=model_name
+            original_model=model_name,
         )
-    
+
     # Detect reasoning type based on model family and suffix
     reasoning_type = _detect_reasoning_type(base_model, suffix)
-    
+
     if not reasoning_type:
         # If no reasoning type detected, the suffix may be part of the model ID
-        # (e.g., OpenRouter's `:free` suffix). Preserve the full original model name.
+        # (e.g., OpenRouter's `:free` suffix). Return base model without suffix.
         logger.debug(
             f"Model {base_model} does not support reasoning parameters. "
-            f"Suffix '{suffix}' preserved as part of model ID."
+            f"Suffix '{suffix}' ignored."
         )
         return ParsedModel(
-            base_model=model_name,  # Use FULL model name (with suffix)
+            base_model=base_model,  # Use base model (without suffix)
             reasoning_type=None,
             reasoning_value=None,
-            original_model=model_name
+            original_model=model_name,
         )
-    
+
     # Parse suffix based on reasoning type
     reasoning_value: Optional[Union[str, int]] = None
-    
+
     try:
-        if reasoning_type == 'effort':
+        if reasoning_type == "effort":
             # OpenAI o-series: expect 'low', 'medium', 'high', k-notation, or numeric token budget
             if suffix.isdigit():
                 # Numeric suffix = arbitrary token budget
                 reasoning_value = int(suffix)
-                reasoning_type = 'thinking_tokens'  # Switch to token budget mode
-            elif suffix.lower().endswith('k'):
+                reasoning_type = "thinking_tokens"  # Switch to token budget mode
+            elif suffix.lower().endswith("k"):
                 # K-notation = arbitrary token budget
                 reasoning_value = _convert_k_notation(suffix)
-                reasoning_type = 'thinking_tokens'  # Switch to token budget mode
+                reasoning_type = "thinking_tokens"  # Switch to token budget mode
             else:
                 # Effort level
                 reasoning_value = suffix.lower()
-            
-        elif reasoning_type in ('thinking_tokens', 'thinking_budget'):
+
+        elif reasoning_type in ("thinking_tokens", "thinking_budget"):
             # Anthropic/Gemini/OpenAI token budgets: expect k-notation or exact number
-            if suffix.lower().endswith('k'):
+            if suffix.lower().endswith("k"):
                 reasoning_value = _convert_k_notation(suffix)
             else:
                 # Try to parse as exact number
                 reasoning_value = int(suffix)
-                
+
     except (ValueError, KeyError) as e:
         logger.error(
             f"Failed to parse reasoning suffix '{suffix}' for model {base_model}: {e}"
@@ -212,20 +208,21 @@ def parse_model_name(model_name: str) -> ParsedModel:
             base_model=base_model,
             reasoning_type=None,
             reasoning_value=None,
-            original_model=model_name
+            original_model=model_name,
         )
-    
+
     logger.debug(
         f"Parsed model: {model_name} → base={base_model}, "
         f"type={reasoning_type}, value={reasoning_value}"
     )
-    
+
     return ParsedModel(
         base_model=base_model,
         reasoning_type=reasoning_type,
         reasoning_value=reasoning_value,
-        original_model=model_name
+        original_model=model_name,
     )
+
 
 # Alias for backward compatibility
 parse_model_id = parse_model_name

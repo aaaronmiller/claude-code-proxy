@@ -199,7 +199,7 @@ async def scrape_openrouter_models(headless: bool = True) -> List[ModelStats]:
                                     input_price = float(price_str.split()[0])
                                 elif "output" in line.lower():
                                     output_price = float(price_str.split()[0])
-                            except:
+                            except Exception as _e:
                                 pass
                     
                     stats = ModelStats(

@@ -5,6 +5,9 @@ Loads model limits from scraped OpenRouter data (CSV/JSON files).
 Falls back to static database if files don't exist.
 
 Run `python dev/scripts/scrape_openrouter_models.py` to update the database.
+
+NOTE: This module uses dynamic model family detection as a fallback when specific
+model limits aren't found. See src/services/models/model_family.py for detection logic.
 """
 
 from typing import Dict, Optional, Tuple
@@ -12,7 +15,20 @@ import logging
 import json
 from pathlib import Path
 
+from src.services.models.model_family import detect_model_family, ModelFamily
+
 logger = logging.getLogger(__name__)
+
+# Family-based fallback limits (used when specific model not found)
+# These are conservative defaults for each model family
+FAMILY_FALLBACK_LIMITS = {
+    ModelFamily.OPENAI_O_SERIES: {"context": 128000, "output": 32768},
+    ModelFamily.OPENAI_GPT: {"context": 128000, "output": 16384},
+    ModelFamily.ANTHROPIC_CLAUDE: {"context": 200000, "output": 16384},
+    ModelFamily.GEMINI_FLASH: {"context": 1000000, "output": 8192},
+    ModelFamily.GEMINI_PRO: {"context": 1000000, "output": 8192},
+    ModelFamily.GEMINI_OTHER: {"context": 1000000, "output": 8192},
+}
 
 # Path to model limits files
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -121,12 +137,19 @@ def get_model_limits(model_name: str) -> Tuple[int, int]:
     """
     Get context window and output limits for a model.
 
+    Resolution order:
+    1. Exact match in loaded data
+    2. Case-insensitive match
+    3. Partial match (for versioned models)
+    4. Provider prefix variations
+    5. Family-based fallback (dynamic detection)
+    6. Conservative default
+
     Args:
         model_name: Model identifier (e.g., "gpt-4o", "openai/gpt-5")
 
     Returns:
         Tuple of (context_limit, output_limit) in tokens
-        Returns (128000, 4096) as conservative defaults if not found
     """
     MODEL_LIMITS = _load_model_limits()
 
@@ -170,6 +193,19 @@ def get_model_limits(model_name: str) -> Tuple[int, int]:
                 limits = MODEL_LIMITS[prefixed]
                 logger.debug(f"Found {model_name} with prefix: {prefixed}")
                 return limits["context"], limits["output"]
+
+    # Try family-based fallback (dynamic detection)
+    try:
+        family_info = detect_model_family(model_name)
+        if family_info.family in FAMILY_FALLBACK_LIMITS:
+            limits = FAMILY_FALLBACK_LIMITS[family_info.family]
+            logger.debug(
+                f"Using family-based fallback for {model_name}: "
+                f"family={family_info.family.value}"
+            )
+            return limits["context"], limits["output"]
+    except Exception as e:
+        logger.debug(f"Family detection failed for {model_name}: {e}")
 
     # Default fallback for unknown models
     logger.warning(f"Model limits not found for {model_name}, using defaults (128k/4k)")

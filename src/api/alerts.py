@@ -20,6 +20,7 @@ import json
 from src.core.logging import logger
 from src.services.usage.usage_tracker import usage_tracker
 from src.services.alert_engine import alert_engine
+from src.utils.json_utils import safe_json_loads
 
 router = APIRouter()
 
@@ -93,13 +94,9 @@ async def get_alert_rules(include_inactive: bool = False):
         rules = []
         for row in rows:
             rule = dict(row)
-            # Parse JSON fields
-            try:
-                rule["conditions"] = json.loads(rule.get("condition_json", "[]"))
-                rule["logic"] = json.loads(rule.get("condition_logic", "null"))
-                rule["actions"] = json.loads(rule.get("actions_json", "{}"))
-            except:
-                pass
+            rule["conditions"] = safe_json_loads(rule.get("condition_json", "[]"), default=[])
+            rule["logic"] = safe_json_loads(rule.get("condition_logic", "null"), default=None)
+            rule["actions"] = safe_json_loads(rule.get("actions_json", "{}"), default={})
             rules.append(rule)
 
         return {"rules": rules, "count": len(rules)}
@@ -127,12 +124,9 @@ async def get_alert_rule(rule_id: str):
             raise HTTPException(status_code=404, detail="Rule not found")
 
         rule = dict(row)
-        try:
-            rule["conditions"] = json.loads(rule.get("condition_json", "[]"))
-            rule["logic"] = json.loads(rule.get("condition_logic", "null"))
-            rule["actions"] = json.loads(rule.get("actions_json", "{}"))
-        except:
-            pass
+        rule["conditions"] = safe_json_loads(rule.get("condition_json", "[]"), default=[])
+        rule["logic"] = safe_json_loads(rule.get("condition_logic", "null"), default=None)
+        rule["actions"] = safe_json_loads(rule.get("actions_json", "{}"), default={})
 
         return rule
 
@@ -376,10 +370,7 @@ async def get_alert_history(
         alerts = []
         for row in rows:
             alert = dict(row)
-            try:
-                alert["alert_data"] = json.loads(row.get("alert_data_json", "{}"))
-            except:
-                alert["alert_data"] = {}
+            alert["alert_data"] = safe_json_loads(row.get("alert_data_json", "{}"), default={})
             alerts.append(alert)
 
         return {
@@ -422,10 +413,7 @@ async def get_alert_detail(alert_id: str):
             raise HTTPException(status_code=404, detail="Alert not found")
 
         alert = dict(row)
-        try:
-            alert["alert_data"] = json.loads(row.get("alert_data_json", "{}"))
-        except:
-            alert["alert_data"] = {}
+        alert["alert_data"] = safe_json_loads(row.get("alert_data_json", "{}"), default={})
 
         return alert
 
@@ -530,7 +518,7 @@ async def bulk_alert_actions(action: str, alert_ids: List[str], notes: Optional[
                     results["success"] += 1
                 else:
                     results["failed"] += 1
-            except:
+            except Exception as _e:
                 results["failed"] += 1
 
         conn.commit()
@@ -590,10 +578,7 @@ async def get_notification_channels():
         channels = []
         for row in rows:
             channel = dict(row)
-            try:
-                channel["config"] = json.loads(row.get("config", "{}"))
-            except:
-                channel["config"] = {}
+            channel["config"] = safe_json_loads(row.get("config", "{}"), default={})
             channels.append(channel)
 
         return {"channels": channels, "count": len(channels)}

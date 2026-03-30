@@ -566,7 +566,7 @@ async def list_models(
                 from src.core.config import get_provider_status_cache
 
                 provider_status = get_provider_status_cache()
-            except:
+            except Exception as _e:
                 provider_status = {}
 
             # Format response for grouped UI
@@ -997,7 +997,7 @@ async def test_provider(provider_id: str):
                 try:
                     data = response.json()
                     model_count = len(data.get("data", []))
-                except:
+                except Exception as _e:
                     model_count = 0
 
                 return {

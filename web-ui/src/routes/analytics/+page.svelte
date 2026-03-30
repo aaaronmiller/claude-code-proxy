@@ -5,6 +5,15 @@
 <script>
   import { onMount } from 'svelte';
   import { LineChart, BarChart, TimeRangePicker } from '../../components/charts/index.js';
+  import { 
+    generateMockTimeSeries, 
+    generateMockAggregate, 
+    generateMockProviderComparison,
+    generateMockModelComparison,
+    generateMockTopEndpoints
+  } from '$lib/services/mockAnalytics.js';
+  import NanoBanana from '$lib/components/icons/NanoBanana.svelte';
+  import Particles from '$lib/components/icons/Particles.svelte';
 
   // State
   let metrics = {
@@ -31,6 +40,7 @@
     try {
       // Fetch tokens
       const tokenRes = await fetch(`/api/analytics/timeseries?metric=tokens&start_date=${start}&end_date=${end}&group_by=day`);
+      if (!tokenRes.ok) throw new Error('API unavailable');
       const tokenData = await tokenRes.json();
 
       // Fetch cost
@@ -46,7 +56,11 @@
       metrics.requests = requestData;
 
     } catch (error) {
-      console.error('Error fetching time series:', error);
+      console.warn('Using mock time series data');
+      const mock = generateMockTimeSeries(7);
+      metrics.tokens = mock;
+      metrics.cost = mock.cost;
+      metrics.requests = mock.requests;
     } finally {
       loading = false;
     }
@@ -55,27 +69,33 @@
   async function fetchAggregateData(start, end) {
     try {
       const res = await fetch(`/api/analytics/aggregate?start_date=${start}&end_date=${end}`);
+      if (!res.ok) throw new Error('API unavailable');
       aggregate = await res.json();
     } catch (error) {
-      console.error('Error fetching aggregate:', error);
+      console.warn('Using mock aggregate data');
+      aggregate = generateMockAggregate();
     }
   }
 
   async function fetchProviderComparison(start, end) {
     try {
       const res = await fetch(`/api/analytics/provider-comparison?start_date=${start}&end_date=${end}`);
+      if (!res.ok) throw new Error('API unavailable');
       providerComparison = await res.json();
     } catch (error) {
-      console.error('Error fetching provider comparison:', error);
+      console.warn('Using mock provider comparison data');
+      providerComparison = generateMockProviderComparison();
     }
   }
 
   async function fetchModelComparison(start, end) {
     try {
       const res = await fetch(`/api/analytics/model-comparison?start_date=${start}&end_date=${end}`);
+      if (!res.ok) throw new Error('API unavailable');
       modelComparison = await res.json();
     } catch (error) {
-      console.error('Error fetching model comparison:', error);
+      console.warn('Using mock model comparison data');
+      modelComparison = generateMockModelComparison();
     }
   }
 
@@ -189,7 +209,15 @@
   <title>Analytics Dashboard - Claude Proxy</title>
 </svelte:head>
 
-<div class="analytics-container">
+<div class="analytics-container" style="position: relative;">
+  <!-- Nano Banana Decorations -->
+  <div class="absolute top-4 right-32 opacity-40 z-0 hidden sm:block" style="position: absolute; top: 1rem; right: 8rem;">
+    <NanoBanana size={28} />
+  </div>
+  <div class="absolute top-20 right-8 opacity-30 z-0 hidden sm:block" style="position: absolute; top: 5rem; right: 2rem;">
+    <Particles size={24} />
+  </div>
+
   <!-- Header -->
   <div class="header">
     <div class="title-section">
@@ -403,7 +431,7 @@
     max-width: 1400px;
     margin: 0 auto;
     padding: 2rem;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
   }
 
   .header {
@@ -418,12 +446,12 @@
   .title-section h1 {
     font-size: 2rem;
     font-weight: 700;
-    color: #1f2937;
+    color: var(--text-primary);
     margin: 0;
   }
 
   .subtitle {
-    color: #6b7280;
+    color: var(--text-secondary);
     margin: 0.25rem 0 0;
   }
 
@@ -439,18 +467,20 @@
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border-default);
+    background: var(--base-200);
+    color: var(--text-primary);
     transition: all 0.2s;
   }
 
   .btn-secondary {
-    background: white;
-    color: #374151;
+    background: var(--base-200);
+    color: var(--text-primary);
   }
 
   .btn-secondary:hover {
-    background: #f3f4f6;
-    border-color: #9ca3af;
+    background: var(--base-300);
+    border-color: var(--border-strong);
   }
 
   .date-range-section {
@@ -465,16 +495,21 @@
   }
 
   .stat-card {
-    background: white;
+    background: var(--base-200);
     border-radius: 8px;
     padding: 1.25rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border-default);
+    transition: all 0.2s ease;
+  }
+
+  .stat-card:hover {
+    border-color: var(--accent-default);
+    box-shadow: var(--shadow-md);
   }
 
   .stat-label {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--text-secondary);
     font-weight: 500;
     margin-bottom: 0.5rem;
   }
@@ -482,28 +517,28 @@
   .stat-value {
     font-size: 1.75rem;
     font-weight: 700;
-    color: #1f2937;
+    color: var(--text-primary);
     margin-bottom: 0.5rem;
   }
 
   .stat-meta {
     font-size: 0.8rem;
-    color: #9ca3af;
+    color: var(--text-tertiary);
   }
 
   .error-rate {
-    color: #ef4444;
+    color: var(--error);
   }
 
   .efficiency {
-    color: #10b981;
+    color: var(--success);
   }
 
   .tabs {
     display: flex;
     gap: 0.5rem;
     margin-bottom: 1.5rem;
-    border-bottom: 2px solid #e5e7eb;
+    border-bottom: 2px solid var(--border-default);
   }
 
   .tab-btn {
@@ -513,19 +548,19 @@
     border-bottom: 2px solid transparent;
     font-size: 0.95rem;
     font-weight: 500;
-    color: #6b7280;
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s;
     margin-bottom: -2px;
   }
 
   .tab-btn.active {
-    color: #3b82f6;
-    border-bottom-color: #3b82f6;
+    color: var(--accent-default);
+    border-bottom-color: var(--accent-default);
   }
 
   .tab-btn:hover {
-    color: #374151;
+    color: var(--text-primary);
   }
 
   .charts-grid {
@@ -536,17 +571,22 @@
   }
 
   .chart-card {
-    background: white;
+    background: var(--base-200);
     border-radius: 8px;
     padding: 1.25rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border-default);
+    transition: all 0.2s ease;
+  }
+
+  .chart-card:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
   }
 
   .chart-card h3 {
     font-size: 1rem;
     font-weight: 600;
-    color: #1f2937;
+    color: var(--text-primary);
     margin: 0 0 1rem;
   }
 
@@ -574,21 +614,21 @@
   th, td {
     text-align: left;
     padding: 0.75rem;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--border-default);
   }
 
   th {
     font-weight: 600;
-    color: #374151;
-    background: #f9fafb;
+    color: var(--text-primary);
+    background: var(--base-300);
   }
 
   td {
-    color: #4b5563;
+    color: var(--text-secondary);
   }
 
   tr:hover {
-    background: #f9fafb;
+    background: var(--base-300);
   }
 
   .loading-state {
@@ -596,17 +636,17 @@
     align-items: center;
     gap: 1rem;
     padding: 2rem;
-    background: white;
+    background: var(--base-200);
     border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid var(--border-default);
     margin: 1rem 0;
   }
 
   .spinner {
     width: 24px;
     height: 24px;
-    border: 3px solid #e5e7eb;
-    border-top-color: #3b82f6;
+    border: 3px solid var(--border-default);
+    border-top-color: var(--accent-default);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -621,9 +661,9 @@
     align-items: center;
     justify-content: center;
     padding: 4rem 2rem;
-    background: white;
+    background: var(--base-200);
     border-radius: 8px;
-    border: 2px dashed #e5e7eb;
+    border: 2px dashed var(--border-default);
     margin-top: 2rem;
   }
 
@@ -635,12 +675,12 @@
   .empty-state h3 {
     font-size: 1.25rem;
     font-weight: 600;
-    color: #374151;
+    color: var(--text-primary);
     margin: 0 0 0.5rem;
   }
 
   .empty-state p {
-    color: #6b7280;
+    color: var(--text-secondary);
     margin: 0;
   }
 

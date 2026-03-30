@@ -14,6 +14,7 @@ import json
 from datetime import datetime
 import uuid
 
+from src.utils.json_utils import safe_json_loads
 from src.core.logging import logger
 from src.services.usage.usage_tracker import usage_tracker
 
@@ -110,8 +111,8 @@ async def get_dashboards():
             dashboards.append({
                 "id": row["id"],
                 "name": row["name"],
-                "widgets": json.loads(row["widgets"]),
-                "config": json.loads(row["config"]),
+                "widgets": safe_json_loads(row["widgets"], default=[]),
+                "config": safe_json_loads(row["config"], default={}),
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
                 "owner": row["owner"]
@@ -149,8 +150,8 @@ async def get_dashboard(dashboard_id: str):
         return {
             "id": row["id"],
             "name": row["name"],
-            "widgets": json.loads(row["widgets"]),
-            "config": json.loads(row["config"]),
+            "widgets": safe_json_loads(row["widgets"], default=[]),
+            "config": safe_json_loads(row["config"], default={}),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "owner": row["owner"]

@@ -7,11 +7,12 @@ from typing import List, Dict, Set
 from pathlib import Path
 from src.services.models.free_model_rankings import get_top_free_models
 from src.services.models.selection_history import get_recent_models
+from src.services.models.model_family import detect_model_family, ModelFamily
 
 
 class ModelFilter:
     """Filter and prioritize models based on usage, popularity, and cost."""
-    
+
     # Top models that are consistently popular and useful
     TOP_MODELS = [
         "google/gemini-2.0-flash-exp",
@@ -35,7 +36,7 @@ class ModelFilter:
         "perplexity/llama-3.1-sonar-large",
         "cohere/command-r-plus",
     ]
-    
+
     # Free models that are actually good
     FREE_MODELS = [
         "google/gemini-2.0-flash-exp",
@@ -46,7 +47,7 @@ class ModelFilter:
         "mistralai/mistral-7b-instruct",
         "microsoft/phi-3-medium-128k-instruct",
     ]
-    
+
     # New models (last 2 months)
     NEW_MODELS = [
         "google/gemini-2.0-flash-exp",
@@ -57,99 +58,95 @@ class ModelFilter:
         "x-ai/grok-2",
         "deepseek/deepseek-chat",
     ]
-    
+
     def __init__(self, usage_file: str = "data/model_usage.json"):
         """
         Initialize model filter.
-        
+
         Args:
             usage_file: Path to file tracking model usage
         """
         self.usage_file = Path(usage_file)
         self.usage_data = self._load_usage_data()
-    
+
     def _load_usage_data(self) -> Dict:
         """Load model usage data from file."""
         if not self.usage_file.exists():
             return {"models": {}, "last_updated": None}
-        
+
         try:
-            with open(self.usage_file, 'r') as f:
+            with open(self.usage_file, "r") as f:
                 return json.load(f)
         except Exception:
             return {"models": {}, "last_updated": None}
-    
+
     def _save_usage_data(self):
         """Save model usage data to file."""
         try:
             self.usage_data["last_updated"] = datetime.now().isoformat()
-            with open(self.usage_file, 'w') as f:
+            with open(self.usage_file, "w") as f:
                 json.dump(self.usage_data, f, indent=2)
         except Exception:
             pass
-    
+
     def track_model_usage(self, model_name: str):
         """
         Track that a model was used.
-        
+
         Args:
             model_name: Name of the model that was used
         """
         models = self.usage_data.get("models", {})
-        
+
         if model_name not in models:
             models[model_name] = {
                 "count": 0,
                 "last_used": None,
-                "first_used": datetime.now().isoformat()
+                "first_used": datetime.now().isoformat(),
             }
-        
+
         models[model_name]["count"] += 1
         models[model_name]["last_used"] = datetime.now().isoformat()
-        
+
         self.usage_data["models"] = models
         self._save_usage_data()
-    
+
     def get_recently_used_models(self, limit: int = 20) -> List[str]:
         """
         Get most recently used models.
-        
+
         Args:
             limit: Maximum number of models to return
-            
+
         Returns:
             List of model names sorted by most recent usage
         """
         models = self.usage_data.get("models", {})
-        
+
         # Sort by last_used timestamp
         sorted_models = sorted(
-            models.items(),
-            key=lambda x: x[1].get("last_used", ""),
-            reverse=True
+            models.items(), key=lambda x: x[1].get("last_used", ""), reverse=True
         )
-        
+
         return [model for model, _ in sorted_models[:limit]]
-    
+
     def get_most_used_models(self, limit: int = 20) -> List[str]:
         """
         Get most frequently used models.
-        
+
         Args:
             limit: Maximum number of models to return
-            
+
         Returns:
             List of model names sorted by usage count
         """
         models = self.usage_data.get("models", {})
-        
+
         # Sort by count
         sorted_models = sorted(
-            models.items(),
-            key=lambda x: x[1].get("count", 0),
-            reverse=True
+            models.items(), key=lambda x: x[1].get("count", 0), reverse=True
         )
-        
+
         return [model for model, _ in sorted_models[:limit]]
 
     def get_filtered_models(
@@ -158,11 +155,11 @@ class ModelFilter:
         include_free: bool = True,
         include_top: bool = True,
         include_recent: bool = True,
-        max_total: int = 100
+        max_total: int = 100,
     ) -> List[str]:
         """
         Get filtered list of models with Smart Sorting.
-        
+
         Sorting Order:
         1. New & Free (The "Stealth" free models)
         2. Recently Used (Your favorites)
@@ -171,14 +168,14 @@ class ModelFilter:
         5. Others
         """
         unique_models = set()
-        
+
         # 1. New Models (Prioritize New & Free)
         new_models = []
         for model in self.NEW_MODELS:
             if model in all_models:
                 new_models.append(model)
                 unique_models.add(model)
-        
+
         # 2. Recently Used (request usage + selection history)
         recent_models = []
         if include_recent:
@@ -196,7 +193,7 @@ class ModelFilter:
                 if model in all_models and model not in unique_models:
                     recent_models.append(model)
                     unique_models.add(model)
-                    
+
         # 3. Top Free (excluding already added)
         free_models = []
         if include_free:
@@ -210,7 +207,7 @@ class ModelFilter:
                 if model in all_models and model not in unique_models:
                     free_models.append(model)
                     unique_models.add(model)
-                    
+
         # 4. Top Paid/Popular
         top_models = []
         if include_top:
@@ -218,7 +215,7 @@ class ModelFilter:
                 if model in all_models and model not in unique_models:
                     top_models.append(model)
                     unique_models.add(model)
-                    
+
         # 5. Fill the rest from all_models until max_total
         # Only if we need more padding
         rest_models = []
@@ -229,7 +226,7 @@ class ModelFilter:
                     unique_models.add(model)
                     if len(unique_models) >= max_total:
                         break
-                        
+
         # Combine lists in priority order
         # Note: We return a flat list, but the UI can use is_new_model() etc to show badges
         return new_models + recent_models + free_models + top_models + rest_models
@@ -237,38 +234,80 @@ class ModelFilter:
     def is_new_model(self, model_name: str) -> bool:
         """Check if model is considered 'new'."""
         return model_name in self.NEW_MODELS
-    
+
     def is_free_model(self, model_name: str) -> bool:
         """
         Check if a model is free.
-        
+
         Args:
             model_name: Model name to check
-            
+
         Returns:
             True if model is free
         """
         return model_name in self.FREE_MODELS
-    
+
     def is_top_model(self, model_name: str) -> bool:
         """
         Check if a model is in the top models list.
-        
+
         Args:
             model_name: Model name to check
-            
+
         Returns:
             True if model is a top model
         """
         return model_name in self.TOP_MODELS
 
+    def get_model_family(self, model_name: str) -> ModelFamily:
+        """
+        Get the model family for a model using dynamic detection.
+
+        Args:
+            model_name: Model name to check
+
+        Returns:
+            ModelFamily enum value
+        """
+        return detect_model_family(model_name).family
+
+    def is_anthropic_model(self, model_name: str) -> bool:
+        """Check if model is Anthropic Claude family (dynamic detection)."""
+        return self.get_model_family(model_name) == ModelFamily.ANTHROPIC_CLAUDE
+
+    def is_openai_model(self, model_name: str) -> bool:
+        """Check if model is OpenAI family (GPT or O-series)."""
+        family = self.get_model_family(model_name)
+        return family in (ModelFamily.OPENAI_GPT, ModelFamily.OPENAI_O_SERIES)
+
+    def is_gemini_model(self, model_name: str) -> bool:
+        """Check if model is Google Gemini family."""
+        family = self.get_model_family(model_name)
+        return family in (
+            ModelFamily.GEMINI_FLASH,
+            ModelFamily.GEMINI_PRO,
+            ModelFamily.GEMINI_OTHER,
+        )
+
+    def is_reasoning_model(self, model_name: str) -> bool:
+        """Check if model supports reasoning/thinking (dynamic detection)."""
+        family = self.get_model_family(model_name)
+        return family in (
+            ModelFamily.OPENAI_O_SERIES,
+            ModelFamily.ANTHROPIC_CLAUDE,
+            ModelFamily.GEMINI_PRO,
+            ModelFamily.GEMINI_FLASH,
+        )
+
 
 # Global instance
 model_filter = ModelFilter()
 
+
 def filter_models(all_models: List[str], **kwargs) -> List[str]:
     """Wrapper for model_filter.get_filtered_models"""
     return model_filter.get_filtered_models(all_models, **kwargs)
+
 
 def get_available_models() -> List[str]:
     """

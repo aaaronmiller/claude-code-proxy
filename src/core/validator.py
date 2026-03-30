@@ -139,7 +139,7 @@ class ConfigValidator:
         # Import config to check auto-resolved values
         try:
             from src.core.config import config as resolved_config
-        except:
+        except Exception as _e:
             resolved_config = None
             
         for tier in ["BIG", "MIDDLE", "SMALL"]:
@@ -313,7 +313,7 @@ class ConfigValidator:
                     data = response.json()
                     if "data" in data:
                         result["models_available"] = len(data["data"])
-                except:
+                except Exception as _e:
                     pass
             else:
                 self.warnings.append(

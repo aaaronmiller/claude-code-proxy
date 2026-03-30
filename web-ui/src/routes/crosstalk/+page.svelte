@@ -1531,20 +1531,41 @@
 </div>
 
 <style>
+    /* ═══════════════════════════════════════════════════════════════════════════
+       THEME-AWARE OVERRIDES
+       These override hardcoded zinc colors with CSS variables
+       ═══════════════════════════════════════════════════════════════════════════ */
+    
+    /* Background colors */
+    :global(.bg-zinc-950) { background-color: var(--base-200) !important; }
+    :global(.bg-zinc-900) { background-color: var(--base-100) !important; }
+    :global(.bg-zinc-800) { background-color: var(--base-300) !important; }
+    :global(.bg-zinc-700) { background-color: var(--base-300); filter: brightness(1.15); }
+    
+    /* Border colors */
+    :global(.border-zinc-800) { border-color: var(--border-default) !important; }
+    :global(.border-zinc-700) { border-color: var(--border-strong) !important; }
+    
+    /* Text colors */
+    :global(.text-zinc-400) { color: var(--text-secondary) !important; }
+    :global(.text-zinc-300) { color: var(--text-primary) !important; }
+    :global(.text-zinc-500) { color: var(--text-tertiary) !important; }
+    :global(.text-zinc-200) { color: var(--text-primary) !important; }
+
     /* Custom scrollbar */
     ::-webkit-scrollbar {
         width: 6px;
         height: 6px;
     }
     ::-webkit-scrollbar-track {
-        background: #18181b;
+        background: var(--base-200);
     }
     ::-webkit-scrollbar-thumb {
-        background: #3f3f46;
+        background: var(--border-strong);
         border-radius: 3px;
     }
     ::-webkit-scrollbar-thumb:hover {
-        background: #52525b;
+        background: var(--text-tertiary);
     }
 
     /* Font adjustments */

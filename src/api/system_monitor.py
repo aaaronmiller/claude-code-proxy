@@ -50,7 +50,7 @@ async def get_system_health():
                     start_time = datetime.fromisoformat(result[0])
                     uptime_seconds = (datetime.utcnow() - start_time).total_seconds()
                 conn.close()
-        except:
+        except Exception as _e:
             pass
 
         # Format uptime
@@ -80,7 +80,7 @@ async def get_system_health():
                 """)
                 hourly_requests = cursor.fetchone()[0] or 0
                 conn.close()
-            except:
+            except Exception as _e:
                 pass
 
         return {

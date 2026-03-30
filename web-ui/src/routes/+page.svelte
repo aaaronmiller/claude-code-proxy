@@ -46,6 +46,19 @@
         Target,
         Award
     } from "lucide-svelte";
+    import ThemeSelector from "$lib/components/ThemeSelector.svelte";
+    import HeroBackground from "$lib/components/HeroBackground.svelte";
+    import BrainCircuit from "$lib/components/icons/BrainCircuit.svelte";
+    import ModelIcon from "$lib/components/icons/ModelIcon.svelte";
+    import AnalyticsIcon from "$lib/components/icons/AnalyticsIcon.svelte";
+    import MultiModelIcon from "$lib/components/icons/MultiModelIcon.svelte";
+    import CacheIcon from "$lib/components/icons/CacheIcon.svelte";
+    import RoutingIcon from "$lib/components/icons/RoutingIcon.svelte";
+    import ShieldIcon from "$lib/components/icons/ShieldIcon.svelte";
+    import ZapIcon from "$lib/components/icons/ZapIcon.svelte";
+    import ModelSelector from "$lib/components/ModelSelector.svelte";
+    import NanoBanana from "$lib/components/icons/NanoBanana.svelte";
+    import Particles from "$lib/components/icons/Particles.svelte";
 
     // State management
     let activeTab = $state("dashboard");  // Changed to dashboard as default
@@ -530,50 +543,51 @@
     });
 </script>
 
-<div class="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
+<div class="min-h-screen font-sans" style="background-color: var(--base-100); color: var(--text-primary);">
 
     <!-- Header -->
-    <header class="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10">
+    <header class="border-b sticky top-0 z-10 backdrop-blur-sm" style="background-color: var(--base-200); border-color: var(--border-default);">
         <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
-                    <span class="text-zinc-900 font-bold text-sm">CP</span>
+                    <span class="font-bold text-sm" style="color: var(--text-inverse);">CP</span>
                 </div>
                 <div>
                     <h1 class="font-bold text-lg tracking-tight">Claude Proxy</h1>
-                    <p class="text-xs text-zinc-400">Web Dashboard</p>
+                    <p class="text-xs text-[var(--text-secondary)]">Web Dashboard</p>
                 </div>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 items-center">
+                <ThemeSelector />
                 <button
                     onclick={() => { activeTab = 'dashboard'; }}
-                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'dashboard' ? 'bg-zinc-800 border-cyan-500' : ''}"
+                    class="px-3 py-1.5 text-sm rounded-md border transition-colors {activeTab === 'dashboard' ? 'border-[var(--accent-default)] bg-[var(--base-300)]' : 'border-[var(--border-default)] hover:bg-[var(--base-300)]'}"
                 >
                     Dashboard
                 </button>
                 <button
                     onclick={() => { activeTab = 'setup'; }}
-                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'setup' ? 'bg-zinc-800 border-cyan-500' : ''}"
+                    class="px-3 py-1.5 text-sm rounded-md border transition-colors {activeTab === 'setup' ? 'border-[var(--accent-default)] bg-[var(--base-300)]' : 'border-[var(--border-default)] hover:bg-[var(--base-300)]'}"
                 >
                     Setup
                 </button>
                 <button
                     onclick={() => { activeTab = 'models'; }}
-                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'models' ? 'bg-zinc-800 border-cyan-500' : ''}"
+                    class="px-3 py-1.5 text-sm rounded-md border transition-colors {activeTab === 'models' ? 'border-[var(--accent-default)] bg-[var(--base-300)]' : 'border-[var(--border-default)] hover:bg-[var(--base-300)]'}"
                 >
                     Models
                 </button>
                 <button
                     onclick={() => { activeTab = 'analytics'; }}
-                    class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 hover:bg-zinc-800 transition-colors {activeTab === 'analytics' ? 'bg-zinc-800 border-cyan-500' : ''}"
+                    class="px-3 py-1.5 text-sm rounded-md border transition-colors {activeTab === 'analytics' ? 'border-[var(--accent-default)] bg-[var(--base-300)]' : 'border-[var(--border-default)] hover:bg-[var(--base-300)]'}"
                 >
                     Analytics
                 </button>
                 <button
                     onclick={openCrosstalk}
-                    class="px-3 py-1.5 text-sm rounded-md border border-purple-700 hover:bg-zinc-800 transition-colors bg-purple-900/20 text-purple-300"
+                    class="px-3 py-1.5 text-sm rounded-md border border-purple-700/50 bg-purple-900/20 text-purple-300 hover:bg-purple-900/30 transition-colors"
                 >
-                    ⚡ Crosstalk
+                    Crosstalk
                 </button>
             </div>
         </div>
@@ -587,24 +601,58 @@
             <div class="space-y-6">
 
                 <!-- Welcome & Status Header -->
-                <section class="bg-gradient-to-br from-zinc-900 to-zinc-950 rounded-lg p-6 border border-zinc-800 relative overflow-hidden">
-                    <!-- Decorative glow -->
-                    <div class="absolute top-0 right-0 w-64 h-64 bg-purple-500/5 rounded-full blur-3xl pointer-events-none"></div>
+                <section class="dashboard-card relative overflow-hidden" style="background: linear-gradient(135deg, var(--base-200), var(--base-100));">
+                    <!-- Animated Hero Background -->
+                    <HeroBackground variant="aurora" />
+
+                    <!-- Nano Banana Decorations -->
+                    <div class="absolute top-4 right-20 opacity-60 z-0 animate-float">
+                        <NanoBanana size={32} />
+                    </div>
+                    <div class="absolute bottom-8 left-8 opacity-40 z-0">
+                        <Particles size={40} />
+                    </div>
+                    <div class="absolute top-8 left-1/4 opacity-30 z-0">
+                        <NanoBanana size={20} />
+                    </div>
+                    <div class="absolute bottom-4 right-1/3 opacity-25 z-0 animate-pulse">
+                        <Particles size={24} />
+                    </div>
 
                     <div class="flex justify-between items-start mb-6 relative z-10">
                         <div>
                             <h2 class="text-2xl font-bold mb-1">Welcome to Claude Proxy</h2>
-                            <p class="text-zinc-400 text-sm">Real-time monitoring and analytics</p>
+                            <p class="text-[var(--text-secondary)] text-sm">Real-time monitoring and analytics</p>
+                            
+                            <!-- Feature Badges -->
+                            <div class="flex flex-wrap gap-2 mt-4">
+                                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs" style="background-color: var(--base-300); border-color: var(--border-default);">
+                                    <BrainCircuit size={14} />
+                                    <span style="color: var(--text-primary)">AI Routing</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs" style="background-color: var(--base-300); border-color: var(--border-default);">
+                                    <MultiModelIcon size={14} />
+                                    <span style="color: var(--text-primary)">Multi-Model</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs" style="background-color: var(--base-300); border-color: var(--border-default);">
+                                    <ModelIcon size={14} />
+                                    <span style="color: var(--text-primary)">Smart Caching</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs" style="background-color: var(--base-300); border-color: var(--border-default);">
+                                    <AnalyticsIcon size={14} />
+                                    <span style="color: var(--text-primary)">Analytics</span>
+                                </div>
+                            </div>
                         </div>
                         <div class="flex items-center gap-3">
-                            <div class="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700">
+                            <div class="flex items-center gap-2 px-3 py-1.5 rounded border" style="background-color: var(--base-300); border-color: var(--border-default);">
                                 <div class="w-2 h-2 rounded-full {systemHealth.websocket_connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}"></div>
                                 <span class="text-xs font-mono">{wsStatus.toUpperCase()}</span>
                             </div>
                             <button
                                 onclick={loadDashboardData}
                                 disabled={dashboardLoading}
-                                class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700 flex items-center gap-2 transition-colors"
+                                class="px-3 py-1.5 rounded border flex items-center gap-2 transition-colors hover:bg-[var(--base-300)]" style="background-color: var(--base-300); border-color: var(--border-default);"
                             >
                                 <RefreshCw class="w-3 h-3 {dashboardLoading ? 'animate-spin' : ''}" />
                                 Refresh
@@ -613,15 +661,15 @@
                     </div>
 
                     <!-- Quick Stats Grid -->
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <!-- Requests Today -->
-                        <div class="bg-zinc-950/50 rounded-lg p-4 border border-zinc-800 hover:border-cyan-500/50 transition-colors">
+                        <div class="rounded-lg p-4 border hover:border-[var(--primary-default)] transition-all duration-200 cursor-pointer card-hover card-hover-glow animate-slide-up stagger-1" style="background-color: var(--base-200); border-color: var(--border-default);">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs text-zinc-400">Requests Today</span>
+                                <span class="text-xs text-[var(--text-secondary)]">Requests Today</span>
                                 <ActivityIcon class="w-3 h-3 text-cyan-400" />
                             </div>
                             <div class="text-2xl font-bold text-cyan-400">{stats.requests_today || 0}</div>
-                            <div class="text-xs text-zinc-500 mt-1">
+                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
                                 {#if liveMetrics.requests_per_second > 0}
                                     +{liveMetrics.requests_per_second}/s
                                 {:else}
@@ -631,13 +679,13 @@
                         </div>
 
                         <!-- Cost Today -->
-                        <div class="bg-zinc-950/50 rounded-lg p-4 border border-zinc-800 hover:border-green-500/50 transition-colors">
+                        <div class="rounded-lg p-4 border hover:border-green-500/50 transition-all duration-200 cursor-pointer card-hover card-hover-glow animate-slide-up stagger-2" style="background-color: var(--base-200); border-color: var(--border-default);">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs text-zinc-400">Cost Today</span>
+                                <span class="text-xs text-[var(--text-secondary)]">Cost Today</span>
                                 <DollarSign class="w-3 h-3 text-green-400" />
                             </div>
                             <div class="text-2xl font-bold text-green-400">${stats.est_cost.toFixed(2)}</div>
-                            <div class="text-xs text-zinc-500 mt-1">
+                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
                                 {#if liveMetrics.cost_per_second > 0}
                                     ${liveMetrics.cost_per_second.toFixed(4)}/s
                                 {:else}
@@ -647,13 +695,13 @@
                         </div>
 
                         <!-- Total Tokens -->
-                        <div class="bg-zinc-950/50 rounded-lg p-4 border border-zinc-800 hover:border-purple-500/50 transition-colors">
+                        <div class="rounded-lg p-4 border hover:border-purple-500/50 transition-all duration-200 cursor-pointer card-hover card-hover-glow animate-slide-up stagger-3" style="background-color: var(--base-200); border-color: var(--border-default);">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs text-zinc-400">Total Tokens</span>
+                                <span class="text-xs text-[var(--text-secondary)]">Total Tokens</span>
                                 <Layers class="w-3 h-3 text-purple-400" />
                             </div>
                             <div class="text-2xl font-bold text-purple-400">{formatTokens(stats.total_tokens)}</div>
-                            <div class="text-xs text-zinc-500 mt-1">
+                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
                                 {#if liveMetrics.tokens_per_second > 0}
                                     +{liveMetrics.tokens_per_second.toFixed(0)}/s
                                 {:else}
@@ -663,13 +711,125 @@
                         </div>
 
                         <!-- Avg Latency -->
-                        <div class="bg-zinc-950/50 rounded-lg p-4 border border-zinc-800 hover:border-amber-500/50 transition-colors">
+                        <div class="rounded-lg p-4 border hover:border-amber-500/50 transition-all duration-200 cursor-pointer card-hover card-hover-glow animate-slide-up stagger-4" style="background-color: var(--base-200); border-color: var(--border-default);">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs text-zinc-400">Avg Latency</span>
+                                <span class="text-xs text-[var(--text-secondary)]">Avg Latency</span>
                                 <Clock class="w-3 h-3 text-amber-400" />
                             </div>
                             <div class="text-2xl font-bold text-amber-400">{stats.avg_latency || 0}ms</div>
-                            <div class="text-xs text-zinc-500 mt-1">
+                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
+                                {#if liveMetrics.active_requests > 0}
+                                    {liveMetrics.active_requests} active
+                                {:else}
+                                    All requests complete
+                                {/if}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Current Models & Live Speed/Usage -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Current Models -->
+                        <div class="rounded-lg p-4 border" style="background-color: var(--base-200); border-color: var(--border-default);">
+                            <h3 class="text-sm font-bold mb-3 flex items-center gap-2">
+                                <Cpu class="w-4 h-4 text-purple-400" />
+                                Current Models
+                            </h3>
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center p-2 rounded" style="background-color: var(--base-100);">
+                                    <span class="text-xs uppercase font-bold text-purple-400">BIG</span>
+                                    <span class="font-mono text-sm text-cyan-400 truncate max-w-[200px]">{config.big_model || 'Not set'}</span>
+                                </div>
+                                <div class="flex justify-between items-center p-2 rounded" style="background-color: var(--base-100);">
+                                    <span class="text-xs uppercase font-bold text-cyan-400">MIDDLE</span>
+                                    <span class="font-mono text-sm text-cyan-400 truncate max-w-[200px]">{config.middle_model || 'Not set'}</span>
+                                </div>
+                                <div class="flex justify-between items-center p-2 rounded" style="background-color: var(--base-100);">
+                                    <span class="text-xs uppercase font-bold text-green-400">SMALL</span>
+                                    <span class="font-mono text-sm text-cyan-400 truncate max-w-[200px]">{config.small_model || 'Not set'}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Speed Stats -->
+                        <div class="rounded-lg p-4 border" style="background-color: var(--base-200); border-color: var(--border-default);">
+                            <h3 class="text-sm font-bold mb-3 flex items-center gap-2">
+                                <ZapIcon size={16} class="text-amber-400" />
+                                Live Speed Stats
+                            </h3>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="p-2 rounded text-center" style="background-color: var(--base-100);">
+                                    <div class="text-lg font-bold text-cyan-400">{liveMetrics.requests_per_second.toFixed(1)}</div>
+                                    <div class="text-xs" style="color: var(--text-tertiary);">req/sec</div>
+                                </div>
+                                <div class="p-2 rounded text-center" style="background-color: var(--base-100);">
+                                    <div class="text-lg font-bold text-purple-400">{liveMetrics.tokens_per_second.toFixed(0)}</div>
+                                    <div class="text-xs" style="color: var(--text-tertiary);">tokens/sec</div>
+                                </div>
+                                <div class="p-2 rounded text-center" style="background-color: var(--base-100);">
+                                    <div class="text-lg font-bold text-green-400">${liveMetrics.cost_per_second.toFixed(4)}</div>
+                                    <div class="text-xs" style="color: var(--text-tertiary);">cost/sec</div>
+                                </div>
+                                <div class="p-2 rounded text-center" style="background-color: var(--base-100);">
+                                    <div class="text-lg font-bold text-amber-400">{liveMetrics.active_requests}</div>
+                                    <div class="text-xs" style="color: var(--text-tertiary);">active</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                            </div>
+                        </div>
+                    </div>
+                            <div class="text-2xl font-bold text-cyan-400">{stats.requests_today || 0}</div>
+                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
+                                {#if liveMetrics.requests_per_second > 0}
+                                    +{liveMetrics.requests_per_second}/s
+                                {:else}
+                                    No current activity
+                                {/if}
+                            </div>
+                        </div>
+
+                        <!-- Cost Today -->
+                        <div class="rounded-lg p-4 border hover:border-green-500/50 transition-colors" style="background-color: var(--base-200); border-color: var(--border-default);">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs text-[var(--text-secondary)]">Cost Today</span>
+                                <DollarSign class="w-3 h-3 text-green-400" />
+                            </div>
+                            <div class="text-2xl font-bold text-green-400">${stats.est_cost.toFixed(2)}</div>
+                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
+                                {#if liveMetrics.cost_per_second > 0}
+                                    ${liveMetrics.cost_per_second.toFixed(4)}/s
+                                {:else}
+                                    No current spend
+                                {/if}
+                            </div>
+                        </div>
+
+                        <!-- Total Tokens -->
+                        <div class="rounded-lg p-4 border hover:border-purple-500/50 transition-colors" style="background-color: var(--base-200); border-color: var(--border-default);">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs text-[var(--text-secondary)]">Total Tokens</span>
+                                <Layers class="w-3 h-3 text-purple-400" />
+                            </div>
+                            <div class="text-2xl font-bold text-purple-400">{formatTokens(stats.total_tokens)}</div>
+                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
+                                {#if liveMetrics.tokens_per_second > 0}
+                                    +{liveMetrics.tokens_per_second.toFixed(0)}/s
+                                {:else}
+                                    No current processing
+                                {/if}
+                            </div>
+                        </div>
+
+                        <!-- Avg Latency -->
+                        <div class="rounded-lg p-4 border hover:border-amber-500/50 transition-colors" style="background-color: var(--base-200); border-color: var(--border-default);">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs text-[var(--text-secondary)]">Avg Latency</span>
+                                <Clock class="w-3 h-3 text-amber-400" />
+                            </div>
+                            <div class="text-2xl font-bold text-amber-400">{stats.avg_latency || 0}ms</div>
+                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
                                 {#if liveMetrics.active_requests > 0}
                                     {liveMetrics.active_requests} active
                                 {:else}
@@ -680,9 +840,9 @@
                     </div>
 
                     <!-- System Health Bar -->
-                    <div class="bg-zinc-950 rounded-lg p-4 border border-zinc-800">
+                    <div class="rounded-lg p-4 border" style="background-color: var(--base-100); border-color: var(--border-default);">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs text-zinc-400">System Health</span>
+                            <span class="text-xs text-[var(--text-secondary)]">System Health</span>
                             <div class="flex items-center gap-3 text-xs font-mono">
                                 <span>⚡ Uptime: {systemHealth.uptime}</span>
                                 <span>💾 DB: {systemHealth.db_size}MB</span>
@@ -690,20 +850,20 @@
                         </div>
                         <div class="flex gap-2">
                             <div class="flex-1">
-                                <div class="flex justify-between text-xs text-zinc-500 mb-1">
+                                <div class="flex justify-between text-xs mb-1" style="color: var(--text-tertiary);">
                                     <span>CPU</span>
                                     <span>{systemHealth.cpu_usage}%</span>
                                 </div>
-                                <div class="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                <div class="h-1.5 rounded-full overflow-hidden" style="background-color: var(--base-300);">
                                     <div class="h-full bg-cyan-500 transition-all duration-300" style="width: {systemHealth.cpu_usage}%"></div>
                                 </div>
                             </div>
                             <div class="flex-1">
-                                <div class="flex justify-between text-xs text-zinc-500 mb-1">
+                                <div class="flex justify-between text-xs mb-1" style="color: var(--text-tertiary);">
                                     <span>Memory</span>
                                     <span>{systemHealth.memory_usage}%</span>
                                 </div>
-                                <div class="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                <div class="h-1.5 rounded-full overflow-hidden" style="background-color: var(--base-300);">
                                     <div class="h-full bg-purple-500 transition-all duration-300" style="width: {systemHealth.memory_usage}%"></div>
                                 </div>
                             </div>
@@ -713,7 +873,7 @@
 
                 <!-- Alert Section -->
                 {#if activeAlerts.length > 0 || hasCriticalAlerts}
-                    <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                    <section class="dashboard-card">
                         <div class="flex items-center justify-between mb-4">
                             <h3 class="font-bold flex items-center gap-2">
                                 <Bell class="w-4 h-4 {hasCriticalAlerts ? 'text-red-400' : 'text-amber-400'}" />
@@ -721,7 +881,7 @@
                             </h3>
                             <button
                                 onclick={() => activeAlerts = []}
-                                class="text-xs px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded"
+                                class="text-xs px-2 py-1 rounded border transition-colors hover:bg-[var(--base-300)]" style="background-color: var(--base-300); border-color: var(--border-default);"
                             >
                                 Clear All
                             </button>
@@ -737,12 +897,12 @@
                                     {/if}
                                     <div class="flex-1">
                                         <div class="font-semibold text-sm">{alert.rule_name || alert.message}</div>
-                                        <div class="text-xs text-zinc-400 mt-1">{alert.message}</div>
-                                        <div class="text-xs text-zinc-500 mt-1">{alert.timestamp}</div>
+                                        <div class="text-xs text-[var(--text-secondary)] mt-1">{alert.message}</div>
+                                        <div class="text-xs mt-1" style="color: var(--text-tertiary);">{alert.timestamp}</div>
                                     </div>
                                     <button
                                         onclick={() => { activeAlerts = activeAlerts.filter((_, idx) => idx !== i); }}
-                                        class="text-zinc-500 hover:text-zinc-300"
+                                        class="transition-colors" style="color: var(--text-tertiary);"
                                     >
                                         <X class="w-3 h-3" />
                                     </button>
@@ -753,13 +913,13 @@
                 {/if}
 
                 <!-- Budget & Cost Tracking -->
-                <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                <section class="dashboard-card">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="font-bold flex items-center gap-2">
                             <Target class="w-4 h-4 text-green-400" />
                             Budget Tracking
                         </h3>
-                        <button class="text-xs px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700">
+                        <button class="text-xs px-3 py-1 rounded border transition-colors hover:bg-[var(--base-300)]" style="background-color: var(--base-300); border-color: var(--border-default);">
                             Configure Budget
                         </button>
                     </div>
@@ -768,12 +928,12 @@
                         <!-- Daily Budget -->
                         <div>
                             <div class="flex justify-between text-sm mb-2">
-                                <span class="text-zinc-400">Daily Budget</span>
+                                <span class="text-[var(--text-secondary)]">Daily Budget</span>
                                 <span class="{budgetData.usage_percentage >= 80 ? 'text-amber-400 font-bold' : 'text-green-400'}">
                                     ${budgetData.current_daily.toFixed(2)} / ${budgetData.daily_limit.toFixed(2)}
                                 </span>
                             </div>
-                            <div class="h-2 bg-zinc-800 rounded-full overflow-hidden relative">
+                            <div class="h-2 rounded-full overflow-hidden relative" style="background-color: var(--base-300);">
                                 <div
                                     class="h-full transition-all duration-300 rounded-full
                                         {budgetData.usage_percentage >= 95 ? 'bg-red-500' :
@@ -782,9 +942,9 @@
                                     style="width: {budgetData.usage_percentage}%"
                                 ></div>
                                 <!-- 80% marker -->
-                                <div class="absolute top-0 bottom-0 w-0.5 bg-zinc-600 left-[80%]"></div>
+                                <div class="absolute top-0 bottom-0 w-0.5 left-[80%]" style="background-color: var(--border-strong);"></div>
                             </div>
-                            <div class="text-xs text-zinc-500 mt-1">
+                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
                                 {budgetData.usage_percentage.toFixed(0)}% used
                                 {#if budgetData.usage_percentage >= 95}
                                     • <span class="text-red-400">Near limit!</span>
@@ -797,37 +957,37 @@
                         <!-- Monthly Budget -->
                         <div>
                             <div class="flex justify-between text-sm mb-2">
-                                <span class="text-zinc-400">Monthly Budget</span>
-                                <span class="text-zinc-200">
+                                <span class="text-[var(--text-secondary)]">Monthly Budget</span>
+                                <span class="font-medium" style="color: var(--text-primary);">
                                     ${budgetData.current_monthly.toFixed(0)} / ${budgetData.monthly_limit}
                                 </span>
                             </div>
-                            <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                            <div class="h-2 rounded-full overflow-hidden" style="background-color: var(--base-300);">
                                 <div
                                     class="h-full bg-cyan-500 transition-all duration-300 rounded-full"
                                     style="width: {(budgetData.current_monthly / budgetData.monthly_limit * 100)}%"
                                 ></div>
                             </div>
-                            <div class="text-xs text-zinc-500 mt-1">
+                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
                                 {(budgetData.current_monthly / budgetData.monthly_limit * 100).toFixed(1)}% used
                             </div>
                         </div>
                     </div>
 
                     <!-- Alert Configuration -->
-                    <div class="mt-4 pt-4 border-t border-zinc-800">
+                    <div class="mt-4 pt-4 border-t" style="border-color: var(--border-default);">
                         <div class="flex items-center justify-between">
-                            <span class="text-sm text-zinc-400">Alert Settings</span>
+                            <span class="text-sm text-[var(--text-secondary)]">Alert Settings</span>
                             <div class="flex gap-2">
                                 <label class="flex items-center gap-2 text-xs cursor-pointer">
-                                    <input type="checkbox" checked class="rounded bg-zinc-800 border-zinc-700" />
+                                    <input type="checkbox" checked class="rounded border" style="background-color: var(--base-300); border-color: var(--border-default);" />
                                     Email at 80%
                                 </label>
                                 <label class="flex items-center gap-2 text-xs cursor-pointer">
-                                    <input type="checkbox" checked class="rounded bg-zinc-800 border-zinc-700" />
+                                    <input type="checkbox" checked class="rounded border" style="background-color: var(--base-300); border-color: var(--border-default);" />
                                     Slack at 95%
                                 </label>
-                                <button class="text-xs px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700">
+                                <button class="text-xs px-3 py-1 rounded border transition-colors hover:bg-[var(--base-300)]" style="background-color: var(--base-300); border-color: var(--border-default);">
                                     Manage Rules
                                 </button>
                             </div>
@@ -837,7 +997,7 @@
 
                 <!-- Real-time Model Distribution -->
                 {#if Object.keys(liveMetrics.model_distribution).length > 0}
-                    <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                    <section class="dashboard-card">
                         <h3 class="font-bold mb-4 flex items-center gap-2">
                             <ActivityIcon class="w-4 h-4 text-cyan-400" />
                             Current Activity Distribution (Last 60s)
@@ -845,24 +1005,67 @@
                         <div class="space-y-2">
                             {#each Object.entries(liveMetrics.model_distribution) as [model, count]}
                                 <div class="flex items-center gap-3 text-sm">
-                                    <div class="font-mono text-xs w-32 text-zinc-400 truncate">
+                                    <div class="font-mono text-xs w-32 text-[var(--text-secondary)] truncate">
                                         {model.split('/').pop() || model}
                                     </div>
-                                    <div class="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
+                                    <div class="flex-1 h-2 rounded-full overflow-hidden" style="background-color: var(--base-300);">
                                         <div
                                             class="h-full bg-cyan-500"
                                             style="width: {(count / Math.max(...Object.values(liveMetrics.model_distribution)) * 100)}%"
                                         ></div>
                                     </div>
-                                    <div class="text-xs text-zinc-400 w-12 text-right">{count}</div>
+                                    <div class="text-xs text-[var(--text-secondary)] w-12 text-right">{count}</div>
                                 </div>
                             {/each}
                         </div>
                     </section>
                 {/if}
 
+                <!-- Features Banner -->
+                <section class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <button type="button" class="dashboard-card p-4 flex items-center gap-4 group cursor-pointer hover:border-[var(--primary-default)] text-left card-hover-lift animate-slide-up stagger-1" onclick={() => activeTab = 'analytics'}>
+                        <div class="p-3 rounded-lg transition-transform group-hover:scale-110" style="background-color: var(--base-300);">
+                            <RoutingIcon size={24} class="text-cyan-400 transition-transform" />
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-sm">Smart Routing</h4>
+                            <p class="text-xs text-[var(--text-secondary)]">AI-powered request distribution</p>
+                        </div>
+                    </button>
+                    
+                    <button type="button" class="dashboard-card p-4 flex items-center gap-4 group cursor-pointer hover:border-[var(--primary-default)] text-left card-hover-lift animate-slide-up stagger-2" onclick={() => activeTab = 'models'}>
+                        <div class="p-3 rounded-lg transition-transform group-hover:scale-110" style="background-color: var(--base-300);">
+                            <CacheIcon size={24} class="text-purple-400 transition-transform" />
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-sm">Intelligent Caching</h4>
+                            <p class="text-xs text-[var(--text-secondary)]">Reduce costs with smart responses</p>
+                        </div>
+                    </button>
+                    
+                    <button type="button" class="dashboard-card p-4 flex items-center gap-4 group cursor-pointer hover:border-[var(--primary-default)] text-left card-hover-lift animate-slide-up stagger-3">
+                        <div class="p-3 rounded-lg transition-transform group-hover:scale-110" style="background-color: var(--base-300);">
+                            <ShieldIcon size={24} class="text-green-400 transition-transform" />
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-sm">Privacy First</h4>
+                            <p class="text-xs text-[var(--text-secondary)]">Your data stays yours</p>
+                        </div>
+                    </button>
+                    
+                    <button type="button" class="dashboard-card p-4 flex items-center gap-4 group cursor-pointer hover:border-[var(--primary-default)] text-left card-hover-lift animate-slide-up stagger-4">
+                        <div class="p-3 rounded-lg transition-transform group-hover:scale-110" style="background-color: var(--base-300);">
+                            <ZapIcon size={24} class="text-amber-400 transition-transform" />
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-sm">Lightning Fast</h4>
+                            <p class="text-xs text-[var(--text-secondary)]">Sub-100ms response times</p>
+                        </div>
+                    </button>
+                </section>
+
                 <!-- Crosstalk Overview -->
-                <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                <section class="dashboard-card">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="font-bold flex items-center gap-2">
                             <Zap class="w-4 h-4 text-purple-400" />
@@ -878,70 +1081,73 @@
                     </div>
 
                     <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-                        <div class="bg-zinc-950 rounded p-3 border border-zinc-800">
-                            <div class="text-xs text-zinc-400">Total Sessions</div>
+                        <div class="rounded p-3 border" style="background-color: var(--base-100); border-color: var(--border-default);">
+                            <div class="text-xs text-[var(--text-secondary)]">Total Sessions</div>
                             <div class="text-xl font-bold text-purple-400">{crosstalkStats.total_sessions}</div>
                         </div>
-                        <div class="bg-zinc-950 rounded p-3 border border-zinc-800">
-                            <div class="text-xs text-zinc-400">Avg Cost</div>
+                        <div class="rounded p-3 border" style="background-color: var(--base-100); border-color: var(--border-default);">
+                            <div class="text-xs text-[var(--text-secondary)]">Avg Cost</div>
                             <div class="text-xl font-bold text-green-400">${crosstalkStats.avg_cost_per_session.toFixed(2)}</div>
                         </div>
-                        <div class="bg-zinc-950 rounded p-3 border border-zinc-800">
-                            <div class="text-xs text-zinc-400">Avg Rounds</div>
+                        <div class="rounded p-3 border" style="background-color: var(--base-100); border-color: var(--border-default);">
+                            <div class="text-xs text-[var(--text-secondary)]">Avg Rounds</div>
                             <div class="text-xl font-bold text-cyan-400">{crosstalkStats.avg_rounds}</div>
                         </div>
-                        <div class="bg-zinc-950 rounded p-3 border border-zinc-800">
-                            <div class="text-xs text-zinc-400">Top Paradigm</div>
+                        <div class="rounded p-3 border" style="background-color: var(--base-100); border-color: var(--border-default);">
+                            <div class="text-xs text-[var(--text-secondary)]">Top Paradigm</div>
                             <div class="text-xl font-bold text-amber-400 capitalize">{crosstalkStats.top_paradigm}</div>
                         </div>
-                        <div class="bg-zinc-950 rounded p-3 border border-zinc-800">
-                            <div class="text-xs text-zinc-400">Active Now</div>
-                            <div class="text-xl font-bold text-zinc-200">{crosstalkStats.active_sessions}</div>
+                        <div class="rounded p-3 border" style="background-color: var(--base-100); border-color: var(--border-default);">
+                            <div class="text-xs text-[var(--text-secondary)]">Active Now</div>
+                            <div class="text-xl font-bold" style="color: var(--text-primary);">{crosstalkStats.active_sessions}</div>
                         </div>
                     </div>
                 </section>
 
                 <!-- Quick Actions -->
-                <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                <section class="dashboard-card">
                     <h3 class="font-bold mb-4">Quick Actions</h3>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <button
                             onclick={() => activeTab = 'analytics'}
-                            class="p-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 text-left transition-all hover:border-cyan-500 group"
+                            class="p-4 rounded-lg border text-left transition-all hover:border-cyan-500 group"
+                            style="background-color: var(--base-300); border-color: var(--border-default);"
                         >
                             <div class="flex items-center gap-2 mb-2">
                                 <BarChart3 class="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
                                 <span class="font-semibold">View Analytics</span>
                             </div>
-                            <div class="text-xs text-zinc-400">Interactive charts and insights</div>
+                            <div class="text-xs text-[var(--text-secondary)]">Interactive charts and insights</div>
                         </button>
 
                         <button
                             onclick={() => activeTab = 'models'}
-                            class="p-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 text-left transition-all hover:border-purple-500 group"
+                            class="p-4 rounded-lg border text-left transition-all hover:border-purple-500 group"
+                            style="background-color: var(--base-300); border-color: var(--border-default);"
                         >
                             <div class="flex items-center gap-2 mb-2">
                                 <Cpu class="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
                                 <span class="font-semibold">Manage Models</span>
                             </div>
-                            <div class="text-xs text-zinc-400">Configure providers and routing</div>
+                            <div class="text-xs text-[var(--text-secondary)]">Configure providers and routing</div>
                         </button>
 
                         <button
                             onclick={() => activeTab = 'setup'}
-                            class="p-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 text-left transition-all hover:border-amber-500 group"
+                            class="p-4 rounded-lg border text-left transition-all hover:border-amber-500 group"
+                            style="background-color: var(--base-300); border-color: var(--border-default);"
                         >
                             <div class="flex items-center gap-2 mb-2">
                                 <Settings class="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
                                 <span class="font-semibold">System Config</span>
                             </div>
-                            <div class="text-xs text-zinc-400">Provider settings and API keys</div>
+                            <div class="text-xs text-[var(--text-secondary)]">Provider settings and API keys</div>
                         </button>
                     </div>
                 </section>
 
                 <!-- Last Update & Connection Info -->
-                <div class="text-center text-xs text-zinc-500 flex items-center justify-center gap-4">
+                <div class="text-center text-xs flex items-center justify-center gap-4" style="color: var(--text-tertiary);">
                     <span>Last updated: {lastUpdate}</span>
                     <span>•</span>
                     <span>WebSocket: {wsStatus}</span>
@@ -961,7 +1167,7 @@
                         <Server class="w-5 h-5 text-cyan-400" />
                         Quick Setup - Choose Provider
                     </h2>
-                    <p class="text-zinc-400 mb-4 text-sm">
+                    <p class="text-[var(--text-secondary)] mb-4 text-sm">
                         Select a provider to automatically configure routing. No manual backend selection needed.
                     </p>
 
@@ -970,7 +1176,8 @@
                             <button
                                 onclick={() => selectProvider(preset.id)}
                                 disabled={applyingConfig}
-                                class="p-4 rounded-lg border text-left transition-all hover:border-cyan-500 hover:bg-zinc-900 group relative overflow-hidden {selectedProvider === preset.id ? 'border-cyan-500 bg-zinc-900' : 'border-zinc-800'}"
+                                class="p-4 rounded-lg border text-left transition-all hover:border-cyan-500 group relative overflow-hidden {selectedProvider === preset.id ? 'border-cyan-500' : 'border-[var(--border-default)]'}"
+                                style="background-color: {selectedProvider === preset.id ? 'var(--base-200)' : 'var(--base-100)'};">
                             >
                                 <div class="flex items-center justify-between mb-2">
                                     <span class="font-semibold">{preset.name}</span>
@@ -978,7 +1185,7 @@
                                         <span class="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded">Recommended</span>
                                     {/if}
                                 </div>
-                                <div class="text-xs text-zinc-400">{preset.desc}</div>
+                                <div class="text-xs text-[var(--text-secondary)]">{preset.desc}</div>
                                 <div class="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-cyan-500 to-purple-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                             </button>
                         {/each}
@@ -987,7 +1194,7 @@
 
                 <!-- Manual API Key Entry -->
                 {#if selectedProvider && selectedProvider !== 'vibeproxy'}
-                    <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                    <section class="dashboard-card">
                         <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
                             <Key class="w-5 h-5 text-amber-400" />
                             API Key Configuration
@@ -995,12 +1202,14 @@
 
                         <div class="space-y-4">
                             <div>
-                                <label class="text-sm text-zinc-400 mb-1 block">API Key for {getProviderDisplayName(selectedProvider)}</label>
+                                <label for="apiKeyInput" class="text-sm text-[var(--text-secondary)] mb-1 block">API Key for {getProviderDisplayName(selectedProvider)}</label>
                                 <input
+                                    id="apiKeyInput"
                                     type="password"
                                     bind:value={api_key}
                                     placeholder="sk-... or similar"
-                                    class="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-700 focus:border-cyan-500 focus:outline-none text-sm font-mono"
+                                    class="w-full px-3 py-2 rounded border focus:border-cyan-500 focus:outline-none text-sm font-mono"
+                                    style="background-color: var(--base-100); border-color: var(--border-default); color: var(--text-primary);"
                                 />
                             </div>
 
@@ -1014,7 +1223,8 @@
                                 </button>
                                 <button
                                     onclick={() => { activeTab = 'models'; }}
-                                    class="px-4 py-2 border border-zinc-700 hover:bg-zinc-800 rounded font-medium text-sm transition-colors"
+                                    class="px-4 py-2 rounded font-medium text-sm transition-colors border hover:bg-[var(--base-300)]"
+                                    style="border-color: var(--border-default);"
                                 >
                                     Skip to Models →
                                 </button>
@@ -1025,7 +1235,7 @@
 
                 <!-- Status Messages -->
                 {#if configMessage}
-                    <div class="mt-4 p-3 rounded bg-zinc-900 border border-zinc-800 text-sm flex items-center gap-2">
+                    <div class="mt-4 p-3 rounded border text-sm flex items-center gap-2" style="background-color: var(--base-200); border-color: var(--border-default);">
                         {#if configMessage.includes('✅')}
                             <CheckCircle2 class="w-4 h-4 text-green-400" />
                         {:else if configMessage.includes('❌')}
@@ -1040,122 +1250,72 @@
                 {/if}
 
                 <!-- Current Configuration -->
-                <section class="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+                <section class="dashboard-card">
                     <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
                         <Settings class="w-5 h-5 text-purple-400" />
                         Current Configuration
                     </h3>
                     <div class="space-y-2 text-sm">
                         <div class="flex justify-between">
-                            <span class="text-zinc-400">Provider:</span>
+                            <span class="text-[var(--text-secondary)]">Provider:</span>
                             <span class="font-mono">{getProviderDisplayName(config.default_provider)}</span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-zinc-400">Base URL:</span>
+                            <span class="text-[var(--text-secondary)]">Base URL:</span>
                             <span class="font-mono text-xs">{config.openai_base_url}</span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-zinc-400">BIG Model:</span>
+                            <span class="text-[var(--text-secondary)]">BIG Model:</span>
                             <span class="font-mono">{config.big_model || 'Not set'}</span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-zinc-400">MIDDLE Model:</span>
+                            <span class="text-[var(--text-secondary)]">MIDDLE Model:</span>
                             <span class="font-mono">{config.middle_model || 'Not set'}</span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-zinc-400">SMALL Model:</span>
+                            <span class="text-[var(--text-secondary)]">SMALL Model:</span>
                             <span class="font-mono">{config.small_model || 'Not set'}</span>
                         </div>
                     </div>
                 </section>
             </div>
 
-        <!-- MODELS TAB (Original) -->
+        <!-- MODELS TAB (Enhanced with OpenRouter) -->
         {:else if activeTab === 'models'}
             <div class="space-y-6">
-                <!-- Quick Actions -->
-                <div class="flex justify-between items-center">
-                    <div>
-                        <h2 class="text-xl font-bold">Model Selection</h2>
-                        <p class="text-zinc-400 text-sm">Models organized by provider - click to select automatically</p>
-                    </div>
-                    <button
-                        onclick={loadModelsGrouped}
-                        disabled={modelsLoading}
-                        class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm border border-zinc-700 flex items-center gap-2 transition-colors"
-                    >
-                        <RefreshCw class="w-4 h-4 {modelsLoading ? 'animate-spin' : ''}" />
-                        Refresh
-                    </button>
+                <!-- Header -->
+                <div>
+                    <h2 class="text-xl font-bold">Model Selection</h2>
+                    <p class="text-[var(--text-secondary)] text-sm">Smart categories from OpenRouter - click to select</p>
                 </div>
 
-                <!-- Tier Selection Quick Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {#each ['big', 'middle', 'small'] as tier}
-                        <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-                            <h3 class="font-bold text-sm uppercase mb-2 text-zinc-400">{tier} Tier</h3>
-                            <div class="text-xs text-zinc-500 mb-2">
-                                {#if tier === 'big'}Powerful models for complex tasks
-                                {:else if tier === 'middle'}Balanced performance
-                                {:else}Fast and economical{/if}
-                            </div>
-                            <div class="font-mono text-sm text-cyan-400">
-                                {config[`${tier}_model`] || 'Select below →'}
-                            </div>
-                        </div>
-                    {/each}
-                </div>
+                <!-- New Model Selector -->
+                <ModelSelector 
+                    currentModels={{ 
+                        big: config.big_model, 
+                        middle: config.middle_model, 
+                        small: config.small_model 
+                    }}
+                    onSelect={(tier, modelId) => selectModel(tier, modelId)}
+                />
 
-                <!-- Grouped Models by Provider -->
-                {#if groupedModels.length > 0}
-                    <div class="space-y-6">
-                        {#each groupedModels as providerGroup}
-                            <section class="bg-zinc-900 rounded-lg border border-zinc-800 overflow-hidden">
-                                <div class="px-4 py-3 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between">
-                                    <div class="flex items-center gap-3">
-                                        <svelte:component this={getProviderIcon(providerGroup.provider)} class="w-5 h-5 text-cyan-400" />
-                                        <span class="font-bold">{providerGroup.display_name}</span>
-                                        <span class="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded">{providerGroup.model_count} models</span>
-                                    </div>
-                                    {#if providerGroup.is_available}
-                                        <span class="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded">Available</span>
-                                    {:else}
-                                        <span class="text-xs bg-zinc-700 text-zinc-400 px-2 py-0.5 rounded">Not Configured</span>
-                                    {/if}
+                <!-- Current Configuration -->
+                <section class="dashboard-card">
+                    <h3 class="font-bold mb-4 flex items-center gap-2">
+                        <Settings class="w-4 h-4" style="color: var(--text-secondary);" />
+                        Active Configuration
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {#each ['big', 'middle', 'small'] as tier}
+                            <div class="p-3 rounded border" style="background-color: var(--base-100); border-color: var(--border-default);">
+                                <div class="text-xs uppercase font-bold mb-1" style="color: var(--text-tertiary);">{tier}</div>
+                                <div class="font-mono text-sm text-cyan-400 truncate">
+                                    {config[`${tier}_model`] || 'Not set'}
                                 </div>
-
-                                <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto">
-                                    {#each providerGroup.models as model}
-                                        <div class="group p-3 rounded border border-zinc-800 hover:border-cyan-500 hover:bg-zinc-800 transition-all cursor-pointer"
-                                             onclick={() => {
-                                                 const tier = prompt(`Assign ${model.id} to which tier?\n1. BIG\n2. MIDDLE\n3. SMALL`, "2");
-                                                 if (tier === '1') selectModel('big', model.id);
-                                                 else if (tier === '2') selectModel('middle', model.id);
-                                                 else if (tier === '3') selectModel('small', model.id);
-                                             }}>
-                                            <div class="font-mono text-sm text-zinc-200">{model.id.split('/').pop() || model.id}</div>
-                                            <div class="flex justify-between text-xs text-zinc-500 mt-1">
-                                                <span>{model.name?.split('(')[0] || 'Unknown'}</span>
-                                                {#if model.supports_reasoning}
-                                                    <span class="text-purple-400">🧠</span>
-                                                {/if}
-                                            </div>
-                                        </div>
-                                    {/each}
-                                </div>
-                            </section>
+                            </div>
                         {/each}
                     </div>
-                {:else if modelsLoading}
-                    <div class="text-center py-8 text-zinc-400">
-                        <div class="animate-spin w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full mx-auto mb-3"></div>
-                        Loading models...
-                    </div>
-                {:else}
-                    <div class="text-center py-8 text-zinc-400">
-                        No models available. Check provider configuration or refresh.
-                    </div>
-                {/if}
+                </section>
             </div>
 
         <!-- ANALYTICS TAB (Enhanced) -->
@@ -1165,12 +1325,13 @@
                 <div class="flex justify-between items-center">
                     <div>
                         <h2 class="text-xl font-bold">Usage Analytics</h2>
-                        <p class="text-zinc-400 text-sm">Real-time metrics and insights</p>
+                        <p class="text-[var(--text-secondary)] text-sm">Real-time metrics and insights</p>
                     </div>
                     <button
                         onclick={loadDashboardData}
                         disabled={analyticsLoading}
-                        class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm border border-zinc-700 flex items-center gap-2 transition-colors"
+                        class="px-3 py-2 rounded text-sm border flex items-center gap-2 transition-colors hover:bg-[var(--base-300)]"
+                        style="background-color: var(--base-300); border-color: var(--border-default);"
                     >
                         <RefreshCw class="w-4 h-4 {analyticsLoading ? 'animate-spin' : ''}" />
                         Refresh
@@ -1179,12 +1340,12 @@
 
                 <!-- Stats Cards -->
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-                        <div class="text-xs text-zinc-400 mb-1">Requests Today</div>
+                    <div class="rounded-lg p-4 border" style="background-color: var(--base-200); border-color: var(--border-default);">
+                        <div class="text-xs mb-1" style="color: var(--text-secondary);">Requests Today</div>
                         <div class="text-2xl font-bold text-cyan-400">{stats.requests_today || 0}</div>
                     </div>
-                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-                        <div class="text-xs text-zinc-400 mb-1">Total Tokens</div>
+                    <div class="rounded-lg p-4 border" style="background-color: var(--base-200); border-color: var(--border-default);">
+                        <div class="text-xs mb-1" style="color: var(--text-secondary);">Total Tokens</div>
                         <div class="text-2xl font-bold text-purple-400">
                             {#if (stats.total_tokens || 0) > 1000000}
                                 {((stats.total_tokens || 0) / 1000000).toFixed(1)}M
@@ -1195,35 +1356,35 @@
                             {/if}
                         </div>
                     </div>
-                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-                        <div class="text-xs text-zinc-400 mb-1">Est. Cost</div>
+                    <div class="rounded-lg p-4 border" style="background-color: var(--base-200); border-color: var(--border-default);">
+                        <div class="text-xs mb-1" style="color: var(--text-secondary);">Est. Cost</div>
                         <div class="text-2xl font-bold text-green-400">${(stats.est_cost || 0).toFixed(4)}</div>
                     </div>
-                    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-                        <div class="text-xs text-zinc-400 mb-1">Avg Latency</div>
+                    <div class="rounded-lg p-4 border" style="background-color: var(--base-200); border-color: var(--border-default);">
+                        <div class="text-xs mb-1" style="color: var(--text-secondary);">Avg Latency</div>
                         <div class="text-2xl font-bold text-amber-400">{stats.avg_latency || 0}ms</div>
                     </div>
                 </div>
 
                 <!-- Analytics Data (Note: Full implementation requires /api/analytics endpoints) -->
-                <div class="bg-zinc-900 rounded-lg p-8 border border-zinc-800 text-center">
+                <div class="rounded-lg p-8 border text-center" style="background-color: var(--base-200); border-color: var(--border-default);">
                     <div class="max-w-md mx-auto">
-                        <div class="bg-zinc-950 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                            <Activity class="w-8 h-8 text-zinc-500" />
+                        <div class="rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4" style="background-color: var(--base-100);">
+                            <Activity class="w-8 h-8" style="color: var(--text-tertiary);" />
                         </div>
                         <h3 class="text-lg font-bold mb-2">Advanced Analytics</h3>
-                        <p class="text-zinc-400 mb-4 text-sm">
+                        <p class="mb-4 text-sm" style="color: var(--text-secondary);">
                             Full analytics dashboard with interactive charts, time-series data, and AI insights.
                         </p>
-                        <div class="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-xs text-left mb-4">
-                            <div class="text-zinc-400">// Available Endpoints:</div>
+                        <div class="p-3 rounded border font-mono text-xs text-left mb-4" style="background-color: var(--base-100); border-color: var(--border-default);">
+                            <div style="color: var(--text-secondary);">// Available Endpoints:</div>
                             <div>GET /api/analytics/dashboard</div>
                             <div>GET /api/analytics/timeseries</div>
                             <div>GET /api/analytics/model-comparison</div>
                             <div>GET /api/analytics/insights</div>
                             <div>GET /api/analytics/cost-breakdown</div>
                         </div>
-                        <p class="text-zinc-500 text-xs mt-3">Use the Crosstalk Studio for live session monitoring or enable usage tracking for full analytics.</p>
+                        <p class="text-xs mt-3" style="color: var(--text-tertiary);">Use the Crosstalk Studio for live session monitoring or enable usage tracking for full analytics.</p>
                         <button
                             onclick={() => activeTab = 'dashboard'}
                             class="mt-4 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded text-sm font-medium"
@@ -1237,14 +1398,14 @@
     </main>
 
     <!-- Footer -->
-    <footer class="border-t border-zinc-800 py-6 mt-12">
-        <div class="max-w-7xl mx-auto px-6 text-center text-zinc-500 text-sm">
+    <footer class="border-t py-6 mt-12" style="border-color: var(--border-default);">
+        <div class="max-w-7xl mx-auto px-6 text-center text-sm" style="color: var(--text-tertiary);">
             Claude Proxy Web Dashboard v2.1 • {new Date().getFullYear()}
             <div class="mt-2 text-xs">
                 {#if wsStatus === 'connected'}
                     <span class="text-green-400">🟢 Live Updates Active</span>
                 {:else}
-                    <span class="text-zinc-400">⚪ Live Updates Available</span>
+                    <span class="text-[var(--text-secondary)]">⚪ Live Updates Available</span>
                 {/if}
             </div>
         </div>

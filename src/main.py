@@ -333,7 +333,7 @@ async def live_tracking_middleware(request, call_next):
                     "tokens": metrics.get("total_tokens", 0),
                 }
             )
-        except:
+        except Exception as _e:
             pass  # Ignore broadcast errors
 
     return response

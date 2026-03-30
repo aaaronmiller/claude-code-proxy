@@ -263,7 +263,7 @@ async def log_request_body(request: Request):
                 )
             else:
                 traffic_logger.info(f"Body: {body_str_filtered}")
-        except:
+        except Exception as _e:
             traffic_logger.info(f"Body (Binary): {len(body)} bytes")
 
         traffic_logger.info("------------------------------------------------")

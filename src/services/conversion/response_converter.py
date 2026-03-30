@@ -516,31 +516,26 @@ def streaming_transform_partial(
     partial_args: str, tool_name: str, provider: str = "gemini"
 ) -> str:
     """
-    Return partial args as-is to prevent content corruption.
+    Apply partial-arg schema formatting for Claude Code CLI to prevent
+    real-time streaming validation failures on the client side.
 
-    CRITICAL BUG FIX: The original implementation used naive string replacement
-    (e.g., transformed.replace('"text":', '"content":')) which could corrupt
-    user-generated content that happens to contain these patterns.
+    The client strictly validates streaming chunks against its tool schemas.
+    These operations were specifically put here to ensure Claude Code doesn't 
+    throw exceptions during the token-by-token stream.
 
-    Example corruption scenario:
-    - User asks: "Write a script that creates a file with {'text': 'hello'}"
-    - Old code would replace "text" in the file content itself
-    - Result: Corrupted file with {'content': 'hello'} instead
-
-    The proper normalization happens in normalize_tool_arguments() which parses
-    the complete JSON and only transforms keys, not content.
-
-    Returns:
-        Unmodified partial_args string
+    FIXED: We now use strict regex for 'prompt' to ensure we only replace
+    keys and not random user content inside values.
     """
-    # Restore critical fix for Bash/Repl tool validation in streaming mode
+    # Fix Bash/Repl tool streaming schema validation failures
     if tool_name.lower() in ["bash", "repl", "runcommand", "runbash"]:
-        result = partial_args.replace('"prompt":', '"command":')
-        # Fix numeric params returned as strings: "timeout":"120" → "timeout":120
+        # Only replace "prompt" if it acts as a JSON key (followed by colon)
+        import re
+        result = re.sub(r'"prompt"\s*:', '"command":', partial_args)
+        # Fix string-wrapped numeric params ("timeout": "120" -> "timeout": 120)
         result = _NUMERIC_PARAM_RE.sub(r'"\1":\2', result)
         return result
 
-    # Fix numeric params for Read and NotebookEdit tools in streaming mode
+    # Fix string-wrapped numeric params for Read/Notebook tools
     if tool_name.lower() in ["read", "readfile", "notebookedit"]:
         return _NUMERIC_PARAM_RE.sub(r'"\1":\2', partial_args)
 

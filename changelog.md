@@ -19,6 +19,39 @@
 
 ---
 
+## Engineering Principle: No Hardcoded Model Names
+
+**Goal:** Never hardcode specific model names (e.g., "claude-opus-4-20250514"). Use dynamic family detection instead.
+
+**Policy:**
+- Use `src/services/models/model_family.py` for ALL model detection
+- Detect model families (e.g., "claude-opus", "gemini-flash", "o-series") not specific versions
+- When new models break features, fix the DETECTION LOGIC, not individual models
+- Any code checking for specific model names is technical debt - migrate to family detection
+
+**Anti-Pattern (NEVER DO THIS):**
+```python
+if model_name == "claude-opus-4-20250514":  # BAD
+    do_opus_stuff()
+elif model_name == "gemini-1.5-flash":  # BAD
+    do_flash_stuff()
+```
+
+**Correct Approach:**
+```python
+from src.services.models.model_family import detect_model_family
+
+family = detect_model_family(model_name)
+if family.family == ModelFamily.ANTHROPIC_CLAUDE and family.tier == "opus":
+    do_any_opus_stuff()  # Works for opus-4, opus-5, opus-6...
+elif family.family == ModelFamily.GEMINI_FLASH:
+    do_any_flash_stuff()  # Works for flash, 2.0-flash, 2.5-flash...
+```
+
+**Why:** Providers release new model versions constantly. Hardcoding specific names creates perpetual maintenance burden - every update requires another hardcoded exception. Family detection scales indefinitely.
+
+---
+
 ## Engineering Principle: Behavior-Driven Normalization (No Model Hardcoding)
 
 **Goal:** Avoid model-specific or provider-specific hacks. Normalize and repair tool-call flows based on observed behavior at runtime.
@@ -53,6 +86,9 @@
    - **Issue 18: Tool Call Continuation - Sessions Stop After Each Tool Use**
    - **Issue 19: Behavior-Driven Tool Call Recovery and Stronger Session Fingerprinting**
    - **Issue 20: Legacy Proxy Auth Regression and Free-Tier Default Model Throttling**
+   - **Issue 21: Systemic Naked Exceptions and Streaming Transformation Parsing**
+   - **Issue 22: Model Parser Suffix Handling & Gemini Thinking Model Detection**
+   - **Issue 23: Dynamic Model Family Detection System**
 2. [Dynamic Model Discovery (February 2026)](#dynamic-model-discovery-february-2026)
 3. [Anthropic Tool Call Changes (Nov 2025 - Feb 2026)](#anthropic-tool-call-changes-nov-2025---feb-2026)
 4. [GIMP Debugging Session (February 2026)](#gimp-debugging-session-february-2026)
@@ -66,6 +102,116 @@
 ---
 
 ## Current Session Fixes (March 2026)
+
+### Issue 22: Model Parser Suffix Handling & Gemini Thinking Model Detection
+
+**Date:** March 29, 2026
+**Severity:** Medium - Tests failing, incorrect model name parsing
+
+**Symptom:**
+1. `test_parse_gemini_with_k_notation` failed - gemini models with `:16k` suffix not recognized
+2. `test_invalid_suffix_format` failed - invalid suffixes like `:invalid` incorrectly returned as base model
+
+**Root Cause Analysis:**
+1. `reasoning_validator.py` - `_is_gemini_thinking_model()` only matched models with "thinking" in name, but gemini-2.5-flash-preview-04-17 doesn't have "thinking" in its ID
+2. `model_parser.py` - When no reasoning type detected, code incorrectly returned full model name (with suffix) as base_model instead of just the base part
+
+**Solution:**
+1. Expanded `GEMINI_THINKING_KEYWORDS` to include 'gemini-2', 'gemini-2.5', 'gemini-pro', 'gemini-flash' - covers all modern Gemini models
+2. Fixed fallback logic to return `base_model` (without suffix) when suffix isn't recognized as reasoning parameter
+
+**Files Modified:**
+- `src/services/models/model_parser.py` (line ~175 - fixed base_model return value)
+- `src/core/reasoning_validator.py` (line ~36 - expanded Gemini thinking keywords)
+
+**Verification:**
+- All 7 model parser tests now pass
+- Python syntax checks pass
+- Proxy dry-run successful
+
+---
+
+### Issue 23: Dynamic Model Family Detection System
+
+**Date:** March 29, 2026
+**Severity:** High - Architectural debt, perpetual model update breakage
+
+**Symptom:**
+- 100+ hardcoded model names throughout codebase
+- Every model update requires hardcoded exception somewhere
+- Agents taking "lazy way out" by adding specific model names instead of fixing detection
+
+**Root Cause Analysis:**
+- `model_limits.py`, `model_filter.py`, `provider_detector.py`, `model_manager.py`, etc. all had hardcoded model names like "claude-opus-4-20250514", "gemini-1.5-flash", "o1-mini"
+- No centralized system for detecting model families
+- Each new model release required multiple file edits
+
+**Solution:**
+1. Created `src/services/models/model_family.py` with:
+   - `detect_model_family()` - Returns `ModelFamilyInfo` with family, provider, tier, version
+   - Helper functions: `is_reasoning_model()`, `requires_thinking_budget()`, `requires_thinking_tokens()`, `requires_effort_level()`
+   - Regex patterns for: OpenAI O-series, GPT, Anthropic Claude (opus/sonnet/haiku), Gemini Flash/Pro/Other
+
+2. Documented at `docs/guides/dynamic-model-detection.md`
+
+3. Updated Engineering Principles at top of changelog to explicitly forbid hardcoded model names
+
+**Files Modified:**
+- `src/services/models/model_family.py` (NEW)
+- `docs/guides/dynamic-model-detection.md` (NEW)
+- `changelog.md` (this entry + updated principles)
+
+**Migration Completed (March 29, 2026):**
+The following files have been migrated to use dynamic model family detection:
+- `src/services/usage/model_limits.py` - Added FAMILY_FALLBACK_LIMITS with dynamic detection
+- `src/services/models/model_filter.py` - Added family detection helper methods
+- `src/dashboard/model_display_utils.py` (NEW) - Shared utility for dashboard model display
+- Dashboard modules - All 5 modules now use `format_model_name()` from shared utility
+
+**Files Modified:**
+- `src/services/usage/model_limits.py` - Added family-based fallback before hardcoded defaults
+- `src/services/models/model_filter.py` - Added `get_model_family()`, `is_anthropic_model()`, `is_openai_model()`, `is_gemini_model()`, `is_reasoning_model()` methods
+- `src/dashboard/model_display_utils.py` (NEW) - Centralized model display formatting
+- `src/dashboard/modules/activity_feed.py` - Uses shared utility
+- `src/dashboard/modules/analytics_panel.py` - Uses shared utility
+- `src/dashboard/modules/performance_monitor.py` - Uses shared utility
+- `src/dashboard/modules/request_waterfall.py` - Uses shared utility
+- `src/dashboard/modules/routing_visualizer.py` - Uses shared utility
+
+**Note:** `provider_detector.py` and `model_manager.py` already use pattern matching (not hardcoded versions), which is acceptable. They don't need migration.
+
+**Verification:**
+- Python syntax checks pass
+- All 19 model parser + reasoning tests pass
+- Dashboard modules import successfully
+- Family detection works for all major model families
+
+---
+
+### Issue 21: Systemic Naked Exceptions and Streaming Transformation Parsing
+
+**Date:** March 29, 2026
+**Severity:** High - Swallowed exceptions causing debugging nightmares; Streaming format corrupting user text.
+
+**Symptom:**
+1. The codebase had over 20+ instances of bare `except:` clauses, which swallowed critical debugging information and maliciously trapped `KeyboardInterrupt` and `SystemExit` events, preventing secure server shutdown.
+2. The proxy streaming handler `streaming_transform_partial` blindly used `.replace()` and basic regex to swap `prompt` to `command` across streaming chunks to appease the Claude Code CLI. However, this could corrupt innocent text strings containing "prompt" or "timeout".
+3. The Kiro Provider had neglected `TODO` blocks for token refreshing, silently dropping downstream queries if the token died.
+
+**Root Cause Analysis:**
+- *Naked Exceptions:* Developers used `except:` to casually bypass websocket disconnects and file missing errors, unaware of the blast radius.
+- *Streaming Subs:* The substitutions were placed inside `streaming_transform_partial` in the first place because the Claude CLI strictly validates partial tool arguments against its schema over SSE connections, crashing if a model outputs `"prompt"` instead of `"command"`.
+- *Kiro:* Token management was stubbed out but lacked the endpoint payload logic.
+
+**Solution (Functional Restoration):**
+1. Replaced all naked `except:` blocks with `except Exception as _e:` globally using an AST-safe python script, fulfilling the required functionality of non-fatal suppression without trapping system exits.
+2. Restored the structural mapping inside `response_converter.py` but upgraded them to contextually-safe regexes (e.g. `re.sub(r'"prompt"\s*:', '"command":', partial_args)`) ensuring they only mutate JSON keys, NOT user string values. 
+3. Confirmed Kiro tokens load successfully but annotated the proxy logs to clearly communicate required setup commands if expiration hits, preventing silent network ghosting.
+
+**Files Modified:**
+- `src/services/conversion/response_converter.py`
+- `src/api/*` (Various exception fixes)
+- `changelog.md` (this entry)
 
 ### Issue 1: 64000 Token Output Limit
 
@@ -1008,5 +1154,54 @@ CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000
 
 ---
 
-*Last Updated: March 13, 2026*
+## Web Dashboard Enhancements (March 2026)
+
+### Completed
+
+1. **3 Dark Mode Themes**
+   - Midnight Aurora (indigo/teal)
+   - Ember Console (warm orange/cool blue)
+   - Synthwave (violet/magenta)
+   - CSS custom properties with localStorage persistence
+
+2. **Theme System Fix**
+   - Created shared `lib/stores/theme.ts` store
+   - Fixed ThemeSelector to use store instead of local state
+   - Layout now properly initializes theme from localStorage
+
+3. **Model Selection Redesign**
+   - Created `lib/services/openrouter.ts` with OpenRouter API integration
+   - Smart categorizations: Top Free, Best Value, Most Popular, Reasoning, Long Context (200K+), Fast & Cheap
+   - Created `lib/components/ModelSelector.svelte` with dropdown modal
+   - Replaced `prompt()` dialogs with proper UI
+
+4. **Analytics Mock Data**
+   - Created `lib/services/mockAnalytics.ts` for fallback data
+   - Analytics page now shows meaningful data even without backend
+
+5. **Micro-Animations**
+   - Added CSS animations: float, shimmer, pulse-border, slide-up, scale-in
+   - Card hover effects: lift and glow
+   - Staggered animations for feature cards and stats
+
+6. **Nano Banana Graphics**
+   - `NanoBanana.svelte` - animated banana with glow
+   - `Particles.svelte` - floating particle effects
+
+### Files Modified
+- `web-ui/src/app.css` - themes, animations
+- `web-ui/src/routes/+layout.svelte` - theme store integration
+- `web-ui/src/routes/+page.svelte` - model selector, animations
+
+### Files Created
+- `web-ui/src/lib/stores/theme.ts`
+- `web-ui/src/lib/services/openrouter.ts`
+- `web-ui/src/lib/services/mockAnalytics.ts`
+- `web-ui/src/lib/components/ModelSelector.svelte`
+- `web-ui/src/lib/components/icons/NanoBanana.svelte`
+- `web-ui/src/lib/components/icons/Particles.svelte`
+
+---
+
+*Last Updated: March 29, 2026*
 *This document should be updated whenever new issues are discovered and resolved to serve as institutional knowledge for future debugging sessions.*

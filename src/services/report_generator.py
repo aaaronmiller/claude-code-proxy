@@ -239,7 +239,7 @@ class ReportGenerator:
                 logo = Image(brand_logo, width=1*inch, height=1*inch)
                 story.append(logo)
                 story.append(Spacer(1, 12))
-            except:
+            except Exception as _e:
                 pass
 
         title_style = ParagraphStyle(

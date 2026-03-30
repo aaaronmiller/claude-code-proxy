@@ -177,7 +177,7 @@ class SetupWizard:
                 if response.status_code == 200:
                     print(" OK! (Models list accessible)")
                     return True
-            except:
+            except Exception as _e:
                 pass
                 
             # Fallback: Try a tiny completion

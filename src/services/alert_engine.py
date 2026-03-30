@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from src.core.logging import logger
 from src.services.usage.usage_tracker import usage_tracker
 from src.services.notifications import notification_service
+from src.utils.json_utils import safe_json_loads
 
 
 @dataclass
@@ -41,32 +42,25 @@ class AlertRule:
 
     @property
     def conditions(self):
-        try:
-            parsed = json.loads(self.condition_json)
-            if isinstance(parsed, str):
-                # Handle double-encoded JSON
-                try:
-                    parsed = json.loads(parsed)
-                except json.JSONDecodeError:
-                    pass
+        parsed = safe_json_loads(self.condition_json, default=[])
+        if isinstance(parsed, str):
+            parsed = safe_json_loads(parsed, default=[])
 
-            if not isinstance(parsed, list):
-                # Ensure we always return a list
-                if isinstance(parsed, dict):
-                    return [parsed]
-                return []
-
-            return parsed
-        except (json.JSONDecodeError, TypeError):
+        if not isinstance(parsed, list):
+            # Ensure we always return a list
+            if isinstance(parsed, dict):
+                return [parsed]
             return []
+
+        return parsed
 
     @property
     def logic(self):
-        return json.loads(self.condition_logic) if self.condition_logic else None
+        return safe_json_loads(self.condition_logic, default=None) if self.condition_logic else None
 
     @property
     def actions(self):
-        return json.loads(self.actions_json)
+        return safe_json_loads(self.actions_json, default={})
 
 
 @dataclass
@@ -346,11 +340,10 @@ class AlertEngine:
             # Fallback to simple conditions - handle both list and JSON string
             conditions = rule.conditions
             if isinstance(conditions, str):
-                try:
-                    conditions = json.loads(conditions)
-                except (json.JSONDecodeError, TypeError):
+                conditions = safe_json_loads(conditions, default=[])
+                if not conditions:
                     logger.warning(
-                        f"Rule {rule.id}: conditions is invalid JSON string: {conditions}"
+                        f"Rule {rule.id}: conditions is invalid JSON string"
                     )
                     return False, {}
             if not isinstance(conditions, list):

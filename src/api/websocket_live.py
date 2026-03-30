@@ -209,7 +209,7 @@ class LiveMetricsManager:
         for connection in active_connections:
             try:
                 await connection.send_json(message)
-            except:
+            except Exception as _e:
                 disconnected.add(connection)
 
         # Remove disconnected clients
@@ -327,7 +327,7 @@ class LiveMetricsManager:
 
             conn.close()
 
-        except:
+        except Exception as _e:
             pass
 
         return 0
@@ -436,7 +436,7 @@ class LiveMetricsManager:
         for connection in active_connections:
             try:
                 await connection.send_json(alert)
-            except:
+            except Exception as _e:
                 disconnected.add(connection)
 
         for conn in disconnected:
@@ -529,7 +529,7 @@ async def websocket_live_metrics(websocket: WebSocket):
         logger.error(f"WebSocket error: {e}")
         try:
             await websocket.close()
-        except:
+        except Exception as _e:
             pass
 
 
@@ -587,7 +587,7 @@ async def websocket_crosstalk_session(websocket: WebSocket, session_id: str):
         logger.error(f"Crosstalk WebSocket error: {e}")
         try:
             await websocket.close()
-        except:
+        except Exception as _e:
             pass
 
 
@@ -614,7 +614,7 @@ async def broadcast_request_event(request_data: Dict):
     for connection in active_connections:
         try:
             await connection.send_json(message)
-        except:
+        except Exception as _e:
             disconnected.add(connection)
 
     for conn in disconnected:
@@ -654,7 +654,7 @@ async def update_crosstalk_session(session_id: str, round_data: Dict):
     for connection in session["connections"]:
         try:
             await connection.send_json(message)
-        except:
+        except Exception as _e:
             disconnected.add(connection)
 
     for conn in disconnected:
