@@ -381,10 +381,13 @@ class StructuredLogger:
         phase: str,
         tool_id: Optional[str] = None,
         data: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        success: bool = True,
+        error: Optional[str] = None,
         **kwargs
     ):
         """
-        Track tool call lifecycle for debugging.
+        Track tool call lifecycle for debugging and analytics.
         
         Phases:
         - call_start: Tool call detected in model response
@@ -393,6 +396,8 @@ class StructuredLogger:
         - result_received: Tool result received from client
         - result_transform: Result being transformed for model
         - result_sent: Transformed result sent to model
+        - success: Tool call completed successfully
+        - failure: Tool call failed
         
         Args:
             request_id: Request identifier
@@ -400,18 +405,115 @@ class StructuredLogger:
             phase: Current phase
             tool_id: Tool call ID
             data: Phase-specific data
+            session_id: Session identifier for per-session metrics
+            success: Whether the tool call succeeded
+            error: Error message if failed
         """
+        extra_data = {
+            'phase': phase,
+            'tool_id': tool_id[:12] + '...' if tool_id and len(tool_id) > 12 else tool_id,
+            'success': success,
+            'session_id': session_id,
+            **(data or {})
+        }
+        
+        if error:
+            extra_data['error'] = error[:200]
+        
         extra = {
             'request_id': request_id,
             'tool_calls': tool_name,
-            'extra_data': json.dumps({
-                'phase': phase,
-                'tool_id': tool_id[:12] + '...' if tool_id and len(tool_id) > 12 else tool_id,
-                **(data or {})
-            })[:500]
+            'session_id': session_id,
+            'extra_data': json.dumps(extra_data)[:500]
         }
         
-        self.logger.info(f"Tool {phase}: {tool_name}", extra=extra)
+        # Log success/failure for analytics
+        if phase in ('success', 'failure'):
+            self.logger.info(
+                f"Tool {phase}: {tool_name} (success={success})",
+                extra=extra
+            )
+            # Also log to a separate tool analytics file
+            self._log_tool_analytics({
+                'timestamp': datetime.utcnow().isoformat(),
+                'request_id': request_id,
+                'session_id': session_id,
+                'tool_name': tool_name,
+                'tool_id': tool_id,
+                'phase': phase,
+                'success': success,
+                'error': error
+            })
+        else:
+            self.logger.info(f"Tool {phase}: {tool_name}", extra=extra)
+    
+    def _log_tool_analytics(self, data: Dict[str, Any]):
+        """Log tool call analytics to separate file for analysis."""
+        try:
+            analytics_file = self.logs_dir / "tool_analytics.jsonl"
+            with open(analytics_file, 'a') as f:
+                f.write(json.dumps(data) + '\n')
+        except Exception:
+            pass  # Don't fail if analytics logging fails
+    
+    def log_cache_usage(
+        self,
+        request_id: str,
+        session_id: Optional[str] = None,
+        cache_hit: bool = False,
+        cache_miss: bool = False,
+        cached_tokens: int = 0,
+        total_tokens: int = 0,
+        cache_type: str = "prompt",
+        **kwargs
+    ):
+        """
+        Log cache usage for analytics.
+        
+        Args:
+            request_id: Request identifier
+            session_id: Session identifier
+            cache_hit: Whether cache was hit
+            cache_miss: Whether cache was missed
+            cached_tokens: Number of tokens from cache
+            total_tokens: Total tokens in request
+            cache_type: Type of cache (prompt, response, tool)
+        """
+        cache_ratio = round(cached_tokens / total_tokens * 100, 1) if total_tokens > 0 else 0
+        
+        extra = {
+            'request_id': request_id,
+            'session_id': session_id,
+            'extra_data': json.dumps({
+                'cache_hit': cache_hit,
+                'cache_miss': cache_miss,
+                'cached_tokens': cached_tokens,
+                'total_tokens': total_tokens,
+                'cache_ratio': cache_ratio,
+                'cache_type': cache_type
+            })
+        }
+        
+        self.logger.info(
+            f"Cache {'hit' if cache_hit else 'miss'}: {cached_tokens}/{total_tokens} ({cache_ratio}%)",
+            extra=extra
+        )
+        
+        # Log to cache analytics file
+        try:
+            analytics_file = self.logs_dir / "cache_analytics.jsonl"
+            with open(analytics_file, 'a') as f:
+                f.write(json.dumps({
+                    'timestamp': datetime.utcnow().isoformat(),
+                    'request_id': request_id,
+                    'session_id': session_id,
+                    'cache_hit': cache_hit,
+                    'cached_tokens': cached_tokens,
+                    'total_tokens': total_tokens,
+                    'cache_type': cache_type
+                }) + '\n')
+        except Exception:
+            pass
     
     def log_error(
         self,

@@ -8,10 +8,13 @@ Date: 2026-01-04
 """
 
 from fastapi import APIRouter, HTTPException
-from datetime import datetime
+from datetime import datetime, timedelta
+from collections import defaultdict
+from typing import Optional
 import sqlite3
 import psutil
 import os
+import json
 from pathlib import Path
 
 from src.core.logging import logger
@@ -685,3 +688,209 @@ def sanitize_url(url: str) -> str:
     else:
         # Generic sanitization
         return base_url[:50] + "..." if len(base_url) > 50 else base_url
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SESSION METRICS ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/api/metrics/sessions")
+async def get_all_session_metrics():
+    """Get real-time metrics for all active sessions."""
+    try:
+        from src.services.metrics.session_tracker import get_all_sessions
+        sessions = get_all_sessions()
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "sessions": sessions,
+            "count": len(sessions)
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "sessions": []
+        }
+
+
+@router.get("/api/metrics/sessions/{session_id}")
+async def get_session_metrics(session_id: str):
+    """Get metrics for a specific session."""
+    try:
+        from src.services.metrics.session_tracker import get_session_metrics
+        metrics = get_session_metrics(session_id)
+        
+        if metrics:
+            return {
+                "status": "success",
+                "session_id": session_id,
+                "metrics": metrics
+            }
+        else:
+            return {
+                "status": "not_found",
+                "message": f"Session {session_id} not found or inactive"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@router.get("/api/metrics/aggregate")
+async def get_aggregate_metrics():
+    """Get aggregate metrics across all sessions."""
+    try:
+        from src.services.metrics.session_tracker import get_aggregate_metrics
+        metrics = get_aggregate_metrics()
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "metrics": metrics
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@router.get("/api/metrics/tool-analytics")
+async def get_tool_analytics(
+    hours: int = 24,
+    session_id: Optional[str] = None
+):
+    """Get tool call analytics."""
+    try:
+        logs_path = Path(os.getenv("LOGS_DIR", "logs"))
+        analytics_file = logs_path / "tool_analytics.jsonl"
+        
+        if not analytics_file.exists():
+            return {
+                "status": "no_data",
+                "message": "No tool analytics data available yet"
+            }
+        
+        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        tool_stats = defaultdict(lambda: {"success": 0, "failure": 0, "sessions": set()})
+        total_success = 0
+        total_failure = 0
+        
+        with open(analytics_file, 'r') as f:
+            for line in f:
+                try:
+                    data = json.loads(line.strip())
+                    timestamp = datetime.fromisoformat(data['timestamp'])
+                    
+                    if timestamp < cutoff:
+                        continue
+                    
+                    if session_id and data.get('session_id') != session_id:
+                        continue
+                    
+                    tool_name = data.get('tool_name', 'unknown')
+                    success = data.get('success', True)
+                    
+                    if success:
+                        tool_stats[tool_name]['success'] += 1
+                        total_success += 1
+                    else:
+                        tool_stats[tool_name]['failure'] += 1
+                        total_failure += 1
+                    
+                    if data.get('session_id'):
+                        tool_stats[tool_name]['sessions'].add(data['session_id'])
+                except (json.JSONDecodeError, KeyError):
+                    continue
+        
+        # Convert to serializable format
+        result = {
+            "status": "success",
+            "period_hours": hours,
+            "total_tool_calls": total_success + total_failure,
+            "success_rate": round(total_success / max(total_success + total_failure, 1) * 100, 1),
+            "tools": {}
+        }
+        
+        for tool_name, stats in tool_stats.items():
+            total = stats['success'] + stats['failure']
+            result['tools'][tool_name] = {
+                "total": total,
+                "success": stats['success'],
+                "failure": stats['failure'],
+                "success_rate": round(stats['success'] / max(total, 1) * 100, 1),
+                "unique_sessions": len(stats['sessions'])
+            }
+        
+        return result
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@router.get("/api/metrics/cache-analytics")
+async def get_cache_analytics(hours: int = 24):
+    """Get cache usage analytics."""
+    try:
+        logs_path = Path(os.getenv("LOGS_DIR", "logs"))
+        analytics_file = logs_path / "cache_analytics.jsonl"
+        
+        if not analytics_file.exists():
+            return {
+                "status": "no_data",
+                "message": "No cache analytics data available yet"
+            }
+        
+        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        cache_hits = 0
+        cache_misses = 0
+        total_cached_tokens = 0
+        total_tokens = 0
+        
+        with open(analytics_file, 'r') as f:
+            for line in f:
+                try:
+                    data = json.loads(line.strip())
+                    timestamp = datetime.fromisoformat(data['timestamp'])
+                    
+                    if timestamp < cutoff:
+                        continue
+                    
+                    if data.get('cache_hit'):
+                        cache_hits += 1
+                        total_cached_tokens += data.get('cached_tokens', 0)
+                    else:
+                        cache_misses += 1
+                    
+                    total_tokens += data.get('total_tokens', 0)
+                except (json.JSONDecodeError, KeyError):
+                    continue
+        
+        total_requests = cache_hits + cache_misses
+        cache_hit_rate = round(cache_hits / max(total_requests, 1) * 100, 1)
+        token_savings = round(total_cached_tokens / max(total_tokens, 1) * 100, 1)
+        
+        # Estimate cost savings (assuming $1/1M tokens average)
+        cost_savings = round(total_cached_tokens / 1_000_000 * 1.0, 4)
+        
+        return {
+            "status": "success",
+            "period_hours": hours,
+            "total_requests": total_requests,
+            "cache_hits": cache_hits,
+            "cache_misses": cache_misses,
+            "cache_hit_rate": cache_hit_rate,
+            "cached_tokens": total_cached_tokens,
+            "total_tokens": total_tokens,
+            "token_savings_percent": token_savings,
+            "estimated_cost_savings": cost_savings
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
