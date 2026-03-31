@@ -160,6 +160,24 @@ class Config:
         self.host = os.environ.get("HOST", "0.0.0.0")
         self.port = int(os.environ.get("PORT", "8082"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
+        
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # STRUCTURED LOGGING CONFIGURATION
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # Logging tier: production (default), debug, forensic
+        # - production: Errors only, 10MB rotation, 7-day retention (~5MB/day)
+        # - debug: All requests, 50MB rotation, 3-day retention (~20MB/day)
+        # - forensic: Full payloads, manual cleanup (~100MB/day)
+        self.log_tier = os.environ.get("LOG_TIER", "production").lower()
+        
+        # Log file settings
+        self.logs_dir = os.environ.get("LOGS_DIR", "logs")
+        self.log_max_size_mb = int(os.environ.get("LOG_MAX_SIZE_MB", "50"))
+        self.log_retention_days = int(os.environ.get("LOG_RETENTION_DAYS", "7"))
+        
+        # Tool output truncation (saves tokens, prevents model confusion)
+        self.tool_output_max_chars = int(os.environ.get("TOOL_OUTPUT_MAX_CHARS", "50000"))
+        self.tool_output_truncation = os.environ.get("TOOL_OUTPUT_TRUNCATION", "true").lower() == "true"
         self.max_tokens_limit = int(os.environ.get("MAX_TOKENS_LIMIT", "131072"))
         self.min_tokens_limit = int(os.environ.get("MIN_TOKENS_LIMIT", "100"))
 

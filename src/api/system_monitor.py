@@ -455,3 +455,233 @@ async def configure_budget(daily_limit: float, monthly_limit: float):
         "monthly_limit": monthly_limit,
         "message": "Budget configuration saved (would persist to config file)"
     }
+
+@router.get("/api/system/health/diagnostic")
+async def get_diagnostic_health():
+    """
+    Comprehensive diagnostic health check for debugging.
+    
+    Returns detailed information about:
+    - System status and uptime
+    - Log configuration and recent errors
+    - Provider endpoint health
+    - Database status
+    - Recent request statistics
+    - Configuration summary (redacted)
+    
+    This endpoint is useful for troubleshooting issues
+    like Issue 18 (tool call continuation).
+    """
+    import time
+    from src.core.config import config
+    from src.services.logging.structured_logger import get_logger
+    
+    start_time = time.time()
+    
+    try:
+        process = psutil.Process()
+        
+        # Get uptime
+        uptime_seconds = 0
+        try:
+            if usage_tracker.enabled:
+                conn = sqlite3.connect(usage_tracker.db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT executed_at FROM migration_log ORDER BY executed_at ASC LIMIT 1")
+                result = cursor.fetchone()
+                if result:
+                    start_time_db = datetime.fromisoformat(result[0])
+                    uptime_seconds = (datetime.utcnow() - start_time_db).total_seconds()
+                conn.close()
+        except Exception:
+            pass
+        
+        # Get log statistics
+        logs_info = {
+            "tier": config.log_tier,
+            "dir": config.logs_dir,
+            "max_size_mb": config.log_max_size_mb,
+            "retention_days": config.log_retention_days,
+            "files": [],
+            "total_size_mb": 0,
+            "recent_errors": []
+        }
+        
+        logs_path = Path(config.logs_dir)
+        if logs_path.exists():
+            for log_file in sorted(logs_path.glob("*.log"), key=lambda f: f.stat().st_mtime, reverse=True)[:10]:
+                logs_info["files"].append({
+                    "name": log_file.name,
+                    "size_mb": round(log_file.stat().st_size / (1024 * 1024), 2),
+                    "modified": datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
+                })
+                logs_info["total_size_mb"] += log_file.stat().st_size / (1024 * 1024)
+            
+            # Read recent errors from error log
+            error_log = logs_path / "proxy_errors.log"
+            if error_log.exists():
+                try:
+                    with open(error_log, 'r') as f:
+                        lines = f.readlines()[-10:]  # Last 10 errors
+                        logs_info["recent_errors"] = [line.strip()[:200] for line in lines if line.strip()]
+                except Exception:
+                    pass
+        
+        logs_info["total_size_mb"] = round(logs_info["total_size_mb"], 2)
+        
+        # Check provider endpoints
+        providers = {
+            "default": check_endpoint(config.openai_base_url),
+            "big": check_endpoint(config.big_endpoint) if config.big_endpoint != config.openai_base_url else None,
+            "middle": check_endpoint(config.middle_endpoint) if config.middle_endpoint != config.openai_base_url else None,
+            "small": check_endpoint(config.small_endpoint) if config.small_endpoint != config.openai_base_url else None,
+        }
+        
+        # Database info
+        db_info = {
+            "enabled": usage_tracker.enabled,
+            "path": str(usage_tracker.db_path) if usage_tracker.enabled else None,
+            "size_mb": 0,
+            "tables": []
+        }
+        
+        if usage_tracker.enabled and os.path.exists(usage_tracker.db_path):
+            db_info["size_mb"] = round(os.path.getsize(usage_tracker.db_path) / (1024 * 1024), 2)
+            try:
+                conn = sqlite3.connect(usage_tracker.db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                db_info["tables"] = [row[0] for row in cursor.fetchall()]
+                conn.close()
+            except Exception as e:
+                db_info["error"] = str(e)
+        
+        # Recent request statistics
+        request_stats = {
+            "last_hour": 0,
+            "last_24h": 0,
+            "errors_last_hour": 0,
+            "avg_duration_ms": 0
+        }
+        
+        if usage_tracker.enabled:
+            try:
+                conn = sqlite3.connect(usage_tracker.db_path)
+                cursor = conn.cursor()
+                
+                cursor.execute("SELECT COUNT(*) FROM api_requests WHERE timestamp >= datetime('now', '-1 hour')")
+                request_stats["last_hour"] = cursor.fetchone()[0] or 0
+                
+                cursor.execute("SELECT COUNT(*) FROM api_requests WHERE timestamp >= datetime('now', '-24 hours')")
+                request_stats["last_24h"] = cursor.fetchone()[0] or 0
+                
+                cursor.execute("SELECT COUNT(*) FROM api_requests WHERE status = 'error' AND timestamp >= datetime('now', '-1 hour')")
+                request_stats["errors_last_hour"] = cursor.fetchone()[0] or 0
+                
+                cursor.execute("SELECT AVG(duration_ms) FROM api_requests WHERE timestamp >= datetime('now', '-1 hour') AND duration_ms IS NOT NULL")
+                avg_dur = cursor.fetchone()[0]
+                request_stats["avg_duration_ms"] = round(avg_dur, 1) if avg_dur else 0
+                
+                conn.close()
+            except Exception:
+                pass
+        
+        # Configuration summary (redacted)
+        config_summary = {
+            "models": {
+                "big": config.big_model,
+                "middle": config.middle_model,
+                "small": config.small_model
+            },
+            "features": {
+                "dashboard": config.enable_dashboard,
+                "tracking": config.track_usage,
+                "cascade": config.model_cascade
+            },
+            "endpoints": {
+                "default": sanitize_url(config.openai_base_url),
+                "has_big_override": config.big_endpoint != config.openai_base_url,
+                "has_middle_override": config.middle_endpoint != config.openai_base_url,
+                "has_small_override": config.small_endpoint != config.openai_base_url
+            }
+        }
+        
+        return {
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "check_duration_ms": round((time.time() - start_time) * 1000, 1),
+            "uptime": {
+                "seconds": round(uptime_seconds, 1),
+                "formatted": f"{int(uptime_seconds // 3600)}h {int((uptime_seconds % 3600) // 60)}m"
+            },
+            "resources": {
+                "cpu_percent": round(process.cpu_percent(), 1),
+                "memory_mb": round(process.memory_info().rss / (1024 * 1024), 1),
+                "memory_percent": round(process.memory_percent(), 1)
+            },
+            "logs": logs_info,
+            "providers": providers,
+            "database": db_info,
+            "requests": request_stats,
+            "configuration": config_summary
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+
+def check_endpoint(url: str) -> dict:
+    """Check if an endpoint is reachable."""
+    import httpx
+    
+    if not url:
+        return {"status": "not_configured", "url": None}
+    
+    try:
+        # Just check if we can connect (don't send real request)
+        with httpx.Client(timeout=5.0) as client:
+            # Try a lightweight request
+            response = client.get(url.replace('/v1', '/health'), follow_redirects=True)
+            return {
+                "status": "healthy" if response.status_code < 400 else "error",
+                "url": sanitize_url(url),
+                "status_code": response.status_code,
+                "response_time_ms": round(response.elapsed.total_seconds() * 1000, 1)
+            }
+    except httpx.ConnectError:
+        return {
+            "status": "unreachable",
+            "url": sanitize_url(url),
+            "error": "Connection failed"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "url": sanitize_url(url),
+            "error": str(e)[:100]
+        }
+
+
+def sanitize_url(url: str) -> str:
+    """Sanitize URL for display (hide API keys)."""
+    if not url:
+        return None
+    
+    # Remove query params and fragment
+    base_url = url.split('?')[0].split('#')[0]
+    
+    # Hide sensitive parts
+    if 'openrouter' in base_url.lower():
+        return "https://openrouter.ai/api/v1"
+    elif 'openai' in base_url.lower():
+        return "https://api.openai.com/v1"
+    elif 'localhost' in base_url or '127.0.0.1' in base_url:
+        return base_url  # Keep local URLs as-is
+    else:
+        # Generic sanitization
+        return base_url[:50] + "..." if len(base_url) > 50 else base_url

@@ -1205,3 +1205,78 @@ CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000
 
 *Last Updated: March 29, 2026*
 *This document should be updated whenever new issues are discovered and resolved to serve as institutional knowledge for future debugging sessions.*
+
+---
+
+### Issue 21: Enhanced Logging System & Security Updates
+
+**Date:** March 30, 2026  
+**Severity:** Medium - Improves debuggability and security posture
+
+**Problem:**
+Issue 18 debugging revealed logging deficiencies:
+1. No structured request/response logging
+2. debug_traffic.log only showed incoming requests, not transformations  
+3. No easy way to trace tool call flow across multiple turns
+4. Risk of disk exhaustion if verbose logging enabled permanently
+5. npm security vulnerabilities in web-ui dependencies
+
+**Solution:**
+
+1. **Tiered Logging Architecture** (`src/services/logging/structured_logger.py`):
+   - **Production tier** (default): Errors only, 10MB rotation, 7-day retention (~5MB/day)
+   - **Debug tier**: All requests, 50MB rotation, 3-day retention (~20MB/day)
+   - **Forensic tier**: Full payloads, manual cleanup (~100MB/day) - for active debugging
+   
+   Features:
+   - Automatic file rotation (size + time based)
+   - Structured JSON logging for easy parsing
+   - Sensitive data redaction (API keys, tokens)
+   - Request tracing with correlation IDs
+   - Tool call flow tracking (call_start, call_transform, result_received, etc.)
+   - Provider fallback logging
+
+2. **Automatic Log Cleanup** (`src/services/logging/log_cleanup.py`):
+   - Removes logs older than retention period
+   - Enforces maximum total size limit
+   - Cleans up old forensic logs
+   - Can run daily via cron
+
+3. **Diagnostic Health Endpoint** (`GET /api/system/health/diagnostic`):
+   - System status and uptime
+   - Log configuration and recent errors
+   - Provider endpoint health checks
+   - Database status and table list
+   - Recent request statistics (last hour, last 24h)
+   - Configuration summary (redacted)
+
+4. **npm Security Updates**:
+   - ✅ Fixed: jsPDF (10 CVEs - critical/high)
+   - ✅ Fixed: devalue (6 CVEs - high)
+   - ✅ Fixed: @sveltejs/kit (DoS vulnerabilities)
+   - ✅ Fixed: DOMPurify (XSS vulnerabilities)
+   - ⚠️  Remaining: xlsx (2 CVEs - high, low risk for local deployment)
+
+**Files Modified:**
+- `src/services/logging/structured_logger.py` (NEW)
+- `src/services/logging/log_cleanup.py` (NEW)
+- `src/api/system_monitor.py` (added diagnostic endpoint)
+- `src/core/config.py` (added logging config)
+- `.env.example` (added logging section)
+- `web-ui/package.json` (updated dependencies)
+
+**Storage:** Production tier ~35MB max (well under 50MB limit)
+
+**Usage:**
+```bash
+LOG_TIER=debug python start_proxy.py  # Enable debug logging
+python -m src.services.logging.log_cleanup  # Manual cleanup
+curl http://localhost:8082/api/system/health/diagnostic  # Health check
+```
+
+**Lessons Learned:**
+1. Invest in logging BEFORE you need it
+2. Automatic rotation prevents disk full incidents
+3. Regular dependency updates prevent security debt
+
+---
