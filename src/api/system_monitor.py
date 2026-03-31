@@ -1053,3 +1053,105 @@ async def get_metrics_trends(
                 'sessions': []
             }
         }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLI TOOL SESSION ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/api/cli-tools")
+async def get_cli_tools():
+    """Get data from all AI coding CLI tools."""
+    try:
+        from src.services.cli.session_collector import collect_cli_sessions
+        data = collect_cli_sessions()
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": data
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "data": None
+        }
+
+
+@router.get("/api/cli-tools/stats")
+async def get_cli_tool_stats():
+    """Get aggregate statistics from CLI tools."""
+    try:
+        from src.services.cli.session_collector import get_cli_stats
+        stats = get_cli_stats()
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "stats": stats
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "stats": {}
+        }
+
+
+@router.get("/api/cli-tools/timeline")
+async def get_cli_tool_timeline(
+    days: int = 7,
+    tool: Optional[str] = None
+):
+    """
+    Get session timeline from CLI tools.
+    
+    Args:
+        days: Number of days to include (default: 7)
+        tool: Filter by specific tool (optional)
+    """
+    try:
+        from src.services.cli.session_collector import get_cli_timeline
+        timeline = get_cli_timeline(days)
+        
+        # Filter by tool if specified
+        if tool:
+            timeline = [s for s in timeline if s['tool'] == tool]
+        
+        return {
+            "status": "success",
+            "period_days": days,
+            "session_count": len(timeline),
+            "timeline": timeline
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timeline": []
+        }
+
+
+@router.get("/api/cli-tools/{tool_id}")
+async def get_cli_tool_details(tool_id: str):
+    """Get detailed data for a specific CLI tool."""
+    try:
+        from src.services.cli.session_collector import collect_cli_sessions
+        all_data = collect_cli_sessions()
+        
+        if tool_id not in all_data.get('tools', {}):
+            return {
+                "status": "not_found",
+                "message": f"Tool '{tool_id}' not found",
+                "available_tools": list(all_data.get('tools', {}).keys())
+            }
+        
+        return {
+            "status": "success",
+            "tool_id": tool_id,
+            "data": all_data['tools'][tool_id]
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
