@@ -894,3 +894,162 @@ async def get_cache_analytics(hours: int = 24):
             "status": "error",
             "error": str(e)
         }
+
+
+@router.get("/api/metrics/history")
+async def get_metrics_history(
+    limit: int = 30,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """
+    Get historical metrics from aggregated history.
+    
+    Args:
+        limit: Maximum number of entries to return (default: 30)
+        start_date: Filter by start date (ISO format: YYYY-MM-DD)
+        end_date: Filter by end date (ISO format: YYYY-MM-DD)
+    
+    Returns:
+        List of aggregated metric snapshots
+    """
+    try:
+        logs_path = Path(os.getenv("LOGS_DIR", "logs"))
+        history_file = logs_path / "metrics_history.jsonl"
+        
+        if not history_file.exists():
+            return {
+                "status": "no_data",
+                "message": "No metrics history available yet. Run log cleanup to start collecting history.",
+                "entries": []
+            }
+        
+        entries = []
+        with open(history_file, 'r') as f:
+            for line in f:
+                try:
+                    data = json.loads(line.strip())
+                    
+                    # Filter by date range
+                    if start_date:
+                        entry_date = data.get('timestamp', '')[:10]
+                        if entry_date < start_date:
+                            continue
+                    
+                    if end_date:
+                        entry_date = data.get('timestamp', '')[:10]
+                        if entry_date > end_date:
+                            continue
+                    
+                    entries.append(data)
+                except (json.JSONDecodeError, KeyError):
+                    continue
+        
+        # Sort by timestamp (newest first) and limit
+        entries.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        entries = entries[:limit]
+        
+        return {
+            "status": "success",
+            "count": len(entries),
+            "entries": entries
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "entries": []
+        }
+
+
+@router.get("/api/metrics/history/trends")
+async def get_metrics_trends(
+    days: int = 30
+):
+    """
+    Get trend data from metrics history for charting.
+    
+    Returns aggregated trends for:
+    - Tool call volume and success rate
+    - Cache hit rate and token savings
+    - Session count
+    
+    Args:
+        days: Number of days to include (default: 30)
+    
+    Returns:
+        Trend data suitable for charts
+    """
+    try:
+        logs_path = Path(os.getenv("LOGS_DIR", "logs"))
+        history_file = logs_path / "metrics_history.jsonl"
+        
+        if not history_file.exists():
+            return {
+                "status": "no_data",
+                "message": "No metrics history available yet",
+                "trends": {
+                    'dates': [],
+                    'tool_calls': [],
+                    'tool_success_rate': [],
+                    'cache_hit_rate': [],
+                    'cached_tokens': [],
+                    'sessions': []
+                }
+            }
+        
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        entries = []
+        
+        with open(history_file, 'r') as f:
+            for line in f:
+                try:
+                    data = json.loads(line.strip())
+                    timestamp = datetime.fromisoformat(data.get('timestamp', '').replace('Z', '+00:00'))
+                    
+                    if timestamp.replace(tzinfo=None) < cutoff:
+                        continue
+                    
+                    entries.append({
+                        'date': data.get('timestamp', '')[:10],
+                        'tool_calls': data.get('tool_calls', {}).get('total', 0),
+                        'tool_success_rate': data.get('tool_calls', {}).get('success_rate', 0),
+                        'cache_hit_rate': data.get('cache_usage', {}).get('hit_rate', 0),
+                        'cached_tokens': data.get('cache_usage', {}).get('cached_tokens', 0),
+                        'sessions': data.get('sessions', 0)
+                    })
+                except (json.JSONDecodeError, KeyError, ValueError):
+                    continue
+        
+        # Sort by date
+        entries.sort(key=lambda x: x['date'])
+        
+        # Extract arrays for charting
+        trends = {
+            'dates': [e['date'] for e in entries],
+            'tool_calls': [e['tool_calls'] for e in entries],
+            'tool_success_rate': [e['tool_success_rate'] for e in entries],
+            'cache_hit_rate': [e['cache_hit_rate'] for e in entries],
+            'cached_tokens': [e['cached_tokens'] for e in entries],
+            'sessions': [e['sessions'] for e in entries]
+        }
+        
+        return {
+            "status": "success",
+            "period_days": days,
+            "entry_count": len(entries),
+            "trends": trends
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "trends": {
+                'dates': [],
+                'tool_calls': [],
+                'tool_success_rate': [],
+                'cache_hit_rate': [],
+                'cached_tokens': [],
+                'sessions': []
+            }
+        }
