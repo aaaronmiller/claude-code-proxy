@@ -37,18 +37,29 @@ def estimate_response_tokens(response_text: str) -> int:
     return estimate_tokens(response_text)
 
 
-def track_api_call(request_size: int, response_size: int) -> dict:
+def track_api_call(
+    request_size: int,
+    response_size: int,
+    request_body: str = None
+) -> dict:
     """
     Create a token usage record for an API call.
 
     Args:
-        request_size: Size of request payload in characters (0 for GET)
+        request_size: Size of request payload in characters
         response_size: Size of response body in characters
+        request_body: Optional actual request body for more accurate token estimation
 
     Returns:
         dict with prompt_tokens, completion_tokens, total_tokens
     """
-    prompt_tokens = estimate_prompt_tokens("")  # TODO: actual request body if needed
+    # Use actual request body if provided, otherwise estimate from size
+    if request_body:
+        prompt_tokens = estimate_prompt_tokens(request_body)
+    else:
+        # For GET requests or when body not available
+        prompt_tokens = estimate_tokens("a" * request_size)
+    
     completion_tokens = estimate_response_tokens("a" * response_size)
 
     return {

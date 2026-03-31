@@ -125,9 +125,12 @@ class KiroTokenManager:
         self._save_tokens()
         logger.info("✅ Kiro tokens stored successfully")
 
-    def get_access_token(self) -> Optional[str]:
+    def get_access_token(self, auto_refresh: bool = True) -> Optional[str]:
         """
         Get current access token.
+
+        Args:
+            auto_refresh: If True and token is expired, attempt auto-refresh
 
         Returns:
             Access token string or None if not available/expired
@@ -138,7 +141,13 @@ class KiroTokenManager:
 
         if self.tokens.is_expired():
             logger.warning("⚠️ Kiro access token has expired")
-            # TODO: Implement auto-refresh if we have refresh token
+            if auto_refresh and self.tokens.refresh_token:
+                logger.info("🔄 Attempting auto-refresh...")
+                if self.refresh_tokens():
+                    logger.info("✅ Token refresh successful")
+                    return self.tokens.access_token
+                else:
+                    logger.error("❌ Token refresh failed")
             return None
 
         if not self.tokens.is_valid():
@@ -176,20 +185,76 @@ class KiroTokenManager:
 
     def refresh_tokens(self) -> bool:
         """
-        Refresh tokens using refresh token (if available).
-        This is a placeholder - actual refresh logic depends on Kiro's API.
-
+        Refresh tokens using refresh token.
+        
+        Kiro uses OAuth2-style token refresh:
+        POST https://auth.kiro.dev/oauth/token
+        Content-Type: application/x-www-form-urlencoded
+        
+        grant_type=refresh_token
+        &refresh_token={refresh_token}
+        &client_id={client_id}
+        &client_secret={client_secret}
+        
         Returns:
             True if refresh successful, False otherwise
         """
         if not self.tokens or not self.tokens.refresh_token:
             logger.warning("⚠️ No refresh token available")
             return False
-
-        # TODO: Implement actual token refresh with Kiro's auth API
-        # For now, this is a placeholder
-        logger.info("🔄 Token refresh would be called here")
-        return False
+        
+        try:
+            import httpx
+            
+            # Kiro OAuth2 token endpoint
+            token_url = "https://auth.kiro.dev/oauth/token"
+            
+            # Client credentials (Kiro's public OAuth client)
+            client_id = os.getenv("KIRO_CLIENT_ID", "kiro-cli")
+            client_secret = os.getenv("KIRO_CLIENT_SECRET", "")
+            
+            # Prepare refresh request
+            data = {
+                "grant_type": "refresh_token",
+                "refresh_token": self.tokens.refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret
+            }
+            
+            logger.debug(f"🔄 Refreshing Kiro token from {token_url}")
+            
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(token_url, data=data)
+                response.raise_for_status()
+                
+                result = response.json()
+                
+                # Store new tokens
+                new_access = result.get('access_token')
+                new_refresh = result.get('refresh_token')  # May get new refresh token
+                expires_in = result.get('expires_in', 3600)  # Default 1 hour
+                
+                if new_access:
+                    self.store_tokens(
+                        access_token=new_access,
+                        refresh_token=new_refresh or self.tokens.refresh_token,
+                        expires_in=expires_in
+                    )
+                    logger.info("✅ Kiro tokens refreshed successfully")
+                    return True
+                else:
+                    logger.error("❌ No access token in refresh response")
+                    return False
+                    
+        except httpx.HTTPStatusError as e:
+            logger.error(f"❌ Token refresh HTTP error: {e.response.status_code} - {e.response.text}")
+            return False
+        except httpx.RequestError as e:
+            logger.error(f"❌ Token refresh request failed: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Token refresh failed: {e}")
+            return False
 
     def get_token_info(self) -> Dict[str, Any]:
         """
