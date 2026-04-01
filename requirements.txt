@@ -17,13 +17,7 @@ annotated-doc==0.0.4
     #   typer
 annotated-types==0.7.0
     # via pydantic
-anyio==4.12.1 ; python_full_version < '3.10'
-    # via
-    #   httpx
-    #   openai
-    #   starlette
-    #   watchfiles
-anyio==4.13.0 ; python_full_version >= '3.10'
+anyio==4.13.0
     # via
     #   httpx
     #   openai
@@ -35,8 +29,7 @@ attrs==26.1.0
     # via aiohttp
 backports-asyncio-runner==1.2.0 ; python_full_version < '3.11'
     # via pytest-asyncio
-black==25.11.0 ; python_full_version < '3.10'
-black==26.3.1 ; python_full_version >= '3.10'
+black==26.3.1
 certifi==2026.2.25
     # via
     #   httpcore
@@ -47,13 +40,7 @@ charset-normalizer==3.4.6
     # via
     #   reportlab
     #   requests
-click==8.1.8 ; python_full_version < '3.10'
-    # via
-    #   black
-    #   rich-toolkit
-    #   typer
-    #   uvicorn
-click==8.3.1 ; python_full_version >= '3.10'
+click==8.3.1
     # via
     #   black
     #   rich-toolkit
@@ -65,15 +52,11 @@ colorama==0.4.6 ; sys_platform == 'win32'
     #   pytest
     #   tqdm
     #   uvicorn
-coverage==7.10.7 ; python_full_version < '3.10'
-    # via pytest-cov
-coverage==7.13.5 ; python_full_version >= '3.10'
+coverage==7.13.5
     # via pytest-cov
 distro==1.9.0
     # via openai
-dnspython==2.7.0 ; python_full_version < '3.10'
-    # via email-validator
-dnspython==2.8.0 ; python_full_version >= '3.10'
+dnspython==2.8.0
     # via email-validator
 email-validator==2.3.0
     # via
@@ -85,17 +68,11 @@ exceptiongroup==1.3.1 ; python_full_version < '3.11'
     # via
     #   anyio
     #   pytest
-fastapi==0.128.8 ; python_full_version < '3.10'
+fastapi==0.135.2
     # via claude-code-proxy
-fastapi==0.135.2 ; python_full_version >= '3.10'
-    # via claude-code-proxy
-fastapi-cli==0.0.22 ; python_full_version < '3.10'
+fastapi-cli==0.0.24
     # via fastapi
-fastapi-cli==0.0.24 ; python_full_version >= '3.10'
-    # via fastapi
-fastapi-cloud-cli==0.12.0 ; python_full_version < '3.10'
-    # via fastapi-cli
-fastapi-cloud-cli==0.15.1 ; python_full_version >= '3.10'
+fastapi-cloud-cli==0.15.1
     # via fastapi-cli
 fastar==0.9.0
     # via fastapi-cloud-cli
@@ -124,17 +101,9 @@ idna==3.11
     #   httpx
     #   requests
     #   yarl
-importlib-metadata==8.7.1 ; python_full_version < '3.10'
-    # via
-    #   isort
-    #   pyinstaller
-    #   pyinstaller-hooks-contrib
-iniconfig==2.1.0 ; python_full_version < '3.10'
+iniconfig==2.3.0
     # via pytest
-iniconfig==2.3.0 ; python_full_version >= '3.10'
-    # via pytest
-isort==6.1.0 ; python_full_version < '3.10'
-isort==8.0.1 ; python_full_version >= '3.10'
+isort==8.0.1
 jinja2==3.1.6
     # via fastapi
 jiter==0.13.0
@@ -143,9 +112,7 @@ librt==0.8.1 ; platform_python_implementation != 'PyPy'
     # via mypy
 macholib==1.16.4 ; sys_platform == 'darwin'
     # via pyinstaller
-markdown-it-py==3.0.0 ; python_full_version < '3.10'
-    # via rich
-markdown-it-py==4.0.0 ; python_full_version >= '3.10'
+markdown-it-py==4.0.0
     # via rich
 markupsafe==3.0.3
     # via jinja2
@@ -155,15 +122,12 @@ multidict==6.7.1
     # via
     #   aiohttp
     #   yarl
-mypy==1.19.1 ; python_full_version < '3.10'
-mypy==1.20.0 ; python_full_version >= '3.10'
+mypy==1.20.0
 mypy-extensions==1.1.0
     # via
     #   black
     #   mypy
-numpy==2.0.2 ; python_full_version < '3.10'
-    # via claude-code-proxy
-numpy==2.2.6 ; python_full_version == '3.10.*'
+numpy==2.2.6 ; python_full_version < '3.11'
     # via claude-code-proxy
 numpy==2.4.4 ; python_full_version >= '3.11'
     # via claude-code-proxy
@@ -183,13 +147,9 @@ pathspec==1.0.4
     #   mypy
 pefile==2024.8.26 ; sys_platform == 'win32'
     # via pyinstaller
-pillow==11.3.0 ; python_full_version < '3.10'
+pillow==12.1.1
     # via reportlab
-pillow==12.1.1 ; python_full_version >= '3.10'
-    # via reportlab
-platformdirs==4.4.0 ; python_full_version < '3.10'
-    # via black
-platformdirs==4.9.4 ; python_full_version >= '3.10'
+platformdirs==4.9.4
     # via black
 pluggy==1.6.0
     # via
@@ -215,9 +175,7 @@ pydantic-core==2.41.5
     # via pydantic
 pydantic-extra-types==2.11.1
     # via fastapi
-pydantic-settings==2.11.0 ; python_full_version < '3.10'
-    # via fastapi
-pydantic-settings==2.13.1 ; python_full_version >= '3.10'
+pydantic-settings==2.13.1
     # via fastapi
 pygments==2.20.0
     # via
@@ -226,30 +184,18 @@ pygments==2.20.0
 pyinstaller==6.19.0
 pyinstaller-hooks-contrib==2026.4
     # via pyinstaller
-pytest==8.4.2 ; python_full_version < '3.10'
+pytest==9.0.2
     # via
     #   pytest-asyncio
     #   pytest-cov
-pytest==9.0.2 ; python_full_version >= '3.10'
-    # via
-    #   pytest-asyncio
-    #   pytest-cov
-pytest-asyncio==1.2.0 ; python_full_version < '3.10'
-pytest-asyncio==1.3.0 ; python_full_version >= '3.10'
+pytest-asyncio==1.3.0
 pytest-cov==7.1.0
-python-dotenv==1.2.1 ; python_full_version < '3.10'
+python-dotenv==1.2.2
     # via
     #   claude-code-proxy
     #   pydantic-settings
     #   uvicorn
-python-dotenv==1.2.2 ; python_full_version >= '3.10'
-    # via
-    #   claude-code-proxy
-    #   pydantic-settings
-    #   uvicorn
-python-multipart==0.0.20 ; python_full_version < '3.10'
-    # via fastapi
-python-multipart==0.0.22 ; python_full_version >= '3.10'
+python-multipart==0.0.22
     # via fastapi
 pytokens==0.4.1
     # via black
@@ -261,17 +207,11 @@ questionary==2.1.1
     # via claude-code-proxy
 readchar==4.2.1
     # via claude-code-proxy
-regex==2026.1.15 ; python_full_version < '3.10'
-    # via tiktoken
-regex==2026.3.32 ; python_full_version >= '3.10'
+regex==2026.3.32
     # via tiktoken
 reportlab==4.4.10
     # via claude-code-proxy
-requests==2.32.5 ; python_full_version < '3.10'
-    # via
-    #   claude-code-proxy
-    #   tiktoken
-requests==2.33.1 ; python_full_version >= '3.10'
+requests==2.33.1
     # via
     #   claude-code-proxy
     #   tiktoken
@@ -296,9 +236,7 @@ shellingham==1.5.4
     # via typer
 sniffio==1.3.1
     # via openai
-starlette==0.49.3 ; python_full_version < '3.10'
-    # via fastapi
-starlette==1.0.0 ; python_full_version >= '3.10'
+starlette==1.0.0
     # via fastapi
 tiktoken==0.12.0
     # via claude-code-proxy
@@ -311,11 +249,7 @@ tomli==2.4.1 ; python_full_version <= '3.11'
     #   pytest
 tqdm==4.67.3
     # via openai
-typer==0.23.2 ; python_full_version < '3.10'
-    # via
-    #   fastapi-cli
-    #   fastapi-cloud-cli
-typer==0.24.1 ; python_full_version >= '3.10'
+typer==0.24.1
     # via
     #   fastapi-cli
     #   fastapi-cloud-cli
@@ -346,13 +280,7 @@ urllib3==2.6.3
     # via
     #   requests
     #   sentry-sdk
-uvicorn==0.39.0 ; python_full_version < '3.10'
-    # via
-    #   claude-code-proxy
-    #   fastapi
-    #   fastapi-cli
-    #   fastapi-cloud-cli
-uvicorn==0.42.0 ; python_full_version >= '3.10'
+uvicorn==0.42.0
     # via
     #   claude-code-proxy
     #   fastapi
@@ -364,13 +292,7 @@ watchfiles==1.1.1
     # via uvicorn
 wcwidth==0.6.0
     # via prompt-toolkit
-websockets==15.0.1 ; python_full_version < '3.10'
+websockets==16.0
     # via uvicorn
-websockets==16.0 ; python_full_version >= '3.10'
-    # via uvicorn
-yarl==1.22.0 ; python_full_version < '3.10'
+yarl==1.23.0
     # via aiohttp
-yarl==1.23.0 ; python_full_version >= '3.10'
-    # via aiohttp
-zipp==3.23.0 ; python_full_version < '3.10'
-    # via importlib-metadata
