@@ -78,6 +78,14 @@ elif family.family == ModelFamily.GEMINI_FLASH:
    - Issue 10: Syntax Error - Duplicate Docstring
    - Issue 11: Concurrent Sessions Still Blocking
    - Issue 12: Database Migrations Failing on Fresh Install
+
+## Current Session Notes (April 2026)
+
+### Routing sanity note for compressed proxy testing
+
+- Observation: prompt loss symptoms showed up only on the new Headroom-compressed path, not on the underlying proxy routing itself.
+- User preference: retain the existing BIG/MIDDLE/SMALL model map in `.env`; do not rewrite tier choices during compression debugging.
+- Follow-up direction: keep the proxy model map intact and adjust the compression layer behavior instead.
    - Issue 13: Model Catalog Service
    - Issue 14: Overly Aggressive Tool Call Deduplication
    - **Issue 15: Database Schema Mismatch - muted_until Column**
