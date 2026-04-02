@@ -877,55 +877,28 @@ def run_model_selector():
                         "MIDDLE_MODEL": middle_model, 
                         "SMALL_MODEL": small_model,
                     }
-                    # Add provider/endpoint settings if custom (Seamless Hybrid)
-                    # BIG
-                    if big_provider and big_provider not in ["vibeproxy", "ollama", "custom"]:
-                        updates["ENABLE_BIG_ENDPOINT"] = "true"
-                        updates["BIG_ENDPOINT"] = PROVIDERS.get(big_provider, {}).get("endpoint", "")
-                        # Seamless API Key
-                        key_env = PROVIDERS.get(big_provider, {}).get("api_key_env")
-                        if key_env:
-                            val = os.environ.get(key_env)
-                            if not val and key_env == "OPENROUTER_API_KEY":
-                                val = os.environ.get("PROVIDER_API_KEY")
-                            if val:
-                                updates["BIG_API_KEY"] = val
-                    elif big_provider == "vibeproxy":
-                        updates["ENABLE_BIG_ENDPOINT"] = "false"
-                        updates["BIG_API_KEY"] = ""
-                        
-                    # MIDDLE
-                    if middle_provider and middle_provider not in ["vibeproxy", "ollama", "custom"]:
-                        updates["ENABLE_MIDDLE_ENDPOINT"] = "true"
-                        updates["MIDDLE_ENDPOINT"] = PROVIDERS.get(middle_provider, {}).get("endpoint", "")
-                        # Seamless API Key
-                        key_env = PROVIDERS.get(middle_provider, {}).get("api_key_env")
-                        if key_env:
-                            val = os.environ.get(key_env)
-                            if not val and key_env == "OPENROUTER_API_KEY":
-                                val = os.environ.get("PROVIDER_API_KEY")
-                            if val:
-                                updates["MIDDLE_API_KEY"] = val
-                    elif middle_provider == "vibeproxy":
-                        updates["ENABLE_MIDDLE_ENDPOINT"] = "false"
-                        updates["MIDDLE_API_KEY"] = ""
-
-                    # SMALL
-                    if small_provider and small_provider not in ["vibeproxy", "ollama", "custom"]:
-                        updates["ENABLE_SMALL_ENDPOINT"] = "true"
-                        updates["SMALL_ENDPOINT"] = PROVIDERS.get(small_provider, {}).get("endpoint", "")
-                        # Seamless API Key
-                        key_env = PROVIDERS.get(small_provider, {}).get("api_key_env")
-                        if key_env:
-                            val = os.environ.get(key_env)
-                            if not val and key_env == "OPENROUTER_API_KEY":
-                                val = os.environ.get("PROVIDER_API_KEY")
-                            if val:
-                                updates["SMALL_API_KEY"] = val
-                    elif small_provider == "vibeproxy":
-                        updates["ENABLE_SMALL_ENDPOINT"] = "false" 
-                        updates["SMALL_API_KEY"] = ""
-                    
+                    # Write PROVIDER_* settings to the provider registry
+                    providers_to_add = set()
+                    for tier_name, provider_val in [
+                        ("big", big_provider),
+                        ("middle", middle_provider),
+                        ("small", small_provider),
+                    ]:
+                        p = (provider_val or "").lower()
+                        if p and p not in ["vibeproxy", "ollama", "custom"]:
+                            if p not in providers_to_add:
+                                providers_to_add.add(p)
+                                prov_info = PROVIDERS.get(p, {})
+                                endpoint_url = prov_info.get("endpoint", "")
+                                key_env_var = prov_info.get("api_key_env")
+                                if endpoint_url:
+                                    updates[f"PROVIDERS_{p}_URL"] = endpoint_url
+                                if key_env_var:
+                                    val = os.environ.get(key_env_var, "")
+                                    if not val and key_env_var == "OPENROUTER_API_KEY":
+                                        val = os.environ.get("PROVIDER_API_KEY", "")
+                                    if val:
+                                        updates[f"PROVIDERS_{p}_API_KEY"] = val
                     print("\n⏳ Saving configuration...")
                     update_env_values(updates)
                     print(f"\n✅ Configuration saved!")

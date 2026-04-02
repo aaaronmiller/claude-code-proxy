@@ -1,0 +1,16 @@
+{
+  "_comment": "Add this hooks block to ~/.claude/settings.json to wire RTK",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/misscheta/.claude/hooks/rtk-rewrite.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

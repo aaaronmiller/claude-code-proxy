@@ -1,0 +1,17 @@
+[Unit]
+Description=Reset GNOME shell audio context (Surface Laptop Studio 2 periodic sound bug)
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=DISPLAY=:0
+ExecStart=/bin/bash -c '\
+  exts=$(gnome-extensions list --enabled 2>&1); \
+  if [ -z "$exts" ]; then echo "No extensions found, skipping"; exit 0; fi; \
+  echo "$exts" | while read ext; do gnome-extensions disable "$ext" 2>/dev/null; done; \
+  sleep 1; \
+  echo "$exts" | while read ext; do gnome-extensions enable "$ext" 2>/dev/null; done; \
+  echo "Reset complete: $(echo "$exts" | wc -l) extensions cycled"'

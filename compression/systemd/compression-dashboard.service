@@ -1,0 +1,14 @@
+[Unit]
+Description=Compression Dashboard Web Server
+After=network.target compression-tracker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/misscheta/code/input-compression/scripts/compression-dashboard.py --web --interval 30
+Restart=on-failure
+RestartSec=60
+Environment="PATH=/home/misscheta/.local/bin:/usr/local/cuda/bin:%H"
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=GPU Resident Model Manager (Headroom VRAM Optimization)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/misscheta/code/input-compression/scripts/gpu-resident-manager.py
+Restart=on-failure
+RestartSec=10
+Environment="PATH=/home/misscheta/.local/bin:/usr/local/cuda/bin:%H"
+Environment="CUDA_VISIBLE_DEVICES=0"
+Environment="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
+
+[Install]
+WantedBy=default.target

@@ -32,16 +32,15 @@ class OpenAIClient:
         self.timeout = timeout
         self.custom_headers = custom_headers
 
-        # Single default client for backward compatibility
+        # Default client
         self.client = self._create_client(api_key, base_url, api_version, custom_headers)
 
-        # Per-model clients for hybrid deployments
-        self.big_client = None
-        self.middle_client = None
-        self.small_client = None
+        # Provider-based client pool: key = provider name, value = client instance
+        self._provider_clients: Dict[str, Any] = {}
+        self._config = None  # Set in configure_per_model_clients / set_config
 
         # VibeProxy availability tracking
-        self._vibeproxy_available = None  # None = not checked yet
+        self._vibeproxy_available = None
         self._vibeproxy_error = None
 
         self.active_requests: Dict[str, asyncio.Event] = {}
@@ -139,80 +138,86 @@ class OpenAIClient:
             )
 
     def configure_per_model_clients(self, config):
-        """Configure per-model clients for hybrid deployments."""
-        # Big model client
-        if config.enable_big_endpoint:
-            self.big_client = self._create_client(
-                config.big_api_key,
-                config.big_endpoint,
-                config.azure_api_version if config.big_endpoint == config.openai_base_url else None,
-                self.custom_headers
-            )
+        """Store config reference for per-request routing."""
+        self._config = config
 
-        # Middle model client
-        if config.enable_middle_endpoint:
-            self.middle_client = self._create_client(
-                config.middle_api_key,
-                config.middle_endpoint,
-                config.azure_api_version if config.middle_endpoint == config.openai_base_url else None,
-                self.custom_headers
-            )
+    def _get_provider_client(self, provider_name: str) -> Any:
+        """Get or lazily create a client for a registered provider."""
+        if provider_name in self._provider_clients:
+            return self._provider_clients[provider_name]
+        config = self._config
+        if not config:
+            return None
+        url = config.get_provider_endpoint(provider_name)
+        key = config.get_provider_api_key(provider_name)
+        if url is None:
+            return None
+        if key is None:
+            key = self.default_api_key
+        client = self._create_client(key, url, self.default_api_version, self.custom_headers)
+        self._provider_clients[provider_name] = client
+        return client
 
-        # Small model client
-        if config.enable_small_endpoint:
-            self.small_client = self._create_client(
-                config.small_api_key,
-                config.small_endpoint,
-                config.azure_api_version if config.small_endpoint == config.openai_base_url else None,
-                self.custom_headers
-            )
+    def _resolve_provider_for_tier(self, config, tier_model: str, tier_lower: str) -> str:
+        """Determine the provider name for a tier's configured model."""
+        if not tier_model:
+            return ""
+        # Check explicit tier override
+        override = config.tier_provider_overrides.get(tier_lower)
+        if override:
+            return override
+        # Infer provider prefix from model name (e.g., "qwen/foo" → "qwen")
+        if "/" in tier_model:
+            prefix = tier_model.split("/", 1)[0].lower()
+            if prefix in config.provider_registry:
+                return prefix
+        return "default"
 
     def get_client_for_model(self, model: str, config=None) -> Any:
-        """Get the appropriate client for a model (BIG, MIDDLE, or SMALL)."""
+        """Resolve provider client for a model using the provider registry.
+
+        Logic:
+        1. Compare the model name (with/without provider prefix) against each tier's configured model
+        2. If matched, route to that tier's resolved provider
+        3. Fall back to the default client (OpenRouter)
+        """
         import time
         timestamp = time.strftime("%H:%M:%S")
-        
-        # Check for exact model matches first
-        if self.big_client and config and model == config.big_model:
-            logger.debug(f"[Client Selection {timestamp}] Using BIG client for model '{model}'")
-            return self.big_client
-        if self.middle_client and config and model == config.middle_model:
-            logger.debug(f"[Client Selection {timestamp}] Using MIDDLE client for model '{model}'")
-            return self.middle_client
-        if self.small_client and config and model == config.small_model:
-            logger.debug(f"[Client Selection {timestamp}] Using SMALL client for model '{model}'")
-            return self.small_client
+        if not config:
+            return self.client
 
-        # Check for OpenRouter-style models (containing '/') routed via configured tiers
-        # Match if the configured tier model is a substring of the incoming model
-        if config:
-            if self.big_client and config.big_model and config.big_model in model:
-                logger.debug(f"[Client Selection {timestamp}] Using BIG client (substring match) for model '{model}'")
-                return self.big_client
-            if self.middle_client and config.middle_model and config.middle_model in model:
-                logger.debug(f"[Client Selection {timestamp}] Using MIDDLE client (substring match) for model '{model}'")
-                return self.middle_client
-            if self.small_client and config.small_model and config.small_model in model:
-                logger.debug(f"[Client Selection {timestamp}] Using SMALL client (substring match) for model '{model}'")
-                return self.small_client
-            
-            # If model looks like OpenRouter format (vendor/model-name), try to match by provider
-            if '/' in model:
-                logger.debug(f"[Client Selection {timestamp}] OpenRouter-style model detected: '{model}'")
-                # Check if ANY configured tier uses OpenRouter (has '/' in model name)
-                if self.big_client and config.big_model and '/' in config.big_model:
-                    logger.debug(f"[Client Selection {timestamp}] Routing OpenRouter model to BIG client")
-                    return self.big_client
-                if self.middle_client and config.middle_model and '/' in config.middle_model:
-                    logger.debug(f"[Client Selection {timestamp}] Routing OpenRouter model to MIDDLE client")
-                    return self.middle_client
-                if self.small_client and config.small_model and '/' in config.small_model:
-                    logger.debug(f"[Client Selection {timestamp}] Routing OpenRouter model to SMALL client")
-                    return self.small_client
+        def norm(name: str) -> str:
+            if name and "/" in name:
+                return name.split("/", 1)[1]
+            return name or ""
 
-        # Fallback to default client
-        logger.debug(f"[Client Selection {timestamp}] Using DEFAULT (cached) client for model '{model}'")
-        logger.debug(f"[Client Selection {timestamp}] ⚠️  This client was created once and is being REUSED")
+        raw_requested = model
+        stripped_requested = norm(model)
+
+        tiers = [
+            ("BIG", config.big_model),
+            ("MIDDLE", config.middle_model),
+            ("SMALL", config.small_model),
+        ]
+
+        for tier_name, configured_model in tiers:
+            if not configured_model:
+                continue
+            stripped_config = norm(configured_model)
+            tier_lower = tier_name.lower()
+
+            # Match: raw vs raw, raw vs stripped, stripped vs stripped
+            if raw_requested == configured_model or raw_requested == stripped_config \
+               or stripped_requested == configured_model or stripped_requested == stripped_config:
+                provider = self._resolve_provider_for_tier(config, configured_model, tier_lower)
+                client = self._get_provider_client(provider)
+                if client:
+                    logger.debug(f"[Client Selection {timestamp}] {tier_name}→provider '{provider}' for '{model}'")
+                    return client
+                logger.debug(f"[Client Selection {timestamp}] {tier_name} matched but provider '{provider}' not in registry, using DEFAULT")
+                return self.client
+
+        logger.debug(f"[Client Selection {timestamp}] No tier matched for '{model}', using DEFAULT client")
         return self.client
     
     async def create_chat_completion(self, request: Dict[str, Any], request_id: Optional[str] = None, config=None, api_key: Optional[str] = None) -> Dict[str, Any]:
@@ -240,12 +245,9 @@ class OpenAIClient:
             )
         else:
             client = self.get_client_for_model(request.get('model', ''), config)
-            
-            # Determine if this request is using the SMALL tier endpoint
-            # SMALL tier uses a different endpoint (e.g., OpenRouter) so skip VibeProxy refresh
+
             model = request.get('model', '')
-            is_small_tier = self.small_client and config and model == config.small_model
-            
+
             # FIX: For VibeProxy requests, ensure we have a fresh token for each request
             # Check the actual client's base_url, not the default config
             base_url = str(client.base_url)
@@ -288,8 +290,6 @@ class OpenAIClient:
                         )
                     else:
                         logger.error(f"[VibeProxy {timestamp}] Failed to retrieve fresh token! Using cached client (may fail)")
-            elif is_small_tier:
-                logger.debug(f"[Client Selection {timestamp}] SMALL tier - routing to {config.small_endpoint} (not VibeProxy)")
 
         # Create cancellation token if request_id provided
         if request_id:
@@ -372,17 +372,18 @@ class OpenAIClient:
             )
         else:
             client = self.get_client_for_model(request.get('model', ''), config)
-            
-            # Determine if this request is using the SMALL tier endpoint
-            # SMALL tier uses a different endpoint (e.g., OpenRouter) so skip VibeProxy refresh
+
             model = request.get('model', '')
-            is_small_tier = self.small_client and config and model == config.small_model
-            
+
+            # Determine if this is SMALL tier request (use getattr for safety)
+            small_client = getattr(self, 'small_client', None)
+            is_small_tier = config and small_client and model == config.small_model
+
             # FIX: For VibeProxy requests, ensure we have a fresh token for each request
             # Check the actual client's base_url, not the default config
             base_url = str(client.base_url)
             is_vibeproxy = "127.0.0.1:8317" in base_url or "localhost:8317" in base_url
-            
+
             # Allow refresh for any tier (including small) if it points to VibeProxy/CLIProxyAPI
             if is_vibeproxy:
                 # When CLIProxyAPI handles auth, skip token refresh

@@ -1,0 +1,31 @@
+{
+  "batch_id": "hardcoded_model_audit_001",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "files_processed": 1,
+  "total_bytes": 15842,
+  "total_tokens_est": 28000,
+  "file_audits": [
+    {
+      "path": "audit-reports/hardcoded-model-names-audit.md",
+      "tokens": 28000,
+      "quality_indicators": [
+        "detailed_summary",
+        "findings_categorized",
+        "code_snippets_included",
+        "suggested_fixes_provided",
+        "priority_ranking",
+        "impact_matrix"
+      ],
+      "hash": "sha256:audit_hardcoded_models_20260401"
+    }
+  ],
+  "audit_summary": {
+    "total_findings": 24,
+    "critical_findings": 3,
+    "medium_findings": 7,
+    "low_findings": 6,
+    "acceptable_patterns": 8,
+    "files_affected": 9,
+    "files_analyzed": 173
+  }
+}

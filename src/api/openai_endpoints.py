@@ -272,20 +272,10 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
         # Parse model to get routing info
         routed_model, reasoning_config = model_manager.parse_and_map_model(body.model)
 
-        # Determine endpoint and provider
+        # Determine endpoint and provider via provider registry
         client = openai_client.get_client_for_model(routed_model, config)
-        endpoint = config.openai_base_url
-        provider = config.default_provider
-
-        if client == openai_client.big_client:
-            endpoint = config.big_endpoint
-            provider = config.big_provider
-        elif client == openai_client.middle_client:
-            endpoint = config.middle_endpoint
-            provider = config.middle_provider
-        elif client == openai_client.small_client:
-            endpoint = config.small_endpoint
-            provider = config.small_provider
+        endpoint = str(client.base_url) if hasattr(client, 'base_url') else config.openai_base_url
+        provider = config.provider_for_endpoint(endpoint) if hasattr(config, 'provider_for_endpoint') else config.default_provider
 
         logger.debug(f"[{request_id}] Routing to {endpoint} (provider: {provider})")
 
@@ -294,11 +284,14 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
         openai_request["model"] = routed_model
 
         def infer_model_tier(model_name: str) -> Optional[str]:
-            if model_name == config.big_model:
+            def norm(name):
+                return name.split("/", 1)[1].lower() if name and "/" in name else (name or "").lower()
+            req = norm(model_name)
+            if req == norm(config.big_model):
                 return "big"
-            if model_name == config.middle_model:
+            if req == norm(config.middle_model):
                 return "middle"
-            if model_name == config.small_model:
+            if req == norm(config.small_model):
                 return "small"
             return None
 
@@ -313,6 +306,9 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
             # Streaming response
             async def generate_stream():
                 try:
+                    saw_data_chunk = False
+                    saw_done = False
+
                     def transform_chunk_dict(chunk_dict: Dict[str, Any]) -> List[str]:
                         # Normalize tool calls in streaming response
                         for choice in chunk_dict.get("choices", []):
@@ -363,9 +359,11 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                                 continue
                             payload = line[6:].strip()
                             if payload == "[DONE]":
+                                saw_done = True
                                 yield "data: [DONE]\n\n"
                                 break
                             chunk_dict = json.loads(payload)
+                            saw_data_chunk = True
                             for output in transform_chunk_dict(chunk_dict):
                                 yield output
                     else:
@@ -374,10 +372,32 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                         )
                         async for chunk in stream:
                             chunk_dict = chunk.model_dump()
+                            saw_data_chunk = True
                             for output in transform_chunk_dict(chunk_dict):
                                 yield output
 
+                        if not saw_data_chunk:
+                            logger.error(
+                                f"[{request_id}] Upstream stream opened but produced no chunks "
+                                f"(endpoint={endpoint}, provider={provider}, model={routed_model})"
+                            )
+                            error_chunk = {
+                                "error": {
+                                    "message": "Upstream stream closed without any chunks",
+                                    "type": "empty_stream",
+                                }
+                            }
+                            yield f"data: {json.dumps(error_chunk)}\n\n"
+                            return
+
                         yield "data: [DONE]\n\n"
+                        saw_done = True
+
+                    if saw_data_chunk and not saw_done:
+                        logger.warning(
+                            f"[{request_id}] Stream ended after data without explicit [DONE] "
+                            f"(endpoint={endpoint}, provider={provider}, model={routed_model})"
+                        )
 
                 except Exception as e:
                     logger.error(f"[{request_id}] Streaming error: {e}")
@@ -444,37 +464,41 @@ async def list_models():
     """
     config = Config()
 
-    models = []
+    created = int(time.time())
+    model_ids: list[str] = []
 
-    # Add configured models
-    if config.big_model:
-        models.append(
-            {
-                "id": config.big_model,
-                "object": "model",
-                "created": int(time.time()),
-                "owned_by": "vibeproxy",
-            }
-        )
+    def add_model(model_id: str | None) -> None:
+        if model_id and model_id not in model_ids:
+            model_ids.append(model_id)
 
-    if config.middle_model:
-        models.append(
-            {
-                "id": config.middle_model,
-                "object": "model",
-                "created": int(time.time()),
-                "owned_by": "vibeproxy",
-            }
-        )
+    # Advertise the actual routed backend models.
+    add_model(config.big_model)
+    add_model(config.middle_model)
+    add_model(config.small_model)
 
-    if config.small_model:
-        models.append(
-            {
-                "id": config.small_model,
-                "object": "model",
-                "created": int(time.time()),
-                "owned_by": "vibeproxy",
-            }
-        )
+    # Advertise Claude-facing aliases too. The request path maps these aliases
+    # to BIG/MIDDLE/SMALL at runtime, so exposing them keeps Claude CLI model
+    # selection valid even when the underlying backend models are non-Claude.
+    for alias in [
+        "opus",
+        "sonnet",
+        "sonnet[1m]",
+        "haiku",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-6[1m]",
+        "claude-haiku-4-5-20251001",
+    ]:
+        add_model(alias)
+
+    models = [
+        {
+            "id": model_id,
+            "object": "model",
+            "created": created,
+            "owned_by": "vibeproxy",
+        }
+        for model_id in model_ids
+    ]
 
     return {"object": "list", "data": models}

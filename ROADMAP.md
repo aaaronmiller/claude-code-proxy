@@ -1,232 +1,229 @@
-# 🗺️ The Ultimate Proxy - Product Roadmap
+# Claude Code Proxy - Roadmap
 
-**Last Updated:** March 30, 2026  
-**Version:** 2.1.0
-
----
-
-## ✅ Completed (v2.1.0)
-
-### Core Features
-- [x] Multi-provider routing (OpenRouter, OpenAI, Gemini, VibeProxy, Kiro)
-- [x] Model cascade with automatic fallback
-- [x] BIG/MIDDLE/SMALL model tier routing
-- [x] Extended thinking support (up to 128k tokens)
-- [x] Tool call translation and normalization
-- [x] Stream and non-stream response handling
-- [x] Passthrough mode for user-provided API keys
-
-### Observability & Analytics
-- [x] **Tiered Logging System** (Issue 21)
-  - Production/Debug/Forensic tiers
-  - Automatic rotation and cleanup
-  - 10,000x storage reduction with aggregation
-- [x] **Session Metrics Tracker**
-  - Per-session token, cost, latency tracking
-  - Tool call success/failure rates
-  - Cache hit/miss statistics
-- [x] **Real-time Dashboard** (`/realtime`)
-  - Live metrics with micro-animations
-  - WebSocket-powered updates
-  - Active session monitoring
-- [x] **Historical Analytics**
-  - Aggregated metrics history
-  - Trend data for charting
-  - Tool and cache analytics
-- [x] **CLI Tool Session Collector**
-  - Tracks 6+ AI coding tools (Claude Code, OpenCode, etc.)
-  - Session history and config file tracking
-  - Model and plugin discovery
-
-### Developer Experience
-- [x] **Quick Start Automation** (Issue 16)
-  - One-command setup (`python quickstart.py`)
-  - Interactive configuration wizard
-  - Automatic dependency management
-- [x] **Health & Diagnostics**
-  - `/api/system/health/diagnostic` endpoint
-  - Provider connectivity checks
-  - Database and log statistics
-- [x] **Comprehensive Documentation**
-  - QUICKSTART.md guide
-  - SNAKESKIN issue documentation
-  - API reference
-
-### Reliability Fixes
-- [x] Database schema migrations (Issue 15)
-- [x] Tool call continuation (Issue 18)
-- [x] Concurrent session handling (Issue 11)
-- [x] Kiro token auto-refresh
-- [x] npm security vulnerability fixes
+> **Last Updated:** April 2, 2026
+> **Version:** 2.2.0
+> **Status:** Active Development
 
 ---
 
-## 🚧 In Progress (v2.2.0)
+## Executive Summary
 
-### Free Model Cascade (Design Complete)
-- [ ] Smart free model ranking
-  - Programmatic scoring (always-on)
-  - Optional LLM+Exa reranking
-  - Health-based filtering
-- [ ] Quota-aware failover
-  - Per-model daily limits
-  - Rate limit tracking
-  - Cooldown management
-- [ ] TUI integration for free model selection
+**Current Focus:** Phase 2 - Tight Integration
 
-### Enhanced TUI Dashboard
-- [x] Rich-based terminal modules
-- [x] Real-time metrics display
-- [ ] Interactive controls (pause, reset)
-- [ ] Configurable module positioning
-- [ ] Theme support (dark/light)
-
-### Model Intelligence
-- [ ] Model catalog auto-sync
-- [ ] Price/performance tracking
-- [ ] Model recommendation engine
-- [ ] Usage-based model suggestions
+**Key Achievements (Phase 1):**
+- ✅ 92% GPU VRAM utilization (up from 0.2%)
+- ✅ 97% compression rate (900→26 tokens)
+- ✅ 95-99% cost savings
+- ✅ Multi-CLI support (6 CLIs)
+- ✅ Unified control script & 30+ aliases
+- ✅ Real-time visualization dashboard
+- ✅ Unified installation script (install-all.sh)
+- ✅ input-compression migrated and deprecated
+- ✅ Low-VRAM/No-GPU support documented
 
 ---
 
-## 📋 Planned (v2.3.0 - Q2 2026)
+## Project Phases
 
-### Desktop GUI (Tauri)
-- [ ] Cross-platform desktop app
-- [ ] System tray integration
-- [ ] Native notifications
-- [ ] One-click provider setup
-- [ ] Visual model selector
+### Phase 1: Parallel Installation ✅ (COMPLETE - April 2026)
 
-### Multi-Instance Analytics
-- [ ] Aggregate data from multiple proxy instances
-- [ ] Team/organization support
-- [ ] Centralized dashboard
-- [ ] Usage reports and alerts
+**Goal:** Single command installs all three proxies (claude-code-proxy, headroom, RTK)
 
-### MCP Server Integration
-- [ ] Model Context Protocol support
-- [ ] External tool integration
-- [ ] Resource sharing between agents
-- [ ] Standardized tool interfaces
+**Completed Tasks:**
+- [x] Create `install-all.sh` script
+- [x] Create `unified-start.sh` script
+- [x] Modify `compressctl` for claude-code-proxy awareness
+- [x] Test on fresh machine
+- [x] Document installation process
+- [x] Migrate input-compression to compression/ directory
+- [x] Deprecate input-compression repository
+- [x] Add Low-VRAM mode (5GB GPU)
+- [x] Add No-GPU mode (CPU-only)
+- [x] Add Network proxy access (SSH/LAN)
 
-### Multi-Agent Orchestration ("Swarm Mode")
-- [ ] Agent team coordination
-- [ ] Task distribution
-- [ ] Inter-agent communication
-- [ ] Shared context management
+**Files Created:**
+- `install-all.sh` - Unified installer
+- `compression/` directory with all compression code
+- `compression/PHASE-1-FINAL.md` - Completion report
 
----
+**Timeline:** April 2026 ✅
 
-## 🔮 Future Vision (v3.0+)
+### Phase 2: Tight Integration ⏳ (IN PROGRESS - May 2026)
 
-### Advanced Features
-- [ ] **Predictive Analytics**
-  - Usage forecasting
-  - Cost optimization suggestions
-  - Anomaly detection
-- [ ] **Custom Dashboard Builder**
-  - Drag-and-drop module layout
-  - Custom metric definitions
-  - Exportable dashboard configs
-- [ ] **Alert System**
-  - Usage threshold alerts
-  - Error rate monitoring
-  - Webhook integrations (Slack, Discord, PagerDuty)
-- [ ] **Report Generation**
-  - Scheduled usage reports
-  - Cost breakdown by model/team
-  - PDF/CSV export
+**Goal:** Shared state management and unified monitoring
 
-### Enterprise Features
-- [ ] **RBAC (Role-Based Access Control)**
-  - User management
-  - API key permissions
-  - Usage quotas per user
-- [ ] **Audit Logging**
-  - Complete request history
-  - Compliance reporting
-  - Data retention policies
-- [ ] **High Availability**
-  - Multi-instance clustering
-  - Load balancing
-  - Automatic failover
+**Tasks:**
+- [ ] Shared configuration file
+- [ ] Unified health monitoring
+- [ ] Log aggregation
+- [ ] Cross-proxy event system
+- [ ] Unified systemd service
+- [ ] Auto-optimization per content type
+- [ ] Team dashboard with multi-user stats
+- [ ] Direct OpenRouter API integration for actual costs
 
-### AI Enhancements
-- [ ] **Model Auto-Selection**
-  - Task-based model recommendation
-  - Cost/performance optimization
-  - A/B testing framework
-- [ ] **Prompt Optimization**
-  - Prompt caching
-  - Template management
-  - A/B testing for prompts
-- [ ] **Response Caching**
-  - Semantic caching
-  - Cache invalidation strategies
-  - Distributed cache support
+**Timeline:** May 2026
+
+### Phase 3: Full Merger 🔮 (FUTURE - Q3 2026)
+
+**Goal:** Single unified proxy process
+
+**Tasks:**
+- [ ] Headroom compression as claude-code-proxy middleware
+- [ ] RTK-style compression as proxy filter
+- [ ] Single process, single port
+- [ ] No inter-proxy communication needed
+- [ ] Resource optimization
+
+**Timeline:** Q3 2026
 
 ---
 
-## 📊 Priority Matrix
+## Feature Requests
 
-| Feature | Impact | Effort | Priority |
-|---------|--------|--------|----------|
-| Free Model Cascade | High | Medium | 🔴 High |
-| Desktop GUI | High | High | 🟡 Medium |
-| Multi-Instance Analytics | Medium | Medium | 🟡 Medium |
-| MCP Integration | Medium | Low | 🟢 Low |
-| Swarm Mode | High | High | 🟡 Medium |
-| Predictive Analytics | Medium | High | 🟢 Low |
-| RBAC | High | High | 🟡 Medium |
+### High Priority
 
----
+1. **Low-VRAM Mode** (5GB GPU or less)
+   - Target: Intel Arc A370M (5GB), integrated GPUs
+   - Strategy: Smaller models, CPU fallback
+   - ETA: April 2026
 
-## 🎯 Current Sprint Goals (v2.2.0)
+2. **No-GPU Mode**
+   - Target: CPU-only machines
+   - Strategy: Quantized models, efficient batching
+   - ETA: April 2026
 
-1. **Complete Free Model Cascade**
-   - Implement quota-aware routing
-   - Add health-based model filtering
-   - Integrate with TUI selector
+3. **Network Proxy Access**
+   - Target: Multiple machines sharing single proxy
+   - Strategy: SSH tunneling, cleartext LAN access
+   - ETA: April 2026
 
-2. **Enhance TUI Dashboard**
-   - Add interactive controls
-   - Implement theme support
-   - Improve module flexibility
+### Medium Priority
 
-3. **Model Intelligence**
-   - Auto-sync model catalog
-   - Track price/performance
-   - Build recommendation engine
+4. **Auto-Optimization**
+   - Learn optimal compression per content type
+   - Adjust thresholds based on success
 
----
+5. **Team Dashboard**
+   - Multi-user stats aggregation
+   - Per-user breakdown
+   - Cost allocation
 
-## 📝 How to Contribute
+6. **Provider Integration**
+   - Direct OpenRouter API integration
+   - Fetch actual costs
+   - Compare with estimates
 
-### Report Issues
-- Use GitHub Issues (when enabled)
-- Include logs from `logs/` directory
-- Specify proxy version and configuration
+### Low Priority
 
-### Request Features
-- Check existing roadmap first
-- Provide use case and expected behavior
-- Vote on existing feature requests
-
-### Submit PRs
-- Follow existing code style
-- Add tests for new features
-- Update documentation
-- Reference related issues
+7. **Desktop GUI (Tauri)**
+8. **Multi-instance analytics**
+9. **MCP Server integration**
+10. **Multi-agent orchestration ("Swarm Mode")**
 
 ---
 
-## 📞 Contact & Support
+## Technical Debt
 
-- **Documentation:** `/docs` folder and `/QUICKSTART.md`
-- **Issue Tracking:** GitHub Issues
-- **Discussion:** GitHub Discussions
+### Refactoring Needed
+
+1. **Model Detection**
+   - Remove remaining hardcoded model names
+   - Migrate to dynamic family detection
+   - Priority: High
+
+2. **Error Handling**
+   - Standardize error responses
+   - Add retry logic
+   - Priority: Medium
+
+3. **Logging**
+   - Consolidate logging modules
+   - Add structured logging
+   - Priority: Medium
+
+### Documentation Gaps
+
+1. **API Documentation** - In progress
+2. **Usage Examples** - In progress
+3. **Troubleshooting Guide** - Needed
+4. **Performance Tuning Guide** - Needed
 
 ---
 
-*This roadmap is updated with each release. Last updated: March 30, 2026*
+## Known Issues
+
+### Current Bugs
+
+| Issue | Severity | Status | Workaround |
+|-------|----------|--------|------------|
+| Headroom JSONL logs not writing | Medium | Investigating | Use stdout logs |
+| Compression stats not persistent | Low | Known | Manual export |
+
+### Performance Issues
+
+| Issue | Impact | Status |
+|-------|--------|--------|
+| GPU VRAM fragmentation | Moderate | Mitigated |
+| Model load time (cold start) | Low | Accepted |
+
+---
+
+## Metrics & Goals
+
+### Current Metrics (April 2026)
+
+| Metric | Value | Target | Status |
+|--------|-------|--------|--------|
+| GPU VRAM Utilization | 92% | 90%+ | ✅ Exceeded |
+| Compression Rate | 97% | 95%+ | ✅ Exceeded |
+| Latency Overhead | 50ms | <100ms | ✅ Exceeded |
+| Cost Savings | 95-99% | 90%+ | ✅ Exceeded |
+| CLI Integrations | 6 | 5+ | ✅ Exceeded |
+
+### Q2 2026 Goals
+
+- [ ] 10+ CLI integrations
+- [ ] <40ms latency overhead
+- [ ] 98%+ compression rate
+- [ ] Network proxy access
+- [ ] Low-VRAM mode
+
+---
+
+## Community Contributions
+
+### How to Contribute
+
+1. **Report Issues** - GitHub Issues
+2. **Feature Requests** - GitHub Discussions
+3. **Code Contributions** - Pull Requests
+4. **Documentation** - Edit docs/ folder
+
+### Areas Needing Help
+
+- [ ] Windows compatibility
+- [ ] macOS testing
+- [ ] Additional CLI integrations
+- [ ] Translations
+- [ ] Performance benchmarks
+
+---
+
+## Version History
+
+- **v2.1.0** (April 2026) - Compression Stack Integration
+- **v2.0.0** (March 2026) - Multi-Provider Support
+- **v1.0.0** (February 2026) - Initial Release
+
+---
+
+## Contact & Support
+
+- **GitHub:** https://github.com/aaaronmiller/claude-code-proxy
+- **Discussions:** https://github.com/aaaronmiller/claude-code-proxy/discussions
+- **Issues:** https://github.com/aaaronmiller/claude-code-proxy/issues
+
+---
+
+*This roadmap is a living document. Last updated: April 2, 2026*

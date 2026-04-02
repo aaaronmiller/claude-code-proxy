@@ -1,0 +1,8 @@
+[Unit]
+Description=Surface system health audit
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/surface-audit.sh
+StandardOutput=journal
+StandardError=journal

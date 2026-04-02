@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![2025 Ready](https://img.shields.io/badge/2025-Ready-06ffd4.svg)](#)
 
-[Quick Start](#-quick-start) • [Features](#-features) • [Web Dashboard](#-web-dashboard) • [Crosstalk](docs/crosstalk.md)
+[Quick Start](#-quick-start) • [Features](#-features) • [Web Dashboard](#-web-dashboard) • [Crosstalk](docs/crosstalk.md) • [Compression Stack](#-compression-stack) • [Roadmap](ROADMAP.md) • [Changelog](changelog.md)
 
 <br>
 
@@ -40,42 +40,31 @@ Claude Code CLI  →  The Ultimate Proxy  →  Any Provider
 
 ## 🚀 Quick Start
 
-### Option 1: Automated Setup (Recommended)
+### Option 1: Unified Installation (Recommended)
+
+**Single command installs everything:**
 
 ```bash
-# Clone the repository
-git clone https://github.com/holegots/claude-code-proxy.git
-cd claude-code-proxy
-
-# Run the automated setup
-python quickstart.py
+curl -fsSL https://raw.githubusercontent.com/aaaronmiller/claude-code-proxy/main/install-all.sh | bash
 ```
 
 This will:
-- ✅ Check Python version (3.9+ required)
-- ✅ Create virtual environment
-- ✅ Install all dependencies
-- ✅ Configure environment variables
-- ✅ Initialize the database
-- ✅ Launch the proxy
+- ✅ Clone claude-code-proxy
+- ✅ Install Headroom (compression layer)
+- ✅ Install RTK (command compression)
+- ✅ Install all Python dependencies
+- ✅ Configure systemd services
+- ✅ Add compression aliases
+- ✅ Start all services
+- ✅ Show health status
 
-### Option 2: Manual Setup
+**Manual installation:**
 
 ```bash
 # Clone & install
-git clone https://github.com/holegots/claude-code-proxy.git
-cd claude-code-proxy
-
-# Install dependencies (choose one)
-uv sync                    # Recommended (faster)
-# OR
-pip install -r requirements.txt
-
-# Interactive setup wizard
-python start_proxy.py --setup
-
-# Start the proxy
-python start_proxy.py
+git clone https://github.com/aaaronmiller/claude-code-proxy.git ~/code/claude-code-proxy
+cd ~/code/claude-code-proxy
+./install-all.sh
 ```
 
 ### Using with Claude Code
@@ -223,12 +212,77 @@ python start_proxy.py --show-models  # List available models
 
 ---
 
+## 🗜️ Compression Stack
+
+**NEW (April 2026):** Integrated compression layer for 95-99% cost savings
+
+### Quick Start
+
+```bash
+# Start compression stack
+cs-start
+
+# Use Claude with auto-compression
+csi  # or csr to resume
+
+# Quick stats
+cs-stats-quick
+```
+
+### Features
+
+- **97% compression rate** (900→26 tokens)
+- **92% GPU VRAM utilization** (RTX 4050 optimized)
+- **Multi-CLI support** (Claude, Qwen, Codex, OpenCode, OpenClaw, Hermes)
+- **Real-time dashboard** (terminal + web)
+- **4 compression modes** (max/balanced/speed/free-tier)
+
+### Architecture
+
+```
+Claude Code → Proxy (:8082) → Headroom (:8787) → OpenRouter
+                           ↓
+                    GPU: 92% VRAM
+                    97% compression
+```
+
+### Documentation
+
+- **Full Guide:** [docs/COMPRESSION-STACK.md](docs/COMPRESSION-STACK.md)
+- **Performance Analysis:** [docs/PERFORMANCE-ANALYSIS.md](docs/PERFORMANCE-ANALYSIS.md)
+- **GPU Optimization:** [docs/GPU-OPTIMIZATION.md](docs/GPU-OPTIMIZATION.md)
+- **Roadmap:** [ROADMAP.md](ROADMAP.md)
+- **Changelog:** [changelog.md](changelog.md)
+
+### Low-VRAM / No-GPU Support
+
+Coming in Phase 1 (April 2026):
+- Intel Arc A370M (5GB) mode
+- CPU-only mode
+- Network proxy access (SSH/cleartext)
+
+---
+
 ## 🔮 Roadmap
 
-- [ ] Desktop GUI (Tauri)
-- [ ] Multi-instance analytics
-- [ ] MCP Server integration
-- [ ] Multi-agent orchestration ("Swarm Mode")
+**See full roadmap:** [ROADMAP.md](ROADMAP.md)
+
+### Phase 1: Parallel Installation (April 2026)
+- [ ] Single install script for all proxies
+- [ ] Unified start/stop commands
+- [ ] Low-VRAM mode (5GB GPU)
+- [ ] No-GPU mode
+- [ ] Network proxy access
+
+### Phase 2: Tight Integration (May 2026)
+- [ ] Shared state management
+- [ ] Unified health monitoring
+- [ ] Log aggregation
+
+### Phase 3: Full Merger (Q3 2026)
+- [ ] Headroom as proxy middleware
+- [ ] Single unified proxy process
+- [ ] Resource optimization
 
 ---
 

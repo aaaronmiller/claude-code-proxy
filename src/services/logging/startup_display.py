@@ -89,21 +89,16 @@ def display_startup_config(config):
         
         console.print(Panel(reasoning_table, title="[bold magenta]Reasoning[/bold magenta]", border_style="cyan"))
     
-    # Hybrid Mode (if enabled)
-    hybrid_enabled = config.enable_big_endpoint or config.enable_middle_endpoint or config.enable_small_endpoint
-    if hybrid_enabled:
-        hybrid_table = Table(show_header=True, box=None, padding=(0, 1))
-        hybrid_table.add_column("Tier", style="dim", width=8)
-        hybrid_table.add_column("Endpoint", style="bright_cyan", width=50)
-        
-        if config.enable_big_endpoint:
-            hybrid_table.add_row("BIG", config.big_endpoint)
-        if config.enable_middle_endpoint:
-            hybrid_table.add_row("MIDDLE", config.middle_endpoint)
-        if config.enable_small_endpoint:
-            hybrid_table.add_row("SMALL", config.small_endpoint)
-        
-        console.print(Panel(hybrid_table, title="[bold magenta]Model Routing[/bold magenta]", border_style="cyan"))
+    # Provider Registry
+    if config.provider_registry:
+        prov_table = Table(show_header=True, box=None, padding=(0, 1))
+        prov_table.add_column("Provider", style="dim", width=30)
+        prov_table.add_column("Endpoint", style="bright_cyan", width=50)
+
+        for name, entry in config.provider_registry.items():
+            prov_table.add_row(name.upper(), entry.get("url", ""))
+
+        console.print(Panel(prov_table, title="[bold magenta]Provider Registry[/bold magenta]", border_style="cyan"))
     
     # Server Settings
     server_table = Table(show_header=False, box=None, padding=(0, 2))

@@ -105,6 +105,10 @@ def parse_model_name(model_name: str) -> ParsedModel:
 
     Suffix format: model_name:suffix
 
+    Handles hybrid tier/provider format:
+    - 'opus/qwen-2.5-72b' → base_model='qwen-2.5-72b' (tier prefix stripped)
+    - 'sonnet/openai/gpt-4o' → base_model='openai/gpt-4o' (tier prefix stripped)
+
     Examples:
         'claude-opus-4-20250514:4k' → ParsedModel(
             base_model='claude-opus-4-20250514',
@@ -117,6 +121,12 @@ def parse_model_name(model_name: str) -> ParsedModel:
             reasoning_type='effort',
             reasoning_value='high',
             original_model='o4-mini:high'
+        )
+        'opus/qwen-2.5-72b' → ParsedModel(
+            base_model='qwen-2.5-72b',
+            reasoning_type=None,
+            reasoning_value=None,
+            original_model='opus/qwen-2.5-72b'
         )
         'gpt-4' → ParsedModel(
             base_model='gpt-4',
@@ -131,30 +141,38 @@ def parse_model_name(model_name: str) -> ParsedModel:
     Returns:
         ParsedModel with extracted components
     """
-    # Use regex to split model name and suffix
-    # Pattern: ^(.+?)(?::([^:]+))?$
-    # Captures: (base_model)(optional :suffix)
-    match = re.match(r"^(.+?)(?::([^:]+))?$", model_name)
+    # First, handle reasoning suffix (e.g., :4k, :high)
+    suffix = None
+    if ":" in model_name:
+        model_name, suffix = model_name.rsplit(":", 1)
 
-    if not match:
-        logger.warning(f"Failed to parse model name: {model_name}")
-        return ParsedModel(
-            base_model=model_name,
-            reasoning_type=None,
-            reasoning_value=None,
-            original_model=model_name,
-        )
-
-    base_model = match.group(1)
-    suffix = match.group(2)
+    # Handle hybrid tier/provider format: opus/qwen-2.5, sonnet/openai/gpt-4o, haiku/gemini
+    # Strip the tier prefix (opus/, sonnet/, haiku/) to get the actual model ID
+    base_model = model_name
+    if "/" in model_name:
+        parts = model_name.split("/", 1)
+        if parts[0].lower() in ["opus", "sonnet", "haiku"]:
+            # This is tier/provider-model format, use the provider-model part
+            base_model = parts[1]
+            logger.debug(f"Stripped tier prefix from '{model_name}' → base_model='{base_model}'")
 
     # If no suffix, return base model only
     if not suffix:
+        # Still need to detect reasoning type for the base model
+        reasoning_type = _detect_reasoning_type(base_model)
+        if reasoning_type:
+            # Model supports reasoning but no suffix provided
+            return ParsedModel(
+                base_model=base_model,
+                reasoning_type=None,
+                reasoning_value=None,
+                original_model=model_name + (f":{suffix}" if suffix else ""),
+            )
         return ParsedModel(
             base_model=base_model,
             reasoning_type=None,
             reasoning_value=None,
-            original_model=model_name,
+            original_model=model_name + (f":{suffix}" if suffix else ""),
         )
 
     # Detect reasoning type based on model family and suffix
@@ -171,7 +189,7 @@ def parse_model_name(model_name: str) -> ParsedModel:
             base_model=base_model,  # Use base model (without suffix)
             reasoning_type=None,
             reasoning_value=None,
-            original_model=model_name,
+            original_model=model_name + (f":{suffix}" if suffix else ""),
         )
 
     # Parse suffix based on reasoning type

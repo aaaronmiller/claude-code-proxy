@@ -73,21 +73,9 @@ async def check_endpoints():
     
     endpoints = []
     
-    # Collect all endpoints
-    if config.enable_big_endpoint:
-        endpoints.append(("BIG", config.big_endpoint, config.big_api_key, config.big_model))
-    else:
-        endpoints.append(("BIG (default)", config.openai_base_url, config.openai_api_key, config.big_model))
-    
-    if config.enable_middle_endpoint:
-        endpoints.append(("MIDDLE", config.middle_endpoint, config.middle_api_key, config.middle_model))
-    else:
-        endpoints.append(("MIDDLE (default)", config.openai_base_url, config.openai_api_key, config.middle_model))
-    
-    if config.enable_small_endpoint:
-        endpoints.append(("SMALL", config.small_endpoint, config.small_api_key, config.small_model))
-    else:
-        endpoints.append(("SMALL (default)", config.openai_base_url, config.openai_api_key, config.small_model))
+    # Collect all endpoints from provider registry
+    for name, entry in config.provider_registry.items():
+        endpoints.append((name.upper(), entry["url"], entry.get("api_key"), ""))
     
     for name, endpoint, api_key, model in endpoints:
         print(f"\n{name}:")
@@ -134,16 +122,12 @@ async def show_models():
     # Unique endpoints only
     endpoints = {}
     
-    if config.enable_big_endpoint and config.big_endpoint:
-        endpoints[config.big_endpoint] = ("BIG", config.big_api_key)
-    
-    if config.enable_middle_endpoint and config.middle_endpoint:
-        if config.middle_endpoint not in endpoints:
-            endpoints[config.middle_endpoint] = ("MIDDLE", config.middle_api_key)
-    
-    if config.enable_small_endpoint and config.small_endpoint:
-        if config.small_endpoint not in endpoints:
-            endpoints[config.small_endpoint] = ("SMALL", config.small_api_key)
+    for name, entry in config.provider_registry.items():
+        endpoints[entry["url"]] = (name.upper(), entry.get("api_key"))
+
+    # Also include default if not in registry
+    if config.openai_base_url not in endpoints:
+        endpoints[config.openai_base_url] = ("DEFAULT", config.openai_api_key)
     
     if config.openai_base_url and config.openai_base_url not in endpoints:
         endpoints[config.openai_base_url] = ("DEFAULT", config.openai_api_key)

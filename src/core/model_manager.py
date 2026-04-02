@@ -76,8 +76,22 @@ class ModelManager:
         Only maps Claude-specific model family names (haiku/sonnet/opus).
         All other model names — including Gemini, OpenAI, custom, or
         provider-prefixed models — pass through as-is.
+        
+        Handles hybrid tier/provider format:
+        - 'opus/qwen-2.5-72b' → returns 'qwen-2.5-72b' (uses provider model directly)
+        - 'sonnet/openai/gpt-4o' → returns 'openai/gpt-4o' (uses provider model directly)
         """
         model_lower = claude_model.lower()
+
+        # Check for hybrid tier/provider format first (e.g., opus/qwen-2.5, sonnet/openai/gpt-4o)
+        if "/" in model_lower:
+            parts = model_lower.split("/", 1)
+            if parts[0] in ["opus", "sonnet", "haiku"]:
+                # This is tier/provider-model format, return the provider-model part
+                # The actual model ID after the tier prefix
+                provider_model = parts[1]
+                logger.debug(f"Hybrid model detected: '{claude_model}' → using '{provider_model}'")
+                return provider_model
 
         # Only map Claude-specific model names by family keyword
         if "haiku" in model_lower:

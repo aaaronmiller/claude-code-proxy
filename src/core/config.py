@@ -1,7 +1,7 @@
 import os
 import sys
 import re
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # API KEY FORMAT PATTERNS BY PROVIDER
@@ -207,59 +207,51 @@ class Config:
         # Set to 0 to disable threshold-based skipping.
         self.model_cascade_daily_limit = int(os.environ.get("MODEL_CASCADE_DAILY_LIMIT", "1000"))
 
-        # Optional: Per-model routing for hybrid deployments
-        # Enable per-model endpoints (set to "true" to enable)
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # PROVIDER REGISTRY (new provider-based routing)
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # Format: PROVIDERS_<name>_URL and PROVIDERS_<name>_API_KEY
+        # Example: PROVIDERS_openrouter_url=https://openrouter.ai/api/v1
+        #          PROVIDERS_openrouter_api_key=sk-or-v1-xxx
+        #          PROVIDERS_nvidia_url=https://integrate.api.nvidia.com/v1
+        #          PROVIDERS_nvidia_api_key=nvapi-xxx
+        self.provider_registry: Dict[str, Dict[str, Optional[str]]] = {}
+        self._parse_provider_registry()
+
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # TIER-TO-PROVIDER MAPPING
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # Tiers: BIG, MIDDLE, SMALL
+        # Each tier is assigned a model (e.g., BIG=qwen/qwen3.6-plus-preview:free)
+        # The provider prefix is extracted from the model name and looked up in the registry.
+        # Optional override: SMALL_PROVIDER=openrouter routes SMALL through OpenRouter.
+        self.tier_provider_overrides: Dict[str, str] = {}
+        for tier in ('big', 'middle', 'small'):
+            override = os.environ.get(f"{tier.upper()}_PROVIDER")
+            if override:
+                self.tier_provider_overrides[tier] = override.lower()
+
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # LEGACY: Per-model endpoint routing (backward compatibility)
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # Kept for backward compatibility — new configs should use provider registry
         self.enable_big_endpoint = os.environ.get("ENABLE_BIG_ENDPOINT", "false").lower() == "true"
         self.enable_middle_endpoint = os.environ.get("ENABLE_MIDDLE_ENDPOINT", "false").lower() == "true"
         self.enable_small_endpoint = os.environ.get("ENABLE_SMALL_ENDPOINT", "false").lower() == "true"
 
-        # Per-model endpoints (if enabled above)
         self.big_endpoint = os.environ.get("BIG_ENDPOINT", self.openai_base_url)
         self.middle_endpoint = os.environ.get("MIDDLE_ENDPOINT", self.openai_base_url)
         self.small_endpoint = os.environ.get("SMALL_ENDPOINT", self.openai_base_url)
 
-        # Per-model API keys (if enabled above)
-        # CRITICAL: Each endpoint MUST have its own API key if routing to different providers
-        # Do NOT fallback to main provider key - that causes auth failures
-        
-        # BIG endpoint key validation
-        big_key_from_env = os.environ.get("BIG_API_KEY")
-        if self.enable_big_endpoint:
-            if big_key_from_env:
-                self.big_api_key = big_key_from_env
-            elif self.big_endpoint != self.openai_base_url:
-                # Different endpoint but no key - defer to auto-detection
-                self.big_api_key = None
-            else:
-                self.big_api_key = self.openai_api_key
-        else:
-            self.big_api_key = self.openai_api_key
-        
-        # MIDDLE endpoint key validation  
-        middle_key_from_env = os.environ.get("MIDDLE_API_KEY")
-        if self.enable_middle_endpoint:
-            if middle_key_from_env:
-                self.middle_api_key = middle_key_from_env
-            elif self.middle_endpoint != self.openai_base_url:
-                # Different endpoint but no key - defer to auto-detection
-                self.middle_api_key = None
-            else:
-                self.middle_api_key = self.openai_api_key
-        else:
-            self.middle_api_key = self.openai_api_key
-            
-        # SMALL endpoint key validation
-        small_key_from_env = os.environ.get("SMALL_API_KEY")
-        if self.enable_small_endpoint:
-            if small_key_from_env:
-                self.small_api_key = small_key_from_env
-            elif self.small_endpoint != self.openai_base_url:
-                # Different endpoint but no key - defer to auto-detection
-                self.small_api_key = None
-            else:
-                self.small_api_key = self.openai_api_key
-        else:
-            self.small_api_key = self.openai_api_key
+        # API keys: derive from provider registry first, fall back to legacy env vars
+        self.big_api_key = self._get_legacy_tier_key('big', self.openai_api_key)
+        self.middle_api_key = self._get_legacy_tier_key('middle', self.openai_api_key)
+        self.small_api_key = self._get_legacy_tier_key('small', self.openai_api_key)
+
+        # Per-tier providers (auto-detected from registry or endpoint URL)
+        self.big_provider = self._get_tier_provider('big')
+        self.middle_provider = self._get_tier_provider('middle')
+        self.small_provider = self._get_tier_provider('small')
 
 
         # ═══════════════════════════════════════════════════════════════════════════════
@@ -273,21 +265,16 @@ class Config:
         
         # Detect providers for each endpoint
         self.default_provider = os.environ.get(
-            "DEFAULT_PROVIDER", 
+            "DEFAULT_PROVIDER",
             detect_provider(self.openai_base_url)
         )
-        self.big_provider = os.environ.get(
-            "BIG_PROVIDER",
-            detect_provider(self.big_endpoint) if self.enable_big_endpoint else self.default_provider
-        )
-        self.middle_provider = os.environ.get(
-            "MIDDLE_PROVIDER",
-            detect_provider(self.middle_endpoint) if self.enable_middle_endpoint else self.default_provider
-        )
-        self.small_provider = os.environ.get(
-            "SMALL_PROVIDER",
-            detect_provider(self.small_endpoint) if self.enable_small_endpoint else self.default_provider
-        )
+        # Legacy override: allow explicit BIG_PROVIDER/MIDDLE_PROVIDER/SMALL_PROVIDER env vars
+        if "BIG_PROVIDER" in os.environ:
+            self.big_provider = os.environ["BIG_PROVIDER"].lower()
+        if "MIDDLE_PROVIDER" in os.environ:
+            self.middle_provider = os.environ["MIDDLE_PROVIDER"].lower()
+        if "SMALL_PROVIDER" in os.environ:
+            self.small_provider = os.environ["SMALL_PROVIDER"].lower()
         
         # ═══════════════════════════════════════════════════════════════════════════════
         # AUTO API KEY LOOKUP BY PROVIDER
@@ -536,6 +523,77 @@ class Config:
         if not cascade_str:
             return []
         return [m.strip() for m in cascade_str.split(",") if m.strip()]
+
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # PROVIDER REGISTRY METHODS
+    # ═══════════════════════════════════════════════════════════════════════════════
+
+    def _parse_provider_registry(self):
+        """Parse PROVIDERS_<name>_URL/_API_KEY env vars into a provider registry."""
+        prefix = "PROVIDERS_"
+        suffix_url = "_URL"
+        suffix_key = "_API_KEY"
+
+        # Collect all provider names from URL var
+        provider_names = set()
+        for key in os.environ:
+            if key.startswith(prefix) and key.endswith(suffix_url):
+                name = key[len(prefix):-len(suffix_url)]
+                provider_names.add(name.lower())
+
+        for name in provider_names:
+            url_key = f"{prefix}{name}{suffix_url}"
+            # Try both _API_KEY and _KEY suffixes
+            key_key = os.environ.get(f"{prefix}{name}_API_KEY")
+            if key_key is None:
+                key_key = os.environ.get(f"{prefix}{name}_KEY")
+            url = os.environ.get(url_key, "").strip()
+            api_key = (key_key or "").strip() or None
+            if url:
+                self.provider_registry[name] = {"url": url, "api_key": api_key}
+
+        # If registry is empty, register the default provider
+        if not self.provider_registry:
+            self.provider_registry["default"] = {
+                "url": self.openai_base_url,
+                "api_key": self.openai_api_key,
+            }
+
+    def _get_tier_provider_from_model(self, tier: str) -> str:
+        """Extract provider name from the model configured for a tier."""
+        model_map = {'big': self.big_model, 'middle': self.middle_model, 'small': self.small_model}
+        model_name = model_map.get(tier, "")
+        if "/" in model_name:
+            return model_name.split("/", 1)[0].lower()
+        return "default"
+
+    def _get_tier_provider(self, tier: str) -> str:
+        """Resolve which provider handles a tier (with override support)."""
+        if tier in self.tier_provider_overrides:
+            return self.tier_provider_overrides[tier]
+        return self._get_tier_provider_from_model(tier)
+
+    def get_provider_endpoint(self, provider_name: str) -> Optional[str]:
+        """Get base URL for a provider from the registry."""
+        entry = self.provider_registry.get(provider_name)
+        return entry.get("url") if entry else None
+
+    def get_provider_api_key(self, provider_name: str) -> Optional[str]:
+        """Get API key for a provider from the registry."""
+        entry = self.provider_registry.get(provider_name)
+        return entry.get("api_key") if entry else None
+
+    def _get_legacy_tier_key(self, tier: str, fallback: Optional[str]) -> Optional[str]:
+        """Get API key for a tier using provider registry first, then legacy env vars."""
+        provider = self._get_tier_provider(tier)
+        reg_key = self.get_provider_api_key(provider)
+        if reg_key:
+            return reg_key
+        env_key = f"{tier.upper()}_API_KEY"
+        key = os.environ.get(env_key)
+        if key:
+            return key
+        return fallback
     
     def get_cascade_for_tier(self, tier: str) -> list:
         """Get cascade list for a model tier (big, middle, small)."""

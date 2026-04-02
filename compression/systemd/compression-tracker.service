@@ -1,0 +1,14 @@
+[Unit]
+Description=Compression Stats Tracker (Headroom + RTK)
+After=network.target headroom-proxy.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/misscheta/code/input-compression/scripts/compression-tracker.py --interval 2
+Restart=on-failure
+RestartSec=10
+Environment="PATH=/home/misscheta/.local/bin:/usr/local/cuda/bin:%H"
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=default.target

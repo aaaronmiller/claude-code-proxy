@@ -1,0 +1,14 @@
+[Unit]
+Description=Headroom Compression Proxy
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/misscheta/.local/bin/headroom proxy --port 8787 --mode token_headroom --openai-api-url https://openrouter.ai/api/v1 --backend openrouter --no-telemetry
+Restart=on-failure
+RestartSec=5
+Environment="PATH=/home/misscheta/.local/bin:/usr/local/cuda/bin:%H"
+Environment="CUDA_VISIBLE_DEVICES=0"
+
+[Install]
+WantedBy=default.target

@@ -261,6 +261,10 @@ async def log_request_body(request: Request):
                 traffic_logger.info(
                     f"Body (Truncated): {body_str_filtered[:1000]}... [Total {len(body_str_filtered)} bytes]"
                 )
+            elif len(body_str_filtered) > 1000:
+                traffic_logger.info(
+                    f"Body (Truncated): {body_str_filtered[:200]}... [Total {len(body_str_filtered)} bytes]"
+                )
             else:
                 traffic_logger.info(f"Body: {body_str_filtered}")
         except Exception as _e:
@@ -402,24 +406,11 @@ async def create_message(
 
         # Determine endpoint and provider FIRST (before conversion)
         client = openai_client.get_client_for_model(routed_model, config)
-        endpoint = config.openai_base_url
-        provider = config.default_provider  # Default provider
+        endpoint = str(client.base_url) if hasattr(client, 'base_url') else config.openai_base_url
+        provider = config.provider_for_endpoint(endpoint) if hasattr(config, 'provider_for_endpoint') else config.default_provider
         original_tier = None  # Track for fallback logging
 
-        if client == openai_client.big_client:
-            endpoint = config.big_endpoint
-            provider = config.big_provider
-            original_tier = "BIG"
-        elif client == openai_client.middle_client:
-            endpoint = config.middle_endpoint
-            provider = config.middle_provider
-            original_tier = "MIDDLE"
-        elif client == openai_client.small_client:
-            endpoint = config.small_endpoint
-            provider = config.small_provider
-            original_tier = "SMALL"
-
-        # FALLBACK ROUTING: If selected endpoint uses VibeProxy and it's down, fallback to SMALL tier
+        # FALLBACK ROUTING: If selected endpoint uses VibeProxy and it's down, fallback to SMALL
         # Also check default endpoint for VibeProxy
         is_vibeproxy_endpoint = endpoint and (
             "127.0.0.1:8317" in endpoint or "localhost:8317" in endpoint
@@ -428,21 +419,20 @@ async def create_message(
             "127.0.0.1:8317" in config.openai_base_url
             or "localhost:8317" in config.openai_base_url
         )
-        if (
-            is_vibeproxy_endpoint or (original_tier is None and is_default_vibeproxy)
-        ) and openai_client.small_client:
+        # VibeProxy fallback: if the chosen endpoint is VibeProxy and it's down,
+        # fall back to the default provider
+        if is_vibeproxy_endpoint or (original_tier is None and is_default_vibeproxy):
             from src.services.antigravity import is_vibeproxy_available
 
             if not is_vibeproxy_available():
-                # Fallback to SMALL tier (OpenRouter)
                 tier_name = original_tier or "DEFAULT"
                 logger.warning(
-                    f"Request {request_id}: VibeProxy unavailable, falling back from {tier_name} to SMALL tier (OpenRouter)"
+                    f"Request {request_id}: VibeProxy unavailable, falling back from {tier_name} to DEFAULT provider"
                 )
-                client = openai_client.small_client
-                endpoint = config.small_endpoint
-                provider = config.small_provider  # Update provider to match fallback
-                routed_model = config.small_model
+                client = openai_client.client
+                endpoint = config.openai_base_url
+                provider = config.default_provider
+                routed_model = config.big_model  # Use big model on the default provider
 
         # Convert Claude request to OpenAI format with provider-specific transformations
         openai_request = convert_claude_to_openai(
@@ -453,11 +443,14 @@ async def create_message(
         openai_request["model"] = routed_model
 
         def infer_model_tier(model_name: str) -> Optional[str]:
-            if model_name == config.big_model:
+            def norm(name):
+                return name.split("/", 1)[1].lower() if name and "/" in name else (name or "").lower()
+            req = norm(model_name)
+            if req == norm(config.big_model):
                 return "big"
-            if model_name == config.middle_model:
+            if req == norm(config.middle_model):
                 return "middle"
-            if model_name == config.small_model:
+            if req == norm(config.small_model):
                 return "small"
             return None
 

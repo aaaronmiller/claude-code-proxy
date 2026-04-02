@@ -373,15 +373,9 @@ async def get_all_endpoint_models() -> Dict[str, EndpointStatus]:
         if config.openai_base_url:
             endpoints_to_check.append(("default", config.openai_base_url, config.openai_api_key))
         
-        # Per-model endpoints
-        if config.enable_big_endpoint and config.big_endpoint:
-            endpoints_to_check.append(("big", config.big_endpoint, config.big_api_key))
-        
-        if config.enable_middle_endpoint and config.middle_endpoint:
-            endpoints_to_check.append(("middle", config.middle_endpoint, config.middle_api_key))
-        
-        if config.enable_small_endpoint and config.small_endpoint:
-            endpoints_to_check.append(("small", config.small_endpoint, config.small_api_key))
+        # Provider registry endpoints
+        for name, entry in config.provider_registry.items():
+            endpoints_to_check.append((name, entry["url"], entry.get("api_key")))
         
         # Fetch in parallel
         tasks = []

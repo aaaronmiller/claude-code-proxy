@@ -79,15 +79,11 @@ class ConfigUpdate(BaseModel):
     dashboard_refresh: Optional[str] = None
 
     # Hybrid mode settings
-    enable_big_endpoint: Optional[str] = None
-    big_endpoint: Optional[str] = None
-    big_api_key: Optional[str] = None
-    enable_middle_endpoint: Optional[str] = None
-    middle_endpoint: Optional[str] = None
-    middle_api_key: Optional[str] = None
-    enable_small_endpoint: Optional[str] = None
-    small_endpoint: Optional[str] = None
-    small_api_key: Optional[str] = None
+    # Provider registry fields (new format)
+    providers: Optional[str] = None  # JSON of provider list
+    big_model: Optional[str] = None
+    middle_model: Optional[str] = None
+    small_model: Optional[str] = None
 
     # Cascade settings
     model_cascade: Optional[str] = None
@@ -227,15 +223,12 @@ async def get_config():
         # ═══════════════════════════════════════════════════════════════════════════════
         # HYBRID MODE (Per-tier routing)
         # ═══════════════════════════════════════════════════════════════════════════════
-        "enable_big_endpoint": os.getenv("ENABLE_BIG_ENDPOINT", "false"),
-        "big_endpoint": os.getenv("BIG_ENDPOINT", ""),
-        "big_api_key": "***" if os.getenv("BIG_API_KEY") else "",
-        "enable_middle_endpoint": os.getenv("ENABLE_MIDDLE_ENDPOINT", "false"),
-        "middle_endpoint": os.getenv("MIDDLE_ENDPOINT", ""),
-        "middle_api_key": "***" if os.getenv("MIDDLE_API_KEY") else "",
-        "enable_small_endpoint": os.getenv("ENABLE_SMALL_ENDPOINT", "false"),
-        "small_endpoint": os.getenv("SMALL_ENDPOINT", ""),
-        "small_api_key": "***" if os.getenv("SMALL_API_KEY") else "",
+        # Provider Registry
+        "providers": {name: {"url": entry["url"], "has_key": bool(entry.get("api_key"))}
+                      for name, entry in config.provider_registry.items()},
+        "big_model": os.getenv("BIG_MODEL", config.big_model),
+        "middle_model": os.getenv("MIDDLE_MODEL", config.middle_model),
+        "small_model": os.getenv("SMALL_MODEL", config.small_model),
         # ═══════════════════════════════════════════════════════════════════════════════
         # CASCADE (Fallback)
         # ═══════════════════════════════════════════════════════════════════════════════
@@ -345,15 +338,9 @@ async def update_config(config_update: ConfigUpdate):
             "dashboard_layout": "DASHBOARD_LAYOUT",
             "dashboard_refresh": "DASHBOARD_REFRESH",
             "compact_logger": "COMPACT_LOGGER",
-            "enable_big_endpoint": "ENABLE_BIG_ENDPOINT",
-            "big_endpoint": "BIG_ENDPOINT",
-            "big_api_key": "BIG_API_KEY",
-            "enable_middle_endpoint": "ENABLE_MIDDLE_ENDPOINT",
-            "middle_endpoint": "MIDDLE_ENDPOINT",
-            "middle_api_key": "MIDDLE_API_KEY",
-            "enable_small_endpoint": "ENABLE_SMALL_ENDPOINT",
-            "small_endpoint": "SMALL_ENDPOINT",
-            "small_api_key": "SMALL_API_KEY",
+            "big_model": "BIG_MODEL",
+            "middle_model": "MIDDLE_MODEL",
+            "small_model": "SMALL_MODEL",
             "model_cascade": "MODEL_CASCADE",
             "big_cascade": "BIG_CASCADE",
             "middle_cascade": "MIDDLE_CASCADE",
@@ -1125,9 +1112,7 @@ async def apply_auto_routing(provider: str):
         config.small_model = routing["recommended_small"]
 
         # Clear tier-specific endpoints (use default)
-        config.enable_big_endpoint = False
-        config.enable_middle_endpoint = False
-        config.enable_small_endpoint = False
+        # config.provider_registry updated via PROVIDERS_* env vars above
         config.big_endpoint = ""
         config.middle_endpoint = ""
         config.small_endpoint = ""

@@ -1,0 +1,587 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+STATE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/input-compression"
+STATE_FILE="$STATE_DIR/state.env"
+BIN_DIR="$HOME/.local/bin"
+SHIM_DIR="$STATE_DIR/shims"
+MANIFEST_DIR="$STATE_DIR/manifests"
+SERVICE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+SERVICE_FILE="$SERVICE_DIR/headroom-proxy.service"
+HEADROOM_PORT="${HEADROOM_PORT:-8787}"
+HEADROOM_MODE="${HEADROOM_MODE:-token_headroom}"
+CLAUDE_PROXY_URL="${CLAUDE_PROXY_URL:-http://127.0.0.1:8082}"
+OPENAI_UPSTREAM_URL="${OPENAI_UPSTREAM_URL:-https://openrouter.ai/api/v1}"
+SHELL_RC="${HOME}/.zshrc"
+
+mkdir -p "$STATE_DIR" "$BIN_DIR" "$SERVICE_DIR" "$SHIM_DIR" "$MANIFEST_DIR"
+[[ ! -f "$SHELL_RC" ]] && SHELL_RC="${HOME}/.bashrc"
+
+die() { echo "compressctl: $*" >&2; exit 1; }
+note() { echo "$*"; }
+has() { command -v "$1" >/dev/null 2>&1; }
+
+shim_path() { echo "$SHIM_DIR/$1"; }
+manifest_path() { echo "$MANIFEST_DIR/$1.env"; }
+
+ensure_state() {
+  if [[ ! -f "$STATE_FILE" ]]; then
+    cat >"$STATE_FILE" <<EOF
+COMPRESSION_ENABLED=0
+HEADROOM_PORT=$HEADROOM_PORT
+HEADROOM_MODE=$HEADROOM_MODE
+CLAUDE_PROXY_URL=$CLAUDE_PROXY_URL
+OPENAI_UPSTREAM_URL=$OPENAI_UPSTREAM_URL
+EOF
+  fi
+}
+
+load_state() {
+  ensure_state
+  # shellcheck disable=SC1090
+  source "$STATE_FILE"
+  HEADROOM_PORT="${HEADROOM_PORT:-8787}"
+  HEADROOM_MODE="${HEADROOM_MODE:-token_headroom}"
+  COMPRESSION_ENABLED="${COMPRESSION_ENABLED:-0}"
+  CLAUDE_PROXY_URL="${CLAUDE_PROXY_URL:-http://127.0.0.1:8082}"
+  OPENAI_UPSTREAM_URL="${OPENAI_UPSTREAM_URL:-https://openrouter.ai/api/v1}"
+}
+
+save_state() {
+  cat >"$STATE_FILE" <<EOF
+COMPRESSION_ENABLED=${COMPRESSION_ENABLED}
+HEADROOM_PORT=${HEADROOM_PORT}
+HEADROOM_MODE=${HEADROOM_MODE}
+CLAUDE_PROXY_URL=${CLAUDE_PROXY_URL}
+OPENAI_UPSTREAM_URL=${OPENAI_UPSTREAM_URL}
+EOF
+}
+
+detect_targets() {
+  local out=()
+  has claude && out+=("claude")
+  has qwen && out+=("qwen")
+  has codex && out+=("codex")
+  has opencode && out+=("opencode")
+  has openclaw && out+=("openclaw")
+  printf '%s\n' "${out[@]}"
+}
+
+normalize_targets() {
+  local raw="$1"
+  if [[ "$raw" == "detected" ]]; then
+    detect_targets
+    return
+  fi
+  tr ',' '\n' <<<"$raw" | sed '/^$/d'
+}
+
+install_headroom_service() {
+  if ! has headroom; then
+    note "Installing headroom-ai[all] in WSL/bash..."
+    python3 -m pip install --user "headroom-ai[all]"
+  fi
+
+  mkdir -p "$HOME/.local/share/headroom"
+  cat >"$SERVICE_FILE" <<EOF
+[Unit]
+Description=Headroom LLM context compression proxy
+After=network.target
+
+[Service]
+ExecStart=$(command -v headroom) proxy \\
+    --port ${HEADROOM_PORT} \\
+    --mode ${HEADROOM_MODE} \\
+    --openai-api-url ${OPENAI_UPSTREAM_URL} \\
+    --log-file ${HOME}/.local/share/headroom/proxy.jsonl \\
+    --no-telemetry
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=HEADROOM_TELEMETRY=off
+Environment=PATH=${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target
+EOF
+  systemctl --user daemon-reload
+}
+
+install_rtk() {
+  if ! has jq; then
+    die "jq is required for RTK hooks"
+  fi
+  if has rtk; then
+    return
+  fi
+  note "Installing RTK in WSL/bash..."
+  curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+}
+
+patch_json_hook() {
+  local settings_path="$1"
+  local matcher="$2"
+  local hook_path="$3"
+
+  python3 - "$settings_path" "$matcher" "$hook_path" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+settings = Path(sys.argv[1]).expanduser()
+matcher = sys.argv[2]
+hook_path = sys.argv[3]
+settings.parent.mkdir(parents=True, exist_ok=True)
+
+if settings.exists():
+    data = json.loads(settings.read_text())
+else:
+    data = {}
+
+hooks = data.setdefault("hooks", {})
+pre = hooks.setdefault("PreToolUse", [])
+entry = None
+for item in pre:
+    if item.get("matcher") == matcher:
+        entry = item
+        break
+if entry is None:
+    entry = {"matcher": matcher, "hooks": []}
+    pre.append(entry)
+
+hook_list = entry.setdefault("hooks", [])
+if not any(h.get("type") == "command" and h.get("command") == hook_path for h in hook_list):
+    hook_list.append({"type": "command", "command": hook_path})
+
+settings.write_text(json.dumps(data, indent=2) + "\n")
+PY
+}
+
+remove_json_hook() {
+  local settings_path="$1"
+  local matcher="$2"
+  local hook_path="$3"
+
+  python3 - "$settings_path" "$matcher" "$hook_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+settings = Path(sys.argv[1]).expanduser()
+matcher = sys.argv[2]
+hook_path = sys.argv[3]
+if not settings.exists():
+    raise SystemExit(0)
+
+data = json.loads(settings.read_text())
+hooks = data.get("hooks", {})
+pre = hooks.get("PreToolUse", [])
+new_pre = []
+for item in pre:
+    if item.get("matcher") != matcher:
+        new_pre.append(item)
+        continue
+    hook_list = item.get("hooks", [])
+    hook_list = [h for h in hook_list if not (h.get("type") == "command" and h.get("command") == hook_path)]
+    if hook_list:
+        item["hooks"] = hook_list
+        new_pre.append(item)
+
+if new_pre:
+    hooks["PreToolUse"] = new_pre
+else:
+    hooks.pop("PreToolUse", None)
+
+if hooks:
+    data["hooks"] = hooks
+else:
+    data.pop("hooks", None)
+
+settings.write_text(json.dumps(data, indent=2) + "\n")
+PY
+}
+
+install_claude_integration() {
+  local hooks_dir="$HOME/.claude/hooks"
+  mkdir -p "$hooks_dir"
+  install -m 0755 "$ROOT_DIR/rtk/rtk-rewrite.sh" "$hooks_dir/rtk-rewrite.sh"
+  install -m 0644 "$ROOT_DIR/rtk/RTK.md" "$HOME/.claude/RTK.md"
+  patch_json_hook "$HOME/.claude/settings.json" "Bash" "$hooks_dir/rtk-rewrite.sh"
+  if has headroom && has claude; then
+    headroom mcp install >/dev/null 2>&1 || true
+  fi
+}
+
+install_qwen_integration() {
+  local hooks_dir="$HOME/.qwen/hooks"
+  mkdir -p "$hooks_dir"
+  install -m 0755 "$ROOT_DIR/rtk/rtk-rewrite.sh" "$hooks_dir/rtk-rewrite.sh"
+  patch_json_hook "$HOME/.qwen/settings.json" ".*" "$hooks_dir/rtk-rewrite.sh"
+}
+
+enable_cli_hooks() {
+  install_claude_integration
+  install_qwen_integration
+}
+
+disable_cli_hooks() {
+  remove_json_hook "$HOME/.claude/settings.json" "Bash" "$HOME/.claude/hooks/rtk-rewrite.sh"
+  remove_json_hook "$HOME/.qwen/settings.json" ".*" "$HOME/.qwen/hooks/rtk-rewrite.sh"
+}
+
+write_launcher() {
+  local target="$1"
+  local mode="$2"
+  local path="$BIN_DIR/${target}-${mode}"
+
+  cat >"$path" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+STATE_FILE="${STATE_FILE}"
+TARGET="${target}"
+MODE="${mode}"
+if [[ -f "\$STATE_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "\$STATE_FILE"
+fi
+HEADROOM_PORT="\${HEADROOM_PORT:-8787}"
+COMPRESSION_ENABLED="\${COMPRESSION_ENABLED:-0}"
+
+enable_proxy() {
+  export ANTHROPIC_BASE_URL="http://127.0.0.1:\${HEADROOM_PORT}"
+  export OPENAI_BASE_URL="http://127.0.0.1:\${HEADROOM_PORT}/v1"
+  export GEMINI_API_BASE="http://127.0.0.1:\${HEADROOM_PORT}/v1"
+}
+
+disable_proxy() {
+  unset ANTHROPIC_BASE_URL OPENAI_BASE_URL GEMINI_API_BASE
+}
+
+if [[ "\$MODE" == "compressed" ]]; then
+  enable_proxy
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user start headroom-proxy.service >/dev/null 2>&1 || true
+  fi
+else
+  disable_proxy
+fi
+
+case "\$TARGET" in
+  qwen)
+    if [[ "\$MODE" == "compressed" ]]; then
+      exec qwen --auth-type openai --openai-base-url "http://127.0.0.1:\${HEADROOM_PORT}/v1" "\$@"
+    fi
+    exec qwen "\$@"
+    ;;
+  *)
+    if command -v "\$TARGET" >/dev/null 2>&1; then
+      exec "\$TARGET" "\$@"
+    fi
+    echo "launcher error: target '\$TARGET' not found in PATH" >&2
+    exit 127
+    ;;
+esac
+EOF
+  chmod 0755 "$path"
+}
+
+write_alias_launcher() {
+  local alias_name="$1"
+  local command_name="$2"
+  local mode="$3"
+  local path="$BIN_DIR/${alias_name}-${mode}"
+
+  cat >"$path" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec "${BIN_DIR}/compressctl" exec --mode ${mode} --command ${command_name} -- "\$@"
+EOF
+  chmod 0755 "$path"
+}
+
+ensure_self_installed() {
+  if [[ "$(readlink -f "$ROOT_DIR/bin/compressctl")" == "$(readlink -f "$BIN_DIR/compressctl" 2>/dev/null || true)" ]]; then
+    return
+  fi
+  install -m 0755 "$ROOT_DIR/bin/compressctl" "$BIN_DIR/compressctl"
+}
+
+write_manifest() {
+  local command_name="$1"
+  local real_path="$2"
+  cat >"$(manifest_path "$command_name")" <<EOF
+REAL_COMMAND_PATH=${real_path}
+EOF
+}
+
+resolve_real_command() {
+  local command_name="$1"
+  if [[ -e "$BIN_DIR/$command_name" && "$command_name" != "compressctl" ]]; then
+    readlink -f "$BIN_DIR/$command_name"
+    return 0
+  fi
+  local candidate
+  while IFS= read -r candidate; do
+    [[ "$candidate" == "$(shim_path "$command_name")" ]] && continue
+    [[ "$candidate" == "$BIN_DIR/$command_name" ]] && continue
+    echo "$candidate"
+    return 0
+  done < <(which -a "$command_name" 2>/dev/null | awk '!seen[$0]++')
+  return 1
+}
+
+write_global_shim() {
+  local command_name="$1"
+  local path
+  path="$(shim_path "$command_name")"
+  cat >"$path" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec "${BIN_DIR}/compressctl" exec --mode auto --command ${command_name} -- "\$@"
+EOF
+  chmod 0755 "$path"
+}
+
+install_path_snippet() {
+  local marker="# input-compression managed PATH"
+  if ! grep -Fq "$marker" "$SHELL_RC" 2>/dev/null; then
+    cat >>"$SHELL_RC" <<EOF
+
+$marker
+export PATH="${SHIM_DIR}:\$PATH"
+source "${STATE_DIR}/shell.sh"
+EOF
+  fi
+}
+
+write_shell_helpers() {
+  local helper="$STATE_DIR/shell.sh"
+  cat >"$helper" <<EOF
+compress-on() {
+  compressctl on
+}
+
+compress-off() {
+  compressctl off
+}
+
+compress-status() {
+  compressctl status
+}
+EOF
+}
+
+install_launchers() {
+  local target
+  for target in "$@"; do
+    write_launcher "$target" "compressed"
+    write_launcher "$target" "direct"
+    if real_path="$(resolve_real_command "$target")"; then
+      write_manifest "$target" "$real_path"
+      write_global_shim "$target"
+    fi
+  done
+  ensure_self_installed
+  write_shell_helpers
+  install_path_snippet
+}
+
+check_status() {
+  load_state
+  note "compression_enabled=$COMPRESSION_ENABLED"
+  note "headroom_port=$HEADROOM_PORT"
+  note "claude_proxy_url=$CLAUDE_PROXY_URL"
+  note "openai_upstream_url=$OPENAI_UPSTREAM_URL"
+  has headroom && note "headroom=$(headroom --version 2>/dev/null)" || note "headroom=missing"
+  has rtk && note "rtk=$(rtk --version 2>/dev/null)" || note "rtk=missing"
+  command -v systemctl >/dev/null 2>&1 && note "headroom_service=$(systemctl --user is-active headroom-proxy.service 2>/dev/null || echo inactive)"
+  note "shim_dir=$SHIM_DIR"
+  note "targets:"
+  detect_targets | sed 's/^/  - /'
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  compressctl list
+  compressctl status
+  compressctl check
+  compressctl on
+  compressctl off
+  compressctl install [--targets target1,target2] [--headroom-only] [--rtk-only]
+  compressctl run <target> -- [args...]
+  compressctl exec --mode auto|compressed|direct --command <cli> -- [args...]
+  compressctl wrap <alias> <command>
+
+Examples:
+  compressctl install --targets claude,qwen,codex
+  compressctl run claude -- --continue
+  compressctl exec --mode auto --command claude -- --continue
+  compressctl exec --mode compressed --command aider -- --model sonnet
+  compressctl wrap aider aider
+  compressctl on
+EOF
+}
+
+cmd="${1:-}"
+[[ $# -gt 0 ]] && shift || true
+
+case "$cmd" in
+  list)
+    detect_targets
+    ;;
+  status|check)
+    check_status
+    ;;
+  on)
+    load_state
+    COMPRESSION_ENABLED=1
+    save_state
+    enable_cli_hooks
+    command -v systemctl >/dev/null 2>&1 && systemctl --user start headroom-proxy.service >/dev/null 2>&1 || true
+    note "compression ON"
+    ;;
+  off)
+    load_state
+    COMPRESSION_ENABLED=0
+    save_state
+    disable_cli_hooks
+    command -v systemctl >/dev/null 2>&1 && systemctl --user stop headroom-proxy.service >/dev/null 2>&1 || true
+    note "compression OFF"
+    ;;
+  install)
+    load_state
+    targets_arg="detected"
+    want_headroom=1
+    want_rtk=1
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --targets)
+          shift
+          targets_arg="${1:-detected}"
+          ;;
+        --targets=*)
+          targets_arg="${1#*=}"
+          ;;
+        --headroom-only)
+          want_rtk=0
+          ;;
+        --rtk-only)
+          want_headroom=0
+          ;;
+        *)
+          die "unknown install option: $1"
+          ;;
+      esac
+      shift || true
+    done
+
+    mapfile -t targets < <(normalize_targets "$targets_arg")
+
+    (( want_headroom == 1 )) && install_headroom_service
+    (( want_rtk == 1 )) && install_rtk
+
+    local_target=""
+    for local_target in "${targets[@]}"; do
+      case "$local_target" in
+        claude)
+          (( want_rtk == 1 )) && install_claude_integration
+          ;;
+        qwen)
+          (( want_rtk == 1 )) && install_qwen_integration
+          ;;
+      esac
+    done
+
+    install_launchers "${targets[@]}"
+    note "installed_targets=${targets[*]}"
+    ;;
+  run)
+    [[ $# -ge 2 ]] || die "usage: compressctl run <target> -- [args...]"
+    target="$1"
+    shift
+    [[ "${1:-}" == "--" ]] || die "usage: compressctl run <target> -- [args...]"
+    shift
+    exec "$BIN_DIR/${target}-compressed" "$@"
+    ;;
+  exec)
+    load_state
+    mode=""
+    command_name=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --mode)
+          shift
+          mode="${1:-}"
+          ;;
+        --mode=*)
+          mode="${1#*=}"
+          ;;
+        --command)
+          shift
+          command_name="${1:-}"
+          ;;
+        --command=*)
+          command_name="${1#*=}"
+          ;;
+        --)
+          shift
+          break
+          ;;
+        *)
+          die "unknown exec option: $1"
+          ;;
+      esac
+      shift || true
+    done
+    [[ -n "$mode" ]] || die "missing --mode"
+    [[ -n "$command_name" ]] || die "missing --command"
+    [[ "$command_name" != "__COMMAND_REQUIRED__" ]] || die "replace placeholder command with a real CLI name"
+    if [[ "$mode" == "auto" ]]; then
+      if [[ "${COMPRESSION_ENABLED}" == "1" ]]; then
+        mode="compressed"
+      else
+        mode="direct"
+      fi
+    fi
+    if [[ "$mode" == "compressed" ]]; then
+      if [[ "$command_name" == "claude" ]]; then
+        export ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-${CLAUDE_PROXY_URL}}"
+      else
+        export ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-http://127.0.0.1:${HEADROOM_PORT}}"
+      fi
+      export OPENAI_BASE_URL="${OPENAI_BASE_URL:-http://127.0.0.1:${HEADROOM_PORT}/v1}"
+      export GEMINI_API_BASE="${GEMINI_API_BASE:-http://127.0.0.1:${HEADROOM_PORT}/v1}"
+      command -v systemctl >/dev/null 2>&1 && systemctl --user start headroom-proxy.service >/dev/null 2>&1 || true
+      if [[ "$command_name" == "qwen" ]]; then
+        exec qwen --auth-type openai --openai-base-url "${OPENAI_BASE_URL}" "$@"
+      fi
+    else
+      unset ANTHROPIC_BASE_URL OPENAI_BASE_URL GEMINI_API_BASE
+    fi
+    if [[ -f "$(manifest_path "$command_name")" ]]; then
+      # shellcheck disable=SC1090
+      source "$(manifest_path "$command_name")"
+      exec "$REAL_COMMAND_PATH" "$@"
+    fi
+    exec "$command_name" "$@"
+    ;;
+  wrap)
+    [[ $# -eq 2 ]] || die "usage: compressctl wrap <alias> <command>"
+    alias_name="$1"
+    command_name="$2"
+    ensure_self_installed
+    write_alias_launcher "$alias_name" "$command_name" "compressed"
+    write_alias_launcher "$alias_name" "$command_name" "direct"
+    note "wrapped ${command_name} as ${alias_name}-compressed and ${alias_name}-direct"
+    ;;
+  ""|-h|--help|help)
+    usage
+    ;;
+  *)
+    die "unknown command: $cmd"
+    ;;
+esac
