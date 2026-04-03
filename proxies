@@ -31,9 +31,19 @@ info() { echo -e "  ${CYAN}→${NC} $*"; }
 
 # ── Health check: wait for port to respond ──
 wait_for() {
-    local port=$1 timeout=${2:-20}
+    local port=$1 timeout=${2:-20} endpoint=${3:-/health}
     for i in $(seq 1 $timeout); do
-        curl -sf --max-time 1 "http://127.0.0.1:$port/health" > /dev/null 2>&1 && return 0
+        curl -sf --max-time 1 "http://127.0.0.1:$port$endpoint" > /dev/null 2>&1 && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# CLIProxyAPI doesn't have /health, check PID instead
+wait_for_cliproxy() {
+    local timeout=${1:-20}
+    for i in $(seq 1 $timeout); do
+        pgrep -f "cli-proxy-api-plus" > /dev/null 2>&1 && return 0
         sleep 1
     done
     return 1
@@ -51,8 +61,8 @@ cmd_start() {
         ok "CLIProxyAPI already running (:8317)"
     else
         info "CLIProxyAPI → Antigravity (:8317)..."
-        $CLIPROXY_BIN --config "$CLIPROXY_CFG" > /tmp/cliproxy.log 2>&1 &
-        if wait_for 8317; then ok "started :8317"; else fail "see /tmp/cliproxy.log"; return 1; fi
+        nohup $CLIPROXY_BIN --config "$CLIPROXY_CFG" > /tmp/cliproxy.log 2>&1 &
+        if wait_for_cliproxy; then ok "started :8317"; else fail "see /tmp/cliproxy.log"; return 1; fi
     fi
 
     # ── 2. Claude Code Proxy (full mode only) ──
@@ -61,12 +71,11 @@ cmd_start() {
             ok "Claude Proxy already running (:8082)"
         else
             info "Claude Proxy → CLIProxyAPI (:8082)..."
-            (
-                cd "$PROXY_DIR"
-                source .venv/bin/activate 2>/dev/null || true
+            # Launch in a new session so parent exit doesn't kill it
+            setsid sh -c 'cd '"$PROXY_DIR"' && . .venv/bin/activate && \
                 PROVIDER_BASE_URL="http://127.0.0.1:8317/v1" \
-                python start_proxy.py --skip-validation > /tmp/proxy.log 2>&1 &
-            )
+                exec python start_proxy.py --skip-validation' \
+                > /tmp/proxy.log 2>&1 &
             if wait_for 8082; then ok "started :8082"; else fail "see /tmp/proxy.log"; return 1; fi
         fi
         HEADROOM_TARGET="http://127.0.0.1:8082"
