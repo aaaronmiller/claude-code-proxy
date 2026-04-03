@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════
+# ai — Universal dispatcher for AI CLI tools
+#
+# Usage:
+#   ai <tool> [args...]              # Run tool in current mode
+#   ai --mode <mode> <tool> [args..] # Run tool in specific mode
+#   ai mode [get|set <mode>]         # Get/set persistent mode
+#   ai ports                         # Show active proxy ports
+#   ai help                          # Usage info
+#
+# Modes:
+#   comp   → Headroom :8787 (compression only, Anthropic direct)
+#   proxy  → Headroom :8787 (compression + ClaudeProxy, OpenRouter)
+#   full   → Headroom :8787 (compression + ClaudeProxy + CLIProxyAPI, Antigravity)
+#
+# All modes use :8787. Headroom's upstream is set at start time
+# by proxies up [--comp].
+#
+# Tools:
+#   claude, qwen, cursor, open-webui, curl, or any on $PATH
+#   Add custom tools: ~/.config/ai/tools.d/<name>.sh
+#
+# The mode persists across sessions via ~/.config/ai/mode
+# ═══════════════════════════════════════════════════════════
+
+MODE_FILE="$HOME/.config/ai/mode"
+TOOLS_DIR="$HOME/.config/ai/tools.d"
+
+# ── Mode handling ──
+get_mode() {
+    if [ -f "$MODE_FILE" ]; then
+        cat "$MODE_FILE"
+    else
+        echo "full"
+    fi
+}
+
+set_mode() {
+    local m="$1"
+    case "$m" in
+        comp|proxy|full)
+            mkdir -p "$(dirname "$MODE_FILE")"
+            echo "$m" > "$MODE_FILE"
+            echo "  Mode set to: $m"
+            ;;
+        *)
+            echo "  Unknown mode: $m (valid: comp, proxy, full)" >&2
+            return 1
+            ;;
+    esac
+}
+
+mode_to_port() {
+    # All modes point at :8787 (Headroom). The upstream chain
+    # is set at start time by proxy-stack start <mode>.
+    case "$1" in
+        comp|proxy|full) echo 8787 ;;
+        *)    echo 8787 ;;
+    esac
+}
+
+mode_to_name() {
+    case "$1" in
+        comp)  echo "Headroom (compression only)" ;;
+        proxy) echo "Headroom + ClaudeProxy (OpenRouter)" ;;
+        full)  echo "Headroom + ClaudeProxy + CLIProxyAPI (Antigravity)" ;;
+        *)     echo "unknown" ;;
+    esac
+}
+
+# ── Tool registry ──
+# Try custom tool file first, then fall back to tool name on PATH
+resolve_tool() {
+    local tool="$1"
+    local tool_file="$TOOLS_DIR/$tool.sh"
+
+    if [ -f "$tool_file" ]; then
+        source "$tool_file"
+        # $TOOL_CMD should be set by the file
+        if [ -z "${TOOL_CMD:-}" ]; then
+            echo "  Error: $tool_file doesn't set TOOL_CMD" >&2
+            return 1
+        fi
+    elif command -v "$tool" > /dev/null 2>&1; then
+        TOOL_CMD="$tool"
+    else
+        echo "  Unknown tool: $tool" >&2
+        echo "  (not found on PATH or in $TOOLS_DIR)" >&2
+        return 1
+    fi
+}
+
+# ── Commands ──
+cmd_mode() {
+    local action="${1:-get}"
+    case "$action" in
+        get)    echo "  Current mode: $(get_mode)" ;;
+        set)    set_mode "${2:-}" ;;
+        list)   echo "  Modes: comp (8787, compression only) | proxy (8787, + ClaudeProxy) | full (8787, + CLIProxyAPI)" ;;
+        *)      echo "  Usage: ai mode [get|set <mode>|list]" ;;
+    esac
+}
+
+cmd_ports() {
+    echo ""
+    echo "  Active proxy ports:"
+    echo "    :8787  Headroom (always — compression)"
+    echo "    :8082  Claude Proxy (full mode)"
+    echo "    :8317  CLIProxyAPI (full mode only)"
+    echo ""
+    proxies status
+}
+
+cmd_help() {
+    echo ""
+    echo "  Usage: ai <tool> [args...]"
+    echo "         ai --mode <mode> <tool> [args...]"
+    echo "         ai mode [get|set <mode>|list]"
+    echo "         ai ports"
+    echo "         ai help"
+    echo ""
+    echo "  Modes:"
+    echo "    comp   → Headroom :8787 (compression only)"
+    echo "    proxy  → Headroom :8787 (compression + ClaudeProxy)"
+    echo "    full   → Headroom :8787 (compression + ClaudeProxy + CLIProxyAPI)"
+    echo ""
+    echo "  Current mode: $(get_mode)"
+    echo ""
+    echo "  Examples:"
+    echo "    ai claude                    # use current mode"
+    echo "    ai --mode comp qwen          # override mode"
+    echo "    ai claude --continue         # pass args through"
+    echo "    ai mode set comp             # persist mode"
+    echo ""
+}
+
+# ── Main ──
+# Parse args
+MODE="$(get_mode)"
+ARGS=()
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --mode)
+            shift
+            MODE="${1:-}"
+            shift
+            ;;
+        mode)
+            cmd_mode "${2:-get}" "${3:-}"
+            exit $?
+            ;;
+        ports)
+            cmd_ports
+            exit 0
+            ;;
+        help|--help|-h)
+            cmd_help
+            exit 0
+            ;;
+        *)
+            ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+TOOL="${ARGS[0]:-}"
+if [ -z "$TOOL" ]; then
+    cmd_help
+    exit 1
+fi
+
+shift  # remove tool name
+TOOL_ARGS=("$@")
+
+# Resolve tool
+if ! resolve_tool "$TOOL"; then
+    exit 1
+fi
+
+# Check proxy is up
+PORT=$(mode_to_port "$MODE")
+MOCK_NAME=$(mode_to_name "$MODE")
+if ! curl -sf --max-time 1 "http://127.0.0.1:$PORT/health" > /dev/null 2>&1; then
+    echo "" >&2
+    echo "  ⚠ Proxy on :$PORT ($MOCK_NAME) is not responding." >&2
+    echo "  Run: proxies up" >&2
+    echo "" >&2
+    exit 1
+fi
+
+# Execute
+export ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT"
+exec $TOOL_CMD "${TOOL_ARGS[@]}"

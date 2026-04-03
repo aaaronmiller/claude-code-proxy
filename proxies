@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════
+# proxies — Manage the proxy chain lifecycle
+#
+# Usage:
+#   proxies up              → Full chain: CLIProxyAPI → ClaudeProxy → Headroom
+#   proxies up --comp       → Compression only: CLIProxyAPI → Headroom
+#   proxies down            → Kill everything
+#   proxies status          → Show running
+#   proxies restart [--comp]
+#
+# Design:
+#   Headroom is the constant entry point (:8787).
+#   All tools point at :8787 — topology decided at start time.
+#   CLIProxyAPI is NEVER started alone (only in full mode).
+#   ClaudeProxy is only started with Headroom.
+# ═══════════════════════════════════════════════════════════════════
+
+set -euo pipefail
+
+PROXY_DIR="/home/cheta/code/claude-code-proxy"
+CLIPROXY_BIN="/home/cheta/code/cliproxyapi/cli-proxy-api-plus"
+CLIPROXY_CFG="/home/cheta/code/cliproxyapi/config.yaml"
+
+# ── Colors ──
+GREEN='\033[0;32m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
+
+ok()   { echo -e "  ${GREEN}✓${NC} $*"; }
+fail() { echo -e "  ${RED}✗${NC} $*"; }
+info() { echo -e "  ${CYAN}→${NC} $*"; }
+
+# ── Health check: wait for port to respond ──
+wait_for() {
+    local port=$1 timeout=${2:-20}
+    for i in $(seq 1 $timeout); do
+        curl -sf --max-time 1 "http://127.0.0.1:$port/health" > /dev/null 2>&1 && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# ── Sequential startup with health checks ──
+cmd_start() {
+    local mode="full"
+    [[ "$1" == "--comp" ]] && mode="comp"
+
+    echo -e "\n${CYAN}Starting proxies (${mode})${NC}\n"
+
+    # ── 1. CLIProxyAPI (always starts first) ──
+    if pgrep -f "cli-proxy-api-plus" > /dev/null 2>&1; then
+        ok "CLIProxyAPI already running (:8317)"
+    else
+        info "CLIProxyAPI → Antigravity (:8317)..."
+        $CLIPROXY_BIN --config "$CLIPROXY_CFG" > /tmp/cliproxy.log 2>&1 &
+        if wait_for 8317; then ok "started :8317"; else fail "see /tmp/cliproxy.log"; return 1; fi
+    fi
+
+    # ── 2. Claude Code Proxy (full mode only) ──
+    if [ "$mode" = "full" ]; then
+        if pgrep -f "start_proxy.py" > /dev/null 2>&1; then
+            ok "Claude Proxy already running (:8082)"
+        else
+            info "Claude Proxy → CLIProxyAPI (:8082)..."
+            (
+                cd "$PROXY_DIR"
+                source .venv/bin/activate 2>/dev/null || true
+                PROVIDER_BASE_URL="http://127.0.0.1:8317/v1" \
+                python start_proxy.py --skip-validation > /tmp/proxy.log 2>&1 &
+            )
+            if wait_for 8082; then ok "started :8082"; else fail "see /tmp/proxy.log"; return 1; fi
+        fi
+        HEADROOM_TARGET="http://127.0.0.1:8082"
+    else
+        HEADROOM_TARGET="http://127.0.0.1:8317"
+    fi
+
+    # ── 3. Headroom (always — the constant entry point) ──
+    if curl -sf http://127.0.0.1:8787/health > /dev/null 2>&1; then
+        ok "Headroom already running (:8787)"
+    else
+        pkill -f "headroom proxy" 2>/dev/null || true; sleep 1
+        info "Headroom → $HEADROOM_TARGET (:8787)..."
+        ANTHROPIC_TARGET_API_URL="$HEADROOM_TARGET" \
+        OPENAI_TARGET_API_URL="${HEADROOM_TARGET}/v1" \
+        nohup headroom proxy --port 8787 > /tmp/headroom.log 2>&1 &
+        if wait_for 8787 30; then ok "started :8787"; else fail "see /tmp/headroom.log"; return 1; fi
+    fi
+
+    echo ""
+    echo -e "  ${GREEN}Chain: ${NC}tools → :8787 → :8082 → :8317"
+    echo ""
+}
+
+# ── Blunt but effective: no PID files to stale ──
+cmd_stop() {
+    echo -e "\n${CYAN}Stopping proxies${NC}"
+    pkill -f "headroom proxy" 2>/dev/null && echo "  Headroom killed" || echo "  Headroom not running"
+    pkill -f "start_proxy.py" 2>/dev/null && echo "  Claude Proxy killed" || echo "  Claude Proxy not running"
+    pkill -f "cli-proxy-api-plus" 2>/dev/null && echo "  CLIProxyAPI killed" || echo "  CLIProxyAPI not running"
+    echo ""
+}
+
+# ── Process-based tracking + HTTP health ──
+cmd_status() {
+    echo -e "\n${CYAN}Proxy status${NC}"
+    for s in "Headroom:headroom proxy:8787" "ClaudeProxy:start_proxy.py:8082" "CLIProxyAPI:cli-proxy-api-plus:8317"; do
+        IFS=':' read -r name proc port <<< "$s"
+        if pids=$(pgrep -f "$proc" 2>/dev/null | head -1); then
+            echo -e "  ${GREEN}✓${NC} $name  :$port  PID:$pids"
+        else
+            echo -e "  ${RED}✗${NC} $name  :$port"
+        fi
+    done
+    echo ""
+}
+
+case "${1:-status}" in
+    up|start)   cmd_start "${2:-}" ;;
+    down|stop)  cmd_stop ;;
+    status|st)  cmd_status ;;
+    restart)    cmd_stop; sleep 2; cmd_start "${2:-}" ;;
+    *)
+        echo "Usage: proxies {up|down|status|restart} [--comp]"
+        echo ""
+        echo "  up              Start full chain (all 3 proxies)"
+        echo "  up --comp       Compression only (Headroom → CLIProxyAPI)"
+        echo "  down            Stop all proxies"
+        echo "  status          Show running proxies"
+        echo "  restart         Stop and restart"
+        ;;
+esac
