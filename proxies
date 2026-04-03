@@ -80,7 +80,7 @@ cmd_start() {
                 SMALL_MODEL="gemini-3.1-flash-lite" \
                 exec python start_proxy.py --skip-validation' \
                 > /tmp/proxy.log 2>&1 &
-            if wait_for 8082 /health; then ok "started :8082"; else fail "see /tmp/proxy.log"; return 1; fi
+            if wait_for 8082; then ok "started :8082"; else fail "see /tmp/proxy.log"; return 1; fi
         fi
         HEADROOM_TARGET="http://127.0.0.1:8082"
     else
