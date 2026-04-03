@@ -93,6 +93,20 @@ if [[ ! -f "$RC_FILE" ]]; then
     touch "$RC_FILE"
 fi
 
+# Add CLI tool PATH fix if not already present
+if ! grep -q ".npm-global/bin" "$RC_FILE" 2>/dev/null; then
+    log_info "Adding CLI tool directories to PATH..."
+    cat >> "$RC_FILE" << 'PATHFIX'
+
+# ═══════════════════════════════════════════════════════════════════
+# CLI Tool PATH Fix
+# ═══════════════════════════════════════════════════════════════════
+export PATH="$HOME/.npm-global/bin:$HOME/.local/bin:$HOME/.opencode/bin:$PATH"
+# ═══════════════════════════════════════════════════════════════════
+PATHFIX
+    log_success "PATH fix added"
+fi
+
 # Add aliases to shell config
 log_info "Installing compression aliases to $RC_FILE..."
 
