@@ -1,0 +1,6 @@
+[submodule "compression/headroom"]
+	path = compression/headroom
+	url = https://github.com/chopratejas/headroom.git
+[submodule "compression/rtk"]
+	path = compression/rtk
+	url = https://github.com/rtk-ai/rtk.git

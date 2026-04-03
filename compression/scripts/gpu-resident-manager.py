@@ -9,42 +9,78 @@ import sys
 from transformers import AutoModel, AutoTokenizer
 from headroom.transforms.kompress_compressor import KompressCompressor, KompressConfig
 
+def detect_device():
+    """Detect the best available compute device."""
+    if torch.cuda.is_available():
+        return 'cuda'
+    # Intel Arc / oneAPI support via ipex
+    if hasattr(torch, 'xpu') and torch.xpu.is_available():
+        return 'xpu'
+    return 'cpu'
+
+COMPUTE_DEVICE = detect_device()
+print(f"[INFO] Using compute device: {COMPUTE_DEVICE}")
+
 class GPUResidentModelManager:
-    """Manages multiple resident models on GPU for maximum VRAM utilization."""
+    """Manages multiple resident models on GPU/CPU for maximum utilization."""
     
     def __init__(self, target_utilization=0.92):
         self.target_utilization = target_utilization
         self.models = {}
-        self.tokenizers = {}
+        self.tokenizers=***<|endoftext|>
         self.caches = {}
         self.total_vram = self._get_total_vram()
         print(f"🎯 Target VRAM: {self.target_utilization * 100:.0f}% ({int(self.total_vram * self.target_utilization)} MiB)")
     
     def _get_total_vram(self):
-        """Get total GPU VRAM in MiB."""
-        return torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
+        """Get total memory (VRAM for GPU, system RAM for CPU) in MiB."""
+        if COMPUTE_DEVICE == 'cuda':
+            return torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
+        elif COMPUTE_DEVICE == 'xpu':
+            # Intel XPU memory query via ipex
+            try:
+                import intel_extension_for_pytorch as ipex
+                return ipex.xpu.get_device_properties(0).total_memory / (1024 * 1024)
+            except Exception:
+                # Fallback to system RAM
+                import psutil
+                return psutil.virtual_memory().total / (1024 * 1024)
+        else:  # cpu
+            import psutil
+            return psutil.virtual_memory().total / (1024 * 1024)
     
     def _get_used_vram(self):
-        """Get currently used VRAM in MiB."""
-        return torch.cuda.memory_allocated(0) / (1024 * 1024)
+        """Get currently used memory (VRAM for GPU/XPU, RAM for CPU) in MiB."""
+        if COMPUTE_DEVICE == 'cuda':
+            return torch.cuda.memory_allocated(0) / (1024 * 1024)
+        elif COMPUTE_DEVICE == 'xpu':
+            try:
+                import intel_extension_for_pytorch as ipex
+                return ipex.xpu.memory_allocated(0) / (1024 * 1024)
+            except Exception:
+                import psutil
+                return psutil.Process().memory_info().rss / (1024 * 1024)
+        else:
+            import psutil
+            return psutil.Process().memory_info().rss / (1024 * 1024)
     
     def _get_utilization(self):
-        """Get current VRAM utilization percentage."""
+        """Get current memory utilization percentage."""
         return self._get_used_vram() / self.total_vram * 100
     
     def load_model(self, name: str, model_id: str, keep_tokenizer=True):
-        """Load a model onto GPU and keep it resident."""
+        """Load a model onto device and keep it resident."""
         print(f"\n📦 Loading {name}...")
         try:
-            model = AutoModel.from_pretrained(model_id).to('cuda')
+            model = AutoModel.from_pretrained(model_id).to(COMPUTE_DEVICE)
             model.eval()
             # Keep model in memory (don't delete reference)
             self.models[name] = model
-            
+
             if keep_tokenizer:
-                tokenizer = AutoTokenizer.from_pretrained(model_id)
+                tokenizer=AutoTo..._id)
                 self.tokenizers[name] = tokenizer
-            
+
             used = self._get_used_vram()
             pct = self._get_utilization()
             print(f"   ✓ {name} loaded ({used:.0f} MiB, {pct:.1f}%)")
@@ -57,7 +93,9 @@ class GPUResidentModelManager:
         """Load Kompress compressor (resident)."""
         print(f"\n📦 Loading Kompress (resident)...")
         try:
-            config = KompressConfig(device='cuda', batch_size=16, preload=True, resident=True)
+            # Adjust batch size based on device: CPU uses smaller batch
+            batch_size = 4 if COMPUTE_DEVICE == 'cpu' else 16
+            config = KompressConfig(device=COMPUTE_DEVICE, batch_size=batch_size, preload=True, resident=True)
             komp = KompressCompressor(config)
             self.models['kompress'] = komp
             used = self._get_used_vram()
@@ -69,11 +107,11 @@ class GPUResidentModelManager:
             return False
     
     def allocate_cache(self, name: str, size_mb: int):
-        """Allocate persistent GPU cache."""
+        """Allocate persistent cache on device."""
         print(f"\n💾 Allocating {name} ({size_mb} MiB)...")
         try:
-            # Allocate on GPU
-            cache = torch.randn(size_mb * 256 * 1024, dtype=torch.float32, device='cuda')
+            # Allocate on device
+            cache = torch.randn(size_mb * 256 * 1024, dtype=torch.float32, device=COMPUTE_DEVICE)
             self.caches[name] = cache
             used = self._get_used_vram()
             pct = self._get_utilization()
@@ -84,10 +122,19 @@ class GPUResidentModelManager:
             return False
     
     def optimize_memory(self):
-        """Optimize GPU memory to reduce fragmentation."""
-        print("\n🔧 Optimizing GPU memory...")
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+        """Optimize device memory to reduce fragmentation."""
+        print("\n🔧 Optimizing device memory...")
+        if COMPUTE_DEVICE == 'cuda':
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        elif COMPUTE_DEVICE == 'xpu':
+            try:
+                import intel_extension_for_pytorch as ipex
+                ipex.xpu.empty_cache()
+                ipex.xpu.synchronize()
+            except Exception:
+                pass
+        # CPU no-op
         used = self._get_used_vram()
         pct = self._get_utilization()
         print(f"   ✓ Optimized ({used:.0f} MiB, {pct:.1f}%)")
@@ -182,7 +229,14 @@ def main():
     try:
         while True:
             # Keep models resident
-            torch.cuda.synchronize()
+            if COMPUTE_DEVICE == 'cuda':
+                torch.cuda.synchronize()
+            elif COMPUTE_DEVICE == 'xpu':
+                try:
+                    import intel_extension_for_pytorch as ipex
+                    ipex.xpu.synchronize()
+                except Exception:
+                    pass
             import time
             time.sleep(60)
     except KeyboardInterrupt:
