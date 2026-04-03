@@ -150,20 +150,16 @@ install_input_compression() {
 # Configure integration
 configure_integration() {
     log_info "Configuring integration..."
-    
-    # Add compression aliases
-    local aliases_file="$HOME/code/input-compression/scripts/compression-aliases.zsh"
-    if [[ -f "$aliases_file" ]]; then
-        if ! grep -q "compression-stack.sh" ~/.zshrc 2>/dev/null; then
-            cat "$aliases_file" >> ~/.zshrc && \
-                log_success "Aliases added to ~/.zshrc" || {
-                log_warn "Failed to add aliases - add manually"
-            }
-        else
-            log_warn "Aliases already in ~/.zshrc"
-        fi
+
+    # Install aliases and PATH fix via dedicated script
+    local alias_script="$(dirname "${BASH_SOURCE[0]}")/install-aliases.sh"
+    if [[ -f "$alias_script" ]]; then
+        log_info "Running alias installer..."
+        bash "$alias_script"
+    else
+        log_warn "install-aliases.sh not found - skipping alias installation"
     fi
-    
+
     # Configure claude-code-proxy to use headroom
     local proxy_envrc="$HOME/code/claude-code-proxy/.envrc"
     if [[ -f "$proxy_envrc" ]]; then
@@ -174,20 +170,20 @@ configure_integration() {
             log_success "Claude Code Proxy configured for headroom"
         fi
     fi
-    
+
     # Install systemd services
     if command -v systemctl &>/dev/null; then
         log_info "Installing systemd services..."
-        
+
         local services_dir="$HOME/.config/systemd/user"
         mkdir -p "$services_dir"
-        
+
         # Copy service files
         if [[ -f "$HOME/code/input-compression/scripts/gpu-resident-manager.service" ]]; then
             cp "$HOME/code/input-compression/scripts/gpu-resident-manager.service" "$services_dir/" && \
                 log_success "GPU resident manager service installed"
         fi
-        
+
         systemctl --user daemon-reload 2>/dev/null || true
     fi
 }
