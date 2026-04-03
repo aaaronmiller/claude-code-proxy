@@ -97,17 +97,31 @@ install_rtk() {
 # Install claude-code-proxy
 install_claude_proxy() {
     log_info "Installing Claude Code Proxy..."
-    
+
     local proxy_dir="$HOME/code/claude-code-proxy"
-    
+
     if [[ -d "$proxy_dir" ]]; then
-        log_warn "Claude Code Proxy already exists at $proxy_dir"
-        read -p "Update existing installation? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            cd "$proxy_dir" && git pull && log_success "Claude Code Proxy updated"
+        log_info "✅ Claude Code Proxy already exists at $proxy_dir"
+        log_info "Checking for compression layer..."
+
+        if [[ -d "$proxy_dir/compression" ]]; then
+            log_warn "Compression layer already installed"
+            read -p "Update compression layer? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                cd "$proxy_dir" && git pull && log_success "Compression layer updated"
+            fi
+        else
+            log_info "Adding compression layer to existing installation..."
+            # The compression/ directory should already exist if running this script from the repo
+            if [[ -d "compression" ]]; then
+                log_success "✅ Compression layer found in current directory"
+            else
+                log_warn "Compression layer not found - skipping"
+            fi
         fi
     else
+        log_info "Fresh installation..."
         git clone https://github.com/aaaronmiller/claude-code-proxy.git "$proxy_dir" && \
             log_success "Claude Code Proxy installed" || {
             log_error "Claude Code Proxy installation failed"

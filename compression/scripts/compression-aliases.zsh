@@ -1,198 +1,397 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# COMPRESSION STACK ALIASES
+# CLAUDE CODE PROXY - COMPREHENSIVE ALIASES v2.3
 # ═══════════════════════════════════════════════════════════════════════════════
-# Add these to ~/.zshrc for quick access to compression stack features
+# 
+# SINGLE INSTANCE ARCHITECTURE:
+#   - ONE Headroom instance serves ALL terminals and ALL CLI tools
+#   - Start once per day: cs-start
+#   - All terminals share the same compression proxy
+#   - Aliases just USE the service, don't START it
+#   - If not running, aliases warn but don't block
 #
-# Quick start: Run this to auto-add aliases:
-#   cat ~/code/input-compression/scripts/compression-aliases.zsh >> ~/.zshrc && source ~/.zshrc
+# TWO PATHS:
+#   1. Direct to Headroom (compression only) - csi, qsi, etc.
+#   2. Through Proxy (compression + proxy) - csi-proxy, qsi-proxy, etc.
+#
+# INSTALLATION:
+#   cat ~/code/claude-code-proxy/compression/scripts/compression-aliases.zsh >> ~/.zshrc
+#   source ~/.zshrc
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Compression stack location
-export COMPRESSION_DIR="$HOME/code/input-compression"
+if [[ -z "$COMPRESSION_DIR" ]]; then
+    export COMPRESSION_DIR="$HOME/code/claude-code-proxy/compression"
+fi
 export PATH="$COMPRESSION_DIR/scripts:$PATH"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CORE COMPRESSION ALIASES
+# HELPER FUNCTIONS - CHECK ONLY, DON'T START
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Stack control
-alias cs-start='systemctl --user start gpu-resident-manager compression-tracker compression-dashboard 2>/dev/null; echo "✅ Compression stack started"'
-alias cs-stop='systemctl --user stop gpu-resident-manager compression-tracker compression-dashboard 2>/dev/null; echo "⏹️  Compression stack stopped"'
-alias cs-restart='systemctl --user restart gpu-resident-manager compression-tracker compression-dashboard 2>/dev/null; echo "🔄 Compression stack restarted"'
-alias cs-status='systemctl --user status gpu-resident-manager compression-tracker compression-dashboard 2>/dev/null'
-alias cs-health='$COMPRESSION_DIR/scripts/compression-stack.sh health'
+# Check if compression is running (don't start)
+_check_compression() {
+    if ! pgrep -f "headroom proxy" > /dev/null 2>&1; then
+        echo -e "⚠️  \033[0;33mCompression not running. Run 'cs-start' first.\033[0m"
+        return 1
+    fi
+    return 0
+}
 
-# Unified control script
-alias cs='$COMPRESSION_DIR/scripts/compression-stack.sh'
+# Check if proxy is running (don't start)
+_check_proxy() {
+    if ! pgrep -f "start_proxy.py" > /dev/null 2>&1; then
+        echo -e "⚠️  \033[0;33mProxy not running. Run 'cproxy-start' first.\033[0m"
+        return 1
+    fi
+    return 0
+}
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# MODE ALIASES
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Quick mode switching
-alias cs-max='$COMPRESSION_DIR/scripts/compression-stack.sh mode set max-compression && $COMPRESSION_DIR/scripts/compression-stack.sh apply-mode && echo "📊 Mode: MAX COMPRESSION (98%, 80ms)"'
-alias cs-balanced='$COMPRESSION_DIR/scripts/compression-stack.sh mode set balanced && $COMPRESSION_DIR/scripts/compression-stack.sh apply-mode && echo "⚖️  Mode: BALANCED (97%, 50ms)"'
-alias cs-speed='$COMPRESSION_DIR/scripts/compression-stack.sh mode set speed && $COMPRESSION_DIR/scripts/compression-stack.sh apply-mode && echo "⚡ Mode: SPEED (90%, 20ms)"'
-alias cs-free='$COMPRESSION_DIR/scripts/compression-stack.sh mode set free-tier && $COMPRESSION_DIR/scripts/compression-stack.sh apply-mode && echo "🆓 Mode: FREE-TIER (99%, 50ms)"'
-
-# Mode info
-alias cs-mode='$COMPRESSION_DIR/scripts/compression-stack.sh mode'
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# STATS & DASHBOARD ALIASES
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Quick stats
-alias cs-stats='python3 $COMPRESSION_DIR/scripts/compression-dashboard.py --interval 2 2>/dev/null | head -50'
-alias cs-stats-quick='python3 -c "
-import json
-from pathlib import Path
-f = Path.home() / \".compression_stats.json\"
-if f.exists():
-    s = json.load(f)[\"total\"]
-    t = s.get(\"tokens_saved\", 0)
-    c = s.get(\"cost_without\", 0) - s.get(\"cost_with\", 0)
-    r = s.get(\"requests\", 0)
-    ts = f\"{t/1e6:.1f}M\" if t > 1e6 else f\"{t/1e3:.0f}K\" if t > 1e3 else str(t)
-    print(f\"💰 Saved \${c:.2f} ({ts} tokens, {r} requests)\")
-else:
-    print(\"💰 No stats yet\")
-" 2>/dev/null'
-
-# Web dashboard
-alias cs-web='python3 $COMPRESSION_DIR/scripts/compression-dashboard.py --web && echo "📊 Dashboard: file://$HOME/.compression_dashboard.html"'
-alias cs-dashboard='python3 $COMPRESSION_DIR/scripts/compression-dashboard.py'
-
-# Tracker
-alias cs-tracker='python3 $COMPRESSION_DIR/scripts/compression-tracker.py &'
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# COMPRESCTL ALIASES
-# ═══════════════════════════════════════════════════════════════════════════════
-
-alias compress-on='compressctl on && echo "✅ Compression ENABLED"'
-alias compress-off='compressctl off && echo "⏹️  Compression DISABLED"'
-alias compress-status='compressctl status'
-
-# Short versions
-alias con='compress-on'
-alias coff='compress-off'
-alias cstat='compress-status'
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# MODIFIED CLI ALIASES (AUTO-ENABLE COMPRESSION)
-# ═══════════════════════════════════════════════════════════════════════════════
-# These replace the standard cli-init and cli-resume to ALWAYS include compression
-# Compression should NEVER be optional - it's always on by default
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Claude Code with compression auto-enabled (REPLACES existing cli-init)
-alias cli-init='
-  echo "🔧 Initializing compression stack..."
-  compressctl on 2>/dev/null
-  systemctl --user start gpu-resident-manager compression-tracker 2>/dev/null || true
-  echo "✅ Compression enabled"
-  echo "🚀 Starting Claude Code..."
-  claude
-'
-
-# Claude Code resume with compression (REPLACES existing cli-resume)
-alias cli-resume='
-  echo "🔧 Resuming compression stack..."
-  compressctl on 2>/dev/null
-  systemctl --user start compression-dashboard 2>/dev/null || true
-  echo "✅ Compression enabled"
-  echo "🚀 Starting Claude Code..."
-  claude
-'
-
-# Ultra-short versions (RECOMMENDED for daily use)
-alias csi='cli-init'      # Claude with compression init
-alias csr='cli-resume'    # Claude with compression resume
-
-# Compression-only start (no Claude)
-alias cli-compress='
-  compressctl on
-  systemctl --user start gpu-resident-manager compression-tracker compression-dashboard 2>/dev/null
-  cs-health
-'
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# HEADROOM ALIASES
-# ═══════════════════════════════════════════════════════════════════════════════
-
-alias headroom-start='headroom proxy --port 8787 --mode token_headroom --openai-api-url https://openrouter.ai/api/v1 --backend openrouter --no-telemetry &'
-alias headroom-stop='pkill -f "headroom proxy" && echo "⏹️  Headroom stopped"'
-alias headroom-status='curl -s http://127.0.0.1:8787/health | python3 -m json.tool 2>/dev/null || echo "Headroom not running"'
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# GPU MONITORING ALIASES
-# ═══════════════════════════════════════════════════════════════════════════════
-
-alias gpu-watch='watch -n1 "nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv"'
-alias gpu-stats='nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu,memory.free --format=csv'
-alias gpu-resident='python3 $COMPRESSION_DIR/scripts/gpu-resident-manager.py &'
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# COMPREHENSIVE HELP
-# ═══════════════════════════════════════════════════════════════════════════════
-
-cs-help() {
-    echo ""
-    echo "╔══════════════════════════════════════════════════════════════════════╗"
-    echo "║              COMPRESSION STACK - QUICK REFERENCE                     ║"
-    echo "╚══════════════════════════════════════════════════════════════════════╝"
-    echo ""
-    echo "📦 STACK CONTROL"
-    echo "  cs-start      Start compression stack"
-    echo "  cs-stop       Stop compression stack"
-    echo "  cs-restart    Restart compression stack"
-    echo "  cs-status     Show service status"
-    echo "  cs-health     Full health check"
-    echo "  cs            Unified control (cs start|stop|restart|status|health)"
-    echo ""
-    echo "⚙️  MODES"
-    echo "  cs-max        MAX COMPRESSION (98%, 80ms)"
-    echo "  cs-balanced   BALANCED (97%, 50ms) ← DEFAULT"
-    echo "  cs-speed      SPEED (90%, 20ms)"
-    echo "  cs-free       FREE-TIER (99%, 50ms)"
-    echo "  cs-mode       Show/set current mode"
-    echo ""
-    echo "📊 STATS"
-    echo "  cs-stats      Full dashboard"
-    echo "  cs-stats-quick Quick one-liner"
-    echo "  cs-web        Web dashboard (HTML)"
-    echo "  cs-dashboard  Terminal dashboard"
-    echo ""
-    echo "🔧 COMPRESSION CONTROL"
-    echo "  con / compress-on    Enable compression"
-    echo "  coff / compress-off  Disable compression"
-    echo "  cstat / compress-status  Show status"
-    echo ""
-    echo "🚀 CLAUDE CODE (AUTO-ENABLES COMPRESSION)"
-    echo "  csi / cli-init    Start Claude with compression"
-    echo "  csr / cli-resume  Resume Claude with compression"
-    echo ""
-    echo "🎮 GPU"
-    echo "  gpu-watch       Real-time GPU monitoring"
-    echo "  gpu-stats       GPU statistics"
-    echo ""
-    echo "══════════════════════════════════════════════════════════════════════"
-    echo "  RECOMMENDED: Use 'csi' or 'csr' for daily Claude Code work"
-    echo "  These ALWAYS enable compression automatically"
-    echo "══════════════════════════════════════════════════════════════════════"
-    echo ""
+# Quick non-blocking check
+_check_quick() {
+    pgrep -f "headroom proxy" > /dev/null 2>&1
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# AUTO-START ON SHELL INIT (OPTIONAL)
+# GLOBAL COMMANDS - Manual Start/Stop
 # ═══════════════════════════════════════════════════════════════════════════════
-# Uncomment the following lines to auto-start compression on shell init:
 
-# if command -v systemctl &>/dev/null; then
-#     systemctl --user start gpu-resident-manager compression-tracker 2>/dev/null || true
-# fi
+# Compression only
+cs-start() {
+    if pgrep -f "headroom proxy" > /dev/null 2>&1; then
+        echo "✅ Compression already running"
+        return 0
+    fi
+    echo -n "🔧 Starting compression... "
+    headroom proxy --port 8787 --mode token_headroom \
+        --openai-api-url https://openrouter.ai/api/v1 \
+        --backend openrouter --no-telemetry > /dev/null 2>&1 &
+    sleep 2
+    if pgrep -f "headroom proxy" > /dev/null 2>&1; then
+        echo "✅"
+    else
+        echo "❌ Failed"
+        return 1
+    fi
+}
+
+cs-stop() {
+    pkill -f "headroom proxy" 2>/dev/null
+    echo "⏹️  Compression stopped"
+}
+
+cs-restart() {
+    cs-stop
+    sleep 2
+    cs-start
+}
+
+cs-status() {
+    if pgrep -f "headroom proxy" > /dev/null 2>&1; then
+        echo -e "✅ Compression: \033[0;32mRunning\033[0m"
+        curl -s http://127.0.0.1:8787/health 2>/dev/null | python3 -m json.tool 2>/dev/null | head -3
+    else
+        echo -e "❌ Compression: \033[0;31mNot Running\033[0m"
+    fi
+}
+
+cs-health() {
+    curl -s http://127.0.0.1:8787/health > /dev/null 2>&1 && echo "✅ Headroom: Healthy" || echo "❌ Headroom: Unhealthy"
+}
+
+cs-stats-quick() {
+    python3 -c "
+import json
+from pathlib import Path
+f = Path.home() / '.compression_stats.json'
+s = json.load(f)['total'] if f.exists() else {'tokens_saved':0,'requests':0}
+t = s.get('tokens_saved', 0)
+r = s.get('requests', 0)
+ts = f'{t/1e6:.1f}M' if t > 1e6 else f'{t/1e3:.0f}K' if t > 1e3 else str(t)
+print(f'💰 Saved {ts} tokens ({r} requests)')
+" 2>/dev/null || echo "💰 No stats yet"
+}
+
+# Proxy + Compression
+cproxy-start() {
+    cs-start
+    if pgrep -f "start_proxy.py" > /dev/null 2>&1; then
+        echo "✅ Proxy already running"
+        return 0
+    fi
+    echo -n "🔧 Starting proxy... "
+    cd ~/code/claude-code-proxy
+    source .venv/bin/activate 2>/dev/null || true
+    export OPENAI_BASE_URL="http://127.0.0.1:8787/v1"
+    nohup python start_proxy.py --skip-validation > /dev/null 2>&1 &
+    sleep 2
+    if pgrep -f "start_proxy.py" > /dev/null 2>&1; then
+        echo "✅"
+    else
+        echo "❌ Failed"
+        return 1
+    fi
+}
+
+cproxy-stop() {
+    pkill -f "start_proxy.py" 2>/dev/null
+    cs-stop
+    echo "⏹️  Proxy + Compression stopped"
+}
+
+cproxy-restart() {
+    cproxy-stop
+    sleep 2
+    cproxy-start
+}
+
+cproxy-status() {
+    if pgrep -f "start_proxy.py" > /dev/null 2>&1; then
+        echo -e "✅ Proxy: \033[0;32mRunning\033[0m"
+    else
+        echo -e "❌ Proxy: \033[0;31mNot Running\033[0m"
+    fi
+    cs-status
+}
+
+cproxy-health() {
+    curl -s http://127.0.0.1:8082/health > /dev/null 2>&1 && echo "✅ Proxy: Healthy" || echo "❌ Proxy: Unhealthy"
+}
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# END COMPRESSION STACK ALIASES
+# CLAUDE CODE - DIRECT TO HEADROOM (Compression Only)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+csi() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" claude "$@"
+}
+
+csr() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" claude --resume "$@"
+}
+
+csi-yolo() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" claude --dangerously-skip-permissions "$@"
+}
+
+csi-safe() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" claude --permission-mode=read "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLAUDE CODE - THROUGH PROXY (Compression + Proxy)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+csi-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" claude "$@"
+}
+
+csr-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" claude --resume "$@"
+}
+
+csi-proxy-yolo() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" claude --dangerously-skip-permissions "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QWEN CODE - DIRECT TO HEADROOM
+# ═══════════════════════════════════════════════════════════════════════════════
+
+qsi() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" qwen "$@"
+}
+
+qsr() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" qwen --resume "$@"
+}
+
+qsi-yolo() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" qwen --dangerously-skip-permissions "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QWEN CODE - THROUGH PROXY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+qsi-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" qwen "$@"
+}
+
+qsr-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" qwen --resume "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CODEX - DIRECT TO HEADROOM
+# ═══════════════════════════════════════════════════════════════════════════════
+
+csi-codex() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" codex "$@"
+}
+
+csr-codex() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" codex resume "$@"
+}
+
+csi-codex-yolo() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" codex --dangerously-skip-permissions "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CODEX - THROUGH PROXY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+csi-codex-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" codex "$@"
+}
+
+csr-codex-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" codex resume "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OPENCODE - DIRECT TO HEADROOM
+# ═══════════════════════════════════════════════════════════════════════════════
+# Note: OpenCode YOLO mode is set in settings.json, not via CLI flag
+
+osi() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" opencode "$@"
+}
+
+osr() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" opencode --resume "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OPENCODE - THROUGH PROXY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+osi-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" opencode "$@"
+}
+
+osr-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" opencode --resume "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OPENCLAW - DIRECT TO HEADROOM
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ocl() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" openclaw "$@"
+}
+
+ocr() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" openclaw --resume "$@"
+}
+
+ocl-yolo() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" openclaw --dangerously-skip-permissions "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OPENCLAW - THROUGH PROXY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ocl-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" openclaw "$@"
+}
+
+ocr-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" openclaw --resume "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HERMES - DIRECT TO HEADROOM
+# ═══════════════════════════════════════════════════════════════════════════════
+
+hsi() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" hermes "$@"
+}
+
+hsr() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" hermes --resume "$@"
+}
+
+hsi-yolo() {
+    _check_compression || return 1
+    OPENAI_BASE_URL="http://127.0.0.1:8787/v1" hermes --dangerously-skip-permissions "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HERMES - THROUGH PROXY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+hsi-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" hermes "$@"
+}
+
+hsr-proxy() {
+    _check_proxy || return 1
+    ANTHROPIC_BASE_URL="http://127.0.0.1:8082" ANTHROPIC_API_KEY="pass" hermes --resume "$@"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QUICK REFERENCE
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# PATTERN: <prefix><action>[-modifier]
+#
+# PREFIXES:
+#   c   = Claude Code          osi/osr = OpenCode
+#   q   = Qwen Code            ocl/ocr = OpenClaw
+#   codex = Codex CLI          hsi/hsr = Hermes
+#   Add -proxy for through proxy path
+#
+# ACTIONS:
+#   si  = Start/Init
+#   sr  = Start/Resume (or just 'r' for resume)
+#   yolo = dangerously-skip-permissions
+#   safe = read-only mode
+#
+# EXAMPLES:
+#   csi          = Claude start (direct to Headroom)
+#   csr          = Claude resume (direct)
+#   csi-yolo     = Claude YOLO (direct)
+#   csi-proxy    = Claude start (through proxy)
+#   csr-proxy  = Claude resume (through proxy)
+#
+# GLOBAL:
+#   cs-start     = Start compression (manual)
+#   cs-stop      = Stop compression
+#   cproxy-start = Start proxy + compression (manual)
+#   cproxy-stop  = Stop both
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# END OF COMPRESSION STACK ALIASES
 # ═══════════════════════════════════════════════════════════════════════════════
