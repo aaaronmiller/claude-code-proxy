@@ -42,21 +42,32 @@ Claude Code CLI  →  The Ultimate Proxy  →  Any Provider
 
 ### Option 1: Unified Installation (Recommended)
 
-**Single command installs everything:**
+**Single command installs everything with automatic GPU detection:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aaaronmiller/claude-code-proxy/main/install-all.sh | bash
 ```
 
-This will:
+The installer will:
+- 🔍 **Auto-detect your GPU** (NVIDIA CUDA, Intel Arc/iGPU, AMD ROCm, or CPU-only)
+- 💬 **Prompt you to confirm or override** the detected GPU backend
 - ✅ Clone claude-code-proxy
 - ✅ Install Headroom (compression layer)
 - ✅ Install RTK (command compression)
-- ✅ Install all Python dependencies
-- ✅ Configure systemd services
-- ✅ Add compression aliases
+- ✅ Install GPU compute stack (Level Zero for Intel, CUDA for NVIDIA, ROCm for AMD)
+- ✅ Configure environment variables (`ONEAPI_DEVICE_SELECTOR`, `CUDA_VISIBLE_DEVICES`, etc.)
+- ✅ Add compression aliases (`cc`, `qw`, `qw-resume`)
 - ✅ Start all services
 - ✅ Show health status
+
+**Supported GPU backends:**
+
+| Backend | Hardware | Env Vars Set |
+|---------|----------|-------------|
+| **NVIDIA CUDA** | RTX 30/40/50 series, datacenter GPUs | `CUDA_VISIBLE_DEVICES=0` |
+| **Intel Arc / iGPU** | Arc A370M/A580/A770, Iris Xe, UHD | `ONEAPI_DEVICE_SELECTOR=level_zero:0`, `LIBVA_DRIVER_NAME=iHD` |
+| **AMD ROCm** | RX 6000/7000, Instinct MI series | `HSA_OVERRIDE_GFX_VERSION=10.3.0` |
+| **CPU-only** | No GPU available | `HEADROOM_DEVICE=cpu` |
 
 **Manual installation:**
 
@@ -232,10 +243,12 @@ cs-stats-quick
 ### Features
 
 - **97% compression rate** (900→26 tokens)
-- **92% GPU VRAM utilization** (RTX 4050 optimized)
+- **GPU acceleration** — NVIDIA CUDA, Intel Arc (Level Zero), AMD ROCm, or CPU-only
 - **Multi-CLI support** (Claude, Qwen, Codex, OpenCode, OpenClaw, Hermes)
-- **Real-time dashboard** (terminal + web)
-- **4 compression modes** (max/balanced/speed/free-tier)
+- **Real-time dashboard** (terminal + web at `:8899`)
+- **Multi-tier compression** — default (`:8787`) + small model (`:8790`)
+- **Semantic caching** — deduplicates repeated context across turns
+- **RTK command compression** — 2-line summaries for CLI output
 
 ### Architecture
 
@@ -256,10 +269,12 @@ Claude Code → Proxy (:8082) → Headroom (:8787) → OpenRouter
 
 ### Low-VRAM / No-GPU Support
 
-Coming in Phase 1 (April 2026):
-- Intel Arc A370M (5GB) mode
-- CPU-only mode
-- Network proxy access (SSH/cleartext)
+The installer handles this automatically:
+- **Intel Arc A370M** (4GB) — Level Zero runtime, `ONEAPI_DEVICE_SELECTOR=level_zero:0`
+- **CPU-only** — fallback when no GPU is detected, runs entirely on CPU
+- **WSL2 passthrough** — GPU exposed via `/dev/dxg` from Windows host
+
+For manual configuration, see [docs/GPU-OPTIMIZATION.md](docs/GPU-OPTIMIZATION.md)
 
 ---
 
@@ -267,12 +282,14 @@ Coming in Phase 1 (April 2026):
 
 **See full roadmap:** [ROADMAP.md](ROADMAP.md)
 
-### Phase 1: Parallel Installation (April 2026)
-- [ ] Single install script for all proxies
-- [ ] Unified start/stop commands
-- [ ] Low-VRAM mode (5GB GPU)
-- [ ] No-GPU mode
-- [ ] Network proxy access
+### Phase 1: Parallel Installation (April 2026) ✅ COMPLETE
+- [x] Single install script with GPU auto-detection (`install-all.sh` v2.0)
+- [x] Unified start/stop commands
+- [x] Low-VRAM mode (Intel Arc A370M 4GB via Level Zero)
+- [x] No-GPU mode (CPU-only fallback)
+- [x] Network proxy access (HTTP/HTTPS)
+- [x] Compression monitoring dashboard (`:8899`)
+- [x] RTK integration (v0.34.3)
 
 ### Phase 2: Tight Integration (May 2026)
 - [ ] Shared state management
