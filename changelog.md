@@ -109,6 +109,13 @@ elif family.family == ModelFamily.GEMINI_FLASH:
 - Fix: updated `src/api/openai_endpoints.py` `/v1/models` to advertise Claude-compatible aliases (`opus`, `sonnet`, `sonnet[1m]`, `haiku`, plus current Claude family IDs) alongside the configured backend models.
 - Why this works: alias validation now matches the request-router behavior, so CLI-visible model names remain stable even when backend providers or per-tier endpoints change.
 - Files modified: `src/api/openai_endpoints.py`
+
+### Double Initialization and Proxy Routing Bug Fix
+
+- Observation: `src/api/openai_endpoints.py` double initialized `OpenAIClient`, overriding initial config parameters and generating duplicate validation blocks. The `proxies` and `ai` scripts also lacked genuine support for `proxy` mode, meaning the CLIProxyAPI still loaded and Headroom was improperly routed.
+- Root cause: Copy-paste duplication in the endpoint logic when `base_url` validation was added. Additionally, the `proxies` script lacked `--proxy` argument handling and tmux pane configurations to directly route Headroom -> OpenRouter.
+- Fix: Removed redundant `OpenAIClient` instantiations and validation blocks from `/v1/messages` in `src/api/openai_endpoints.py`. In `proxies`, implemented `--proxy` argument routing where `Headroom (:8787)` directly talks to `Claude Proxy (:8082)` avoiding `:8317` overhead. Updated the proxy health check hint in `ai` to correctly recommend `Run: proxies up --$MODE` based on current mode configuration.
+- Files modified: `src/api/openai_endpoints.py`, `proxies`, `ai`
    - Issue 13: Model Catalog Service
    - Issue 14: Overly Aggressive Tool Call Deduplication
    - **Issue 15: Database Schema Mismatch - muted_until Column**

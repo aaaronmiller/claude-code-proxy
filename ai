@@ -145,6 +145,10 @@ while [ $# -gt 0 ]; do
         --mode)
             shift
             MODE="${1:-}"
+            if [[ ! "$MODE" =~ ^(comp|proxy|full)$ ]]; then
+                echo "  Error: --mode requires comp, proxy, or full" >&2
+                exit 1
+            fi
             shift
             ;;
         mode)
@@ -172,8 +176,8 @@ if [ -z "$TOOL" ]; then
     exit 1
 fi
 
-shift  # remove tool name
-TOOL_ARGS=("$@")
+# Slice tool args from the collected array (don't re-shift, $@ is empty)
+TOOL_ARGS=("${ARGS[@]:1}")
 
 # Resolve tool
 if ! resolve_tool "$TOOL"; then
@@ -186,11 +190,15 @@ MOCK_NAME=$(mode_to_name "$MODE")
 if ! curl -sf --max-time 1 "http://127.0.0.1:$PORT/health" > /dev/null 2>&1; then
     echo "" >&2
     echo "  ⚠ Proxy on :$PORT ($MOCK_NAME) is not responding." >&2
-    echo "  Run: proxies up" >&2
+    if [ "$MODE" = "full" ]; then
+        echo "  Run: proxies up" >&2
+    else
+        echo "  Run: proxies up --$MODE" >&2
+    fi
     echo "" >&2
     exit 1
 fi
 
 # Execute
 export ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT"
-exec $TOOL_CMD "${TOOL_ARGS[@]}"
+eval "$TOOL_CMD" "${TOOL_ARGS[@]}"

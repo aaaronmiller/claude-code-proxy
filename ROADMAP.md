@@ -114,6 +114,11 @@
    - Fetch actual costs
    - Compare with estimates
 
+7. **Textual TUI Migration (`proxies watch`)**
+   - Migrate current Rich-based polling dashboard to Textual
+   - Add async event-driven architecture to lower CPU usage
+   - Implement interactive features (keybinds to restart proxies, scrolling logs)
+
 ### Low Priority
 
 7. **Desktop GUI (Tauri)**

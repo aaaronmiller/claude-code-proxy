@@ -235,27 +235,6 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
         api_version=config.azure_api_version,
         custom_headers=custom_headers,
     )
-
-    if not config.openai_base_url:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": {
-                    "message": "No base URL configured. Set PROVIDER_BASE_URL or OPENAI_BASE_URL environment variable.",
-                    "type": "configuration_error",
-                    "code": "missing_base_url",
-                }
-            },
-        )
-
-    custom_headers = config.get_custom_headers()
-    openai_client = OpenAIClient(
-        config.openai_api_key,
-        config.openai_base_url,
-        config.request_timeout,
-        api_version=config.azure_api_version,
-        custom_headers=custom_headers,
-    )
     openai_client.configure_per_model_clients(config)
     model_manager = ModelManager(config)
 
