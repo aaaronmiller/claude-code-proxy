@@ -11,6 +11,63 @@ from openai._exceptions import APIError, RateLimitError, AuthenticationError, Ba
 logger = logging.getLogger(__name__)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Module-level circuit breaker registry (shared across all cascade calls)
+# ─────────────────────────────────────────────────────────────────────────────
+_circuit_breakers: Dict[str, Any] = {}
+
+def _get_circuit_breaker(model: str):
+    """Return (or lazily create) the circuit breaker for a model."""
+    if model not in _circuit_breakers:
+        from src.core.circuit_breaker import CircuitBreaker
+        _circuit_breakers[model] = CircuitBreaker(
+            name=model,
+            failure_threshold=3,   # open after 3 quick failures
+            success_threshold=1,   # one success closes it again
+            timeout=300.0,         # 5-minute cooldown before half-open probe
+        )
+    return _circuit_breakers[model]
+
+
+def _is_cb_open(model: str) -> bool:
+    """Return True if the circuit breaker for this model is OPEN (should be skipped)."""
+    if model not in _circuit_breakers:
+        return False
+    return _circuit_breakers[model].is_open
+
+
+def _build_or_models_list(primary: str, fallback_models: list) -> list:
+    """
+    Build the ordered model list for OR native injection, filtering out any
+    models whose circuit breakers are currently OPEN.
+
+    Dead models in the OR `models` array waste OR's routing budget evaluating
+    endpoints we already know are broken.  The primary model is always kept
+    as the first entry (OR needs at least one model to route).
+    """
+    candidates = [primary] + [m for m in fallback_models if m != primary]
+    filtered = [m for m in candidates if not _is_cb_open(m)]
+    if not filtered:
+        # All breakers open — fall back to primary only so OR still gets a valid request
+        filtered = [primary]
+    return filtered
+
+
+def _get_dynamic_fallback_models(limit: int = 10) -> list:
+    """
+    Return the top tool-capable free models from the cached rankings file.
+    Falls back to an empty list if the cache doesn't exist yet.
+    Only models that *support_tools* are included — unusable for agentic tasks otherwise.
+    """
+    try:
+        from src.services.models.free_model_rankings import load_free_model_rankings, RANKINGS_PATH
+        rankings = load_free_model_rankings(RANKINGS_PATH)
+        capable = [r.model_id for r in rankings if r.supports_tools]
+        return capable[:limit]
+    except Exception:
+        return []
+
+
 class VibeProxyUnavailableError(Exception):
     """Raised when VibeProxy is not available."""
     pass
@@ -120,6 +177,12 @@ class OpenAIClient:
         if is_kiro and not api_key:
             # Fallback: Try to get token from environment
             api_key = os.environ.get("KIRO_ACCESS_TOKEN", "")
+
+        # In passthrough mode api_key is None — the OpenAI SDK requires a non-empty string
+        # at construction time even though it makes no network call here.  The actual per-
+        # request key is injected later by endpoints.py when the request arrives.
+        if not api_key:
+            api_key = "passthrough-no-server-key"
 
         if api_version:
             return AsyncAzureOpenAI(
@@ -291,6 +354,30 @@ class OpenAIClient:
                     else:
                         logger.error(f"[VibeProxy {timestamp}] Failed to retrieve fresh token! Using cached client (may fail)")
 
+        # Inject OpenRouter native fallback (models array + require_parameters) when enabled.
+        # Uses _build_or_models_list() to exclude any models with OPEN circuit breakers
+        # so we don't waste OR's routing budget evaluating known-dead endpoints.
+        if config and "openrouter_native" in getattr(config, "fallback_methods", set()):
+            base_url = str(client.base_url)
+            if "openrouter.ai" in base_url or "8787" in base_url:
+                fallback_models = getattr(config, "openrouter_fallback_models", [])
+                primary = request.get("model", "")
+                if fallback_models and primary not in ("", None):
+                    or_models = _build_or_models_list(primary, fallback_models)
+                    request = {
+                        **request,
+                        "model": or_models[0],
+                        "extra_body": {
+                            **request.get("extra_body", {}),
+                            "models": or_models,
+                            "provider": {
+                                **request.get("extra_body", {}).get("provider", {}),
+                                "require_parameters": True,
+                                "sort": {"by": "throughput", "partition": "none"},
+                            },
+                        },
+                    }
+
         # Create cancellation token if request_id provided
         if request_id:
             cancel_event = asyncio.Event()
@@ -407,6 +494,29 @@ class OpenAIClient:
                         logger.error(f"[VibeProxy {timestamp}] Failed to retrieve fresh token! Using cached client (may fail)")
             elif is_small_tier:
                 logger.debug(f"[Client Selection {timestamp}] SMALL tier streaming - routing to {config.small_endpoint} (not VibeProxy)")
+
+        # Inject OpenRouter native fallback for streaming requests
+        # (same CB-filtered model list as non-streaming path)
+        if config and "openrouter_native" in getattr(config, "fallback_methods", set()):
+            base_url = str(client.base_url)
+            if "openrouter.ai" in base_url or "8787" in base_url:
+                fallback_models = getattr(config, "openrouter_fallback_models", [])
+                primary = request.get("model", "")
+                if fallback_models and primary not in ("", None):
+                    or_models = _build_or_models_list(primary, fallback_models)
+                    request = {
+                        **request,
+                        "model": or_models[0],
+                        "extra_body": {
+                            **request.get("extra_body", {}),
+                            "models": or_models,
+                            "provider": {
+                                **request.get("extra_body", {}).get("provider", {}),
+                                "require_parameters": True,
+                                "sort": {"by": "throughput", "partition": "none"},
+                            },
+                        },
+                    }
 
         # Create cancellation token if request_id provided
         if request_id:
@@ -531,23 +641,38 @@ class OpenAIClient:
         if not config or not config.model_cascade:
             # Cascade disabled - use normal call
             return await self.create_chat_completion(request, request_id, config, api_key)
-        
-        # Build models to try: primary + cascade
+
+        # Build models to try: primary → static cascade → dynamic rankings (tool-capable free models)
         primary_model = request.get("model", "")
         cascade_models = config.get_cascade_for_tier(tier)
-        models_to_try = [primary_model] + cascade_models
-        
+        dynamic_models = _get_dynamic_fallback_models(limit=8)
+        # Deduplicate while preserving priority order
+        seen: set = set()
+        models_to_try: list = []
+        for m in [primary_model] + cascade_models + dynamic_models:
+            if m and m not in seen:
+                seen.add(m)
+                models_to_try.append(m)
+
         timestamp = time.strftime("%H:%M:%S")
         last_error = None
-        
+
         # Track retry counts per model for soft failures
         retry_counts = {}
         MAX_RETRIES_BEFORE_CASCADE = 5  # Soft errors need 5 failures
-        
+
         model_idx = 0
         while model_idx < len(models_to_try):
             model = models_to_try[model_idx]
             if not model:
+                model_idx += 1
+                continue
+
+            # Skip models whose circuit is OPEN (tripped by recent failures)
+            cb = _get_circuit_breaker(model)
+            if cb.is_open:
+                import time as _time
+                logger.debug(f"[CASCADE {_time.strftime('%H:%M:%S')}] ⚡ Circuit OPEN for {model} — skipping")
                 model_idx += 1
                 continue
 
@@ -596,7 +721,15 @@ class OpenAIClient:
                     )
                 
                 result = await self.create_chat_completion(current_request, request_id, config, api_key)
-                
+
+                # Record success — also check structural validity (parse_ok).
+                # A HTTP 200 with empty or truncated output still penalises the model
+                # via record_soft_failure so chronically-broken models accumulate toward
+                # their circuit-open threshold without being treated as total failures.
+                cb = _get_circuit_breaker(model)
+                cb._record_success()
+                cb.record_parse_ok(result)
+
                 if model_idx > 0:
                     print(f"[CASCADE {timestamp}] ✅ Success with fallback: {model}")
                     log_cascade(
@@ -606,11 +739,12 @@ class OpenAIClient:
                         reason="fallback_success",
                         request_id=request_id,
                     )
-                
+
                 return result
-                
+
             except (ssl.SSLCertVerificationError, ssl.SSLError) as e:
-                # SSL/Cert errors: switch IMMEDIATELY (hard failure)
+                # SSL/Cert errors: switch IMMEDIATELY (hard failure) + trip the circuit
+                _get_circuit_breaker(model)._record_failure(e)
                 print(f"[CASCADE {timestamp}] 🔒 SSL/Cert error on {model} - switching immediately: {e}")
                 next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
                 log_cascade(
@@ -686,8 +820,32 @@ class OpenAIClient:
                 continue
                 
             except RateLimitError as e:
+                error_str = str(e).lower()
+                # Alibaba's burst ramp-up detector: "rate increased too quickly" fires on
+                # velocity spikes from cold starts.  Retrying the same provider doesn't help
+                # since the window hasn't reset — skip straight to a different provider.
+                is_alibaba_rampup = "rate increased too quickly" in error_str or "scale requests more smoothly" in error_str
+                if is_alibaba_rampup:
+                    print(f"[CASCADE {timestamp}] 🐌 Alibaba ramp-up limit on {model} — cascading immediately to next provider")
+                    next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                    log_cascade(
+                        model=model,
+                        action="switch",
+                        tier=tier,
+                        reason="alibaba_rampup_cascade",
+                        from_model=model,
+                        to_model=next_model,
+                        request_id=request_id,
+                        error=str(e),
+                    )
+                    last_error = e
+                    model_idx += 1
+                    continue
+
                 retry_counts[model] += 1
-                print(f"[CASCADE {timestamp}] ⚠️  Rate limit on {model} ({retry_counts[model]}/{MAX_RETRIES_BEFORE_CASCADE}): {e}")
+                import random as _random
+                backoff = min(30.0, (2 ** min(retry_counts[model], 4)) * _random.uniform(0.8, 1.2))
+                print(f"[CASCADE {timestamp}] ⚠️  Rate limit on {model} ({retry_counts[model]}/{MAX_RETRIES_BEFORE_CASCADE}), backoff {backoff:.1f}s: {e}")
                 log_cascade(
                     model=model,
                     action="retry",
@@ -712,12 +870,12 @@ class OpenAIClient:
                         retry_count=retry_counts[model],
                     )
                     model_idx += 1
-                # Add small delay on rate limit
-                await asyncio.sleep(1)
+                await asyncio.sleep(backoff)
                 continue
             
             except (BadRequestError, AuthenticationError) as e:
-                # 400/401 errors: switch IMMEDIATELY (model not available or auth failed)
+                # 400/401 errors: switch IMMEDIATELY (model not available or auth failed) + trip circuit
+                _get_circuit_breaker(model)._record_failure(e)
                 print(f"[CASCADE {timestamp}] 🚫 Request error on {model} - switching immediately: {e}")
                 next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
                 log_cascade(
@@ -767,7 +925,14 @@ class OpenAIClient:
                 # Other API errors should not cascade
                 raise
         
-        # All models failed
+        # All models failed — persist circuit breaker state so the next session
+        # skips known-dead models immediately rather than re-burning quota.
+        try:
+            from src.core.circuit_breaker import get_circuit_breaker_registry
+            get_circuit_breaker_registry().save_all()
+        except Exception:
+            pass
+
         print(f"[CASCADE {timestamp}] ❌ All cascade models exhausted")
         log_cascade(
             model=primary_model,
@@ -833,6 +998,14 @@ class OpenAIClient:
             if model not in retry_counts:
                 retry_counts[model] = 0
 
+            # Skip models with OPEN circuit breakers (same as non-streaming cascade)
+            _cb_stream = _get_circuit_breaker(model)
+            if _cb_stream.is_open:
+                import time as _t
+                logger.debug(f"[CASCADE {_t.strftime('%H:%M:%S')}] ⚡ Circuit OPEN for {model} (stream) — skipping")
+                model_idx += 1
+                continue
+
             daily_limit = getattr(config, "model_cascade_daily_limit", 0) if config else 0
             if daily_limit and usage_tracker.enabled:
                 daily_count = usage_tracker.get_daily_model_request_count(model)
@@ -857,6 +1030,10 @@ class OpenAIClient:
 
             current_request = {**request, "model": model}
             emitted_any_chunk = False
+            # Track stream-level parse signals for soft failure detection
+            _stream_finish_reason: Optional[str] = None
+            _stream_had_tool_calls = False
+            _stream_had_content = False
 
             try:
                 if model_idx > 0 and retry_counts[model] == 0:
@@ -877,7 +1054,30 @@ class OpenAIClient:
                 )
                 async for line in stream:
                     emitted_any_chunk = True
+                    # Sniff last chunk for parse_ok signals (doesn't decode every chunk,
+                    # only acts on "data: {..." lines near stream end)
+                    if line.startswith("data: {"):
+                        try:
+                            chunk = json.loads(line[6:])
+                            choices = chunk.get("choices", [])
+                            if choices:
+                                c = choices[0]
+                                if c.get("finish_reason"):
+                                    _stream_finish_reason = c["finish_reason"]
+                                delta = c.get("delta", {}) or {}
+                                if delta.get("tool_calls"):
+                                    _stream_had_tool_calls = True
+                                if delta.get("content"):
+                                    _stream_had_content = True
+                        except Exception:
+                            pass
                     yield line
+
+                # Record parse result for this model's circuit breaker
+                _get_circuit_breaker(model)._record_success()
+                _get_circuit_breaker(model).record_stream_finish(
+                    _stream_finish_reason, _stream_had_tool_calls, _stream_had_content
+                )
 
                 if model_idx > 0:
                     print(f"[CASCADE {timestamp}] ✅ Streaming success with fallback: {model}")
@@ -915,8 +1115,31 @@ class OpenAIClient:
                     continue
 
                 if status_code == 429:
+                    error_str = str(e.detail).lower()
+                    # Alibaba's burst ramp-up detector fires on velocity spikes from cold starts.
+                    # Retrying the same provider doesn't help — skip straight to next provider.
+                    is_alibaba_rampup = "rate increased too quickly" in error_str or "scale requests more smoothly" in error_str
+                    if is_alibaba_rampup:
+                        print(f"[CASCADE {timestamp}] 🐌 Alibaba ramp-up limit on {model} (stream) — cascading immediately to next provider")
+                        next_model = models_to_try[model_idx + 1] if model_idx + 1 < len(models_to_try) else None
+                        log_cascade(
+                            model=model,
+                            action="switch",
+                            tier=tier,
+                            reason="alibaba_rampup_cascade_stream",
+                            from_model=model,
+                            to_model=next_model,
+                            request_id=request_id,
+                            error=str(e.detail),
+                        )
+                        last_error = e
+                        model_idx += 1
+                        continue
+
+                    import random as _random
                     retry_counts[model] += 1
-                    print(f"[CASCADE {timestamp}] ⚠️  Streaming rate limit on {model} ({retry_counts[model]}/{max_retries_before_cascade})")
+                    backoff = min(30.0, (2 ** min(retry_counts[model], 4)) * _random.uniform(0.8, 1.2))
+                    print(f"[CASCADE {timestamp}] ⚠️  Streaming rate limit on {model} ({retry_counts[model]}/{max_retries_before_cascade}), backoff {backoff:.1f}s")
                     log_cascade(
                         model=model,
                         action="retry",
@@ -940,7 +1163,7 @@ class OpenAIClient:
                             retry_count=retry_counts[model],
                         )
                         model_idx += 1
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(backoff)
                     continue
 
                 if status_code in (500, 502, 503, 504):
@@ -1023,6 +1246,12 @@ class OpenAIClient:
                     )
                     model_idx += 1
                 continue
+
+        try:
+            from src.core.circuit_breaker import get_circuit_breaker_registry
+            get_circuit_breaker_registry().save_all()
+        except Exception:
+            pass
 
         print(f"[CASCADE {timestamp}] ❌ All stream cascade models exhausted")
         log_cascade(

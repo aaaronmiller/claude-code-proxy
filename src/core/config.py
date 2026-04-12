@@ -1,7 +1,20 @@
 import os
 import sys
 import re
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Load .env at import time (before any os.environ.get calls below)
+# Shell environment always takes precedence over .env file values.
+# ─────────────────────────────────────────────────────────────────────────────
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _env_path = Path(__file__).parent.parent.parent / ".env"
+    if _env_path.exists():
+        _load_dotenv(_env_path, override=False)  # override=False: shell env wins
+except ImportError:
+    pass  # python-dotenv not installed — fall through to os.environ only
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # API KEY FORMAT PATTERNS BY PROVIDER
@@ -129,7 +142,12 @@ class Config:
             self.openai_base_url = legacy_openai_url
             # print("⚠️  DEPRECATION WARNING: OPENAI_BASE_URL is deprecated. Use PROVIDER_BASE_URL instead.")
         else:
-            self.openai_base_url = "https://api.openai.com/v1"
+            # Auto-derive from proxy chain (first enabled HTTP entry)
+            try:
+                from src.core.proxy_chain import get_chain as _get_chain_url
+                self.openai_base_url = _get_chain_url().upstream_url() or "https://api.openai.com/v1"
+            except Exception:
+                self.openai_base_url = "https://api.openai.com/v1"
 
         if proxy_auth_key:
             self.anthropic_api_key = proxy_auth_key
@@ -150,7 +168,7 @@ class Config:
             print("INFO: PROVIDER_API_KEY not configured - enabling passthrough mode")
             print("INFO: Users must provide their own API keys via request headers")
             self.passthrough_mode = True
-        elif self.openai_api_key == "pass" or self.openai_api_key == "your-api-key-here" or "your-" in self.openai_api_key.lower() or self.openai_api_key == "sk-your-openai-api-key-here":
+        elif self.openai_api_key in ("pass", "dummy", "your-api-key-here", "sk-your-openai-api-key-here") or "your-" in self.openai_api_key.lower():
             print("WARNING: PROVIDER_API_KEY is set to a placeholder value")
             print("INFO: Enabling passthrough mode - users must provide their own API keys")
             self.passthrough_mode = True
@@ -206,6 +224,69 @@ class Config:
         # Preemptive cascade when local UTC-day request counters approach provider limits.
         # Set to 0 to disable threshold-based skipping.
         self.model_cascade_daily_limit = int(os.environ.get("MODEL_CASCADE_DAILY_LIMIT", "1000"))
+
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # FALLBACK METHOD
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # Controls how 429/503 failures are handled:
+        #   cascade          — proxy-level retry loop with exponential backoff + model switching
+        #   openrouter_native — inject OpenRouter "models" array so OR selects a healthy endpoint
+        #   both             — OpenRouter native on the initial request; cascade wraps the whole thing
+        # Default: cascade
+        _fallback_raw = os.environ.get("FALLBACK_METHOD", "cascade").lower().replace(" ", "")
+        self.fallback_methods: set = set(_fallback_raw.split(","))
+
+        # Curated list of free agentic-capable models injected when openrouter_native is active.
+        # Override with OPENROUTER_FALLBACK_MODELS=model1,model2,...
+        _default_fallback_models = (
+            "qwen/qwen3-235b-a22b:free,"
+            "minimax/minimax-m2.5:free,"
+            "stepfun/step-3.5-flash:free,"
+            "nvidia/nemotron-3-super-120b-a12b:free,"
+            "openai/gpt-oss-120b:free,"
+            "arcee-ai/trinity-large-preview:free"
+        )
+        self.openrouter_fallback_models: list = [
+            m.strip() for m in
+            os.environ.get("OPENROUTER_FALLBACK_MODELS", _default_fallback_models).split(",")
+            if m.strip()
+        ]
+
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # MODEL ROUTER CONFIG (per-use-case routing)
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # Env vars override proxy_chain.json router section.
+        # Leave blank to fall through to tier model.
+        try:
+            from src.core.proxy_chain import get_chain as _get_chain_rc
+            _rc = _get_chain_rc().router
+        except Exception:
+            from src.core.proxy_chain import RouterConfig, RouteTarget
+            _rc = RouterConfig()
+
+        from src.core.proxy_chain import RouteTarget
+        def _get_router_env(name: str, fallback_rt) -> RouteTarget:
+            model = os.environ.get(f"ROUTER_{name}")
+            if model is None:
+                model = fallback_rt.model
+            url = os.environ.get(f"ROUTER_{name}_URL")
+            if url is None:
+                url = fallback_rt.base_url
+            key = os.environ.get(f"ROUTER_{name}_KEY")
+            if key is None:
+                key = fallback_rt.api_key
+            return RouteTarget(model=model, base_url=url, api_key=key)
+
+        self.router_default = _get_router_env("DEFAULT", _rc.default)
+        self.router_background = _get_router_env("BACKGROUND", _rc.background)
+        self.router_think = _get_router_env("THINK", _rc.think)
+        self.router_long_context = _get_router_env("LONG_CONTEXT", _rc.long_context)
+        self.router_long_context_threshold = int(
+            os.environ.get("ROUTER_LONG_CONTEXT_THRESHOLD", str(_rc.long_context_threshold))
+        )
+        self.router_web_search = _get_router_env("WEB_SEARCH", _rc.web_search)
+        self.router_image = _get_router_env("IMAGE", _rc.image)
+        self.router_custom_path = os.environ.get("ROUTER_CUSTOM_PATH", _rc.custom_router_path)
 
         # ═══════════════════════════════════════════════════════════════════════════════
         # PROVIDER REGISTRY (new provider-based routing)

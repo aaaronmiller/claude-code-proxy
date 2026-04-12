@@ -3,7 +3,7 @@
     import { 
         Activity, Zap, Server, RefreshCw, TrendingUp, DollarSign, 
         BarChart3, CheckCircle2, AlertCircle, Cpu, Database,
-        Wifi, Tool, Cache, Clock, Layers, ArrowUpRight, ArrowDownRight
+        Wifi, Wrench, HardDrive, Clock, Layers, ArrowUpRight, ArrowDownRight
     } from "lucide-svelte";
     import NanoBanana from '$lib/components/icons/NanoBanana.svelte';
     import Particles from '$lib/components/icons/Particles.svelte';
@@ -283,7 +283,7 @@
             <div class="metric-card" id="request-feed">
                 <div class="metric-header">
                     <div class="metric-icon tools">
-                        <Tool size={20} />
+                        <Wrench size={20} />
                     </div>
                     <span class="metric-trend {((toolAnalytics?.success_rate || 0) >= 95) ? 'positive' : 'warning'}">
                         {toolAnalytics?.success_rate || 0}%
@@ -302,7 +302,7 @@
             <div class="metric-card">
                 <div class="metric-header">
                     <div class="metric-icon cache">
-                        <Cache size={20} />
+                        <HardDrive size={20} />
                     </div>
                     <span class="metric-trend {(cacheAnalytics?.cache_hit_rate || 0) >= 50 ? 'positive' : 'neutral'}">
                         {cacheAnalytics?.cache_hit_rate || 0}%
@@ -387,7 +387,7 @@
                     {#each Object.entries(toolAnalytics.tools) as [toolName, stats]: any}
                         <div class="tool-card">
                             <div class="tool-header">
-                                <Tool size={16} />
+                                <Wrench size={16} />
                                 <span class="tool-name">{toolName}</span>
                             </div>
                             <div class="tool-stats">
@@ -421,7 +421,7 @@
                 </div>
             {:else}
                 <div class="empty-state">
-                    <Tool size={48} />
+                    <Wrench size={48} />
                     <p>No tool call data yet</p>
                     <span>Tool calls will be tracked here</span>
                 </div>

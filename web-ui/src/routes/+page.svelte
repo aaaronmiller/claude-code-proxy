@@ -589,6 +589,13 @@
                 >
                     Crosstalk
                 </button>
+                <a
+                    href="/chain"
+                    class="px-3 py-1.5 text-sm rounded-md border border-[var(--border-default)] hover:bg-[var(--base-300)] transition-colors no-underline"
+                    style="color: var(--text-primary);"
+                >
+                    Chain
+                </a>
             </div>
         </div>
     </header>
@@ -774,67 +781,6 @@
                                     <div class="text-lg font-bold text-amber-400">{liveMetrics.active_requests}</div>
                                     <div class="text-xs" style="color: var(--text-tertiary);">active</div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                            </div>
-                        </div>
-                    </div>
-                            <div class="text-2xl font-bold text-cyan-400">{stats.requests_today || 0}</div>
-                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
-                                {#if liveMetrics.requests_per_second > 0}
-                                    +{liveMetrics.requests_per_second}/s
-                                {:else}
-                                    No current activity
-                                {/if}
-                            </div>
-                        </div>
-
-                        <!-- Cost Today -->
-                        <div class="rounded-lg p-4 border hover:border-green-500/50 transition-colors" style="background-color: var(--base-200); border-color: var(--border-default);">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs text-[var(--text-secondary)]">Cost Today</span>
-                                <DollarSign class="w-3 h-3 text-green-400" />
-                            </div>
-                            <div class="text-2xl font-bold text-green-400">${stats.est_cost.toFixed(2)}</div>
-                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
-                                {#if liveMetrics.cost_per_second > 0}
-                                    ${liveMetrics.cost_per_second.toFixed(4)}/s
-                                {:else}
-                                    No current spend
-                                {/if}
-                            </div>
-                        </div>
-
-                        <!-- Total Tokens -->
-                        <div class="rounded-lg p-4 border hover:border-purple-500/50 transition-colors" style="background-color: var(--base-200); border-color: var(--border-default);">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs text-[var(--text-secondary)]">Total Tokens</span>
-                                <Layers class="w-3 h-3 text-purple-400" />
-                            </div>
-                            <div class="text-2xl font-bold text-purple-400">{formatTokens(stats.total_tokens)}</div>
-                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
-                                {#if liveMetrics.tokens_per_second > 0}
-                                    +{liveMetrics.tokens_per_second.toFixed(0)}/s
-                                {:else}
-                                    No current processing
-                                {/if}
-                            </div>
-                        </div>
-
-                        <!-- Avg Latency -->
-                        <div class="rounded-lg p-4 border hover:border-amber-500/50 transition-colors" style="background-color: var(--base-200); border-color: var(--border-default);">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs text-[var(--text-secondary)]">Avg Latency</span>
-                                <Clock class="w-3 h-3 text-amber-400" />
-                            </div>
-                            <div class="text-2xl font-bold text-amber-400">{stats.avg_latency || 0}ms</div>
-                            <div class="text-xs mt-1" style="color: var(--text-tertiary);">
-                                {#if liveMetrics.active_requests > 0}
-                                    {liveMetrics.active_requests} active
-                                {:else}
-                                    All requests complete
-                                {/if}
                             </div>
                         </div>
                     </div>

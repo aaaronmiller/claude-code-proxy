@@ -88,6 +88,15 @@ elif family.family == ModelFamily.GEMINI_FLASH:
 
 ## Current Session Notes (April 2026)
 
+### April 2026 Session Updates
+
+- **Routing sanity note:** Proxy routing updated to allow model-specific endpoint and provider overrides for use-cases (e.g. tool calls bypassing to Nvidia's API).
+- **Hermes base_url:** Rerouted hermes to 127.0.0.1:8082.
+- **tmux mouse mode:** Enabled mouse mode in `~/.tmux.conf`.
+- **Web UI `/chain` page:** Built new visual configuration dashboard for proxy chains and routing logic.
+- **Web UI Icon Fixes:** Resolved import errors for Tool and Cache icons in realtime dashboard viewing.
+
+
 ### Routing sanity note for compressed proxy testing
 
 - Observation: prompt loss symptoms showed up only on the new Headroom-compressed path, not on the underlying proxy routing itself.

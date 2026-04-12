@@ -3,33 +3,24 @@
 # proxies — Manage the proxy chain lifecycle
 #
 # Usage:
-#   proxies up              → Full chain in tmux with live output
-#   proxies up --comp       → Compression only (Headroom → CLIProxyAPI)
+#   proxies up              → Start all chain services in tmux
 #   proxies down            → Kill everything
-#   proxies status          → Show running
-#   proxies logs            → Tail all 3 logs in real-time (no tmux)
-#   proxies restart [--comp]
+#   proxies status          → Show running services (from chain config)
+#   proxies logs            → Tail all log files in real-time
+#   proxies watch [svc]     → Monitor tmux pane output
+#   proxies chain           → Open the chain manager TUI
+#   proxies restart
 #
-# Design:
-#   Headroom is the constant entry point (:8787).
-#   All tools point at :8787 — topology decided at start time.
-#   CLIProxyAPI is NEVER started alone (only in full mode).
-#   ClaudeProxy is only started with Headroom.
-#
-# Output:
-#   "up" spawns a tmux session ("proxies") with 3 panes showing
-#   live terminal output from each service.  Attach with:
-#       tmux attach -t proxies
-#   "logs" tails the 3 log files in a single terminal (no tmux).
+# Chain topology is configured in config/proxy_chain.json.
+# Edit with:  proxies chain
 # ═══════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
 PROXY_DIR="/home/cheta/code/claude-code-proxy"
-CLIPROXY_BIN="/home/cheta/code/cliproxyapi/cli-proxy-api-plus"
-CLIPROXY_CFG="/home/cheta/code/cliproxyapi/config.yaml"
 LOG_DIR="/tmp/proxy-logs"
 TMUX_SESSION="proxies"
+CHAIN_FILE="$PROXY_DIR/config/proxy_chain.json"
 
 # ── Colors ──
 GREEN='\033[0;32m'; RED='\033[0;31m'; CYAN='\033[0;36m'
@@ -42,7 +33,52 @@ warn() { echo -e "  ${YELLOW}⚠${NC} $*"; }
 
 mkdir -p "$LOG_DIR"
 
-# ── Health check: wait for port to respond ──
+# ── Resolve python in venv or system ──
+_python() {
+    if [ -f "$PROXY_DIR/.venv/bin/python" ]; then
+        "$PROXY_DIR/.venv/bin/python" "$@"
+    else
+        python3 "$@"
+    fi
+}
+
+# ── Read chain entries that have a service_cmd (in reverse start order) ──
+# Outputs one line per entry: id|name|service_cmd|port|health_path
+# Reverse order = upstream services start before downstream consumers.
+_chain_services_reversed() {
+    _python - <<'PYEOF'
+import json, sys, os
+path = os.environ.get("CHAIN_FILE", "config/proxy_chain.json")
+try:
+    data = json.loads(open(path).read())
+except Exception:
+    sys.exit(0)
+entries = data.get("entries", [])
+enabled = [e for e in entries if e.get("enabled") and e.get("service_cmd","").strip()]
+enabled.sort(key=lambda e: e.get("order", 0))
+for e in reversed(enabled):
+    print(f"{e['id']}|{e.get('name','?')}|{e.get('service_cmd','')}|{e.get('port',0)}|{e.get('health_path','/health')}")
+PYEOF
+}
+
+# Same but forward order (for status display) — includes cli_wrappers (no service_cmd)
+_chain_services() {
+    _python - <<'PYEOF'
+import json, sys, os
+path = os.environ.get("CHAIN_FILE", "config/proxy_chain.json")
+try:
+    data = json.loads(open(path).read())
+except Exception:
+    sys.exit(0)
+entries = data.get("entries", [])
+enabled = [e for e in entries if e.get("enabled")]
+enabled.sort(key=lambda e: e.get("order", 0))
+for e in enabled:
+    print(f"{e['id']}|{e.get('name','?')}|{e.get('service_cmd','')}|{e.get('port',0)}|{e.get('health_path','/health')}|{e.get('type','http')}")
+PYEOF
+}
+
+# ── Health check helpers ──
 wait_for_port() {
     local port=$1 timeout=${2:-30} endpoint=${3:-/health}
     for i in $(seq 1 $timeout); do
@@ -52,155 +88,105 @@ wait_for_port() {
     return 1
 }
 
-wait_for_cliproxy() {
-    local timeout=${1:-30}
-    for i in $(seq 1 $timeout); do
-        pgrep -f "cli-proxy-api-plus" > /dev/null 2>&1 && return 0
-        sleep 1
-    done
-    return 1
-}
-
-# ── Kill all proxy processes ──
+# ── Kill all managed processes ──
 cmd_stop() {
     echo -e "\n${CYAN}Stopping proxies${NC}"
-    pkill -f "headroom proxy" 2>/dev/null && echo "  Headroom killed" || echo "  Headroom not running"
-    pkill -f "start_proxy.py" 2>/dev/null && echo "  Claude Proxy killed" || echo "  Claude Proxy not running"
-    pkill -f "cli-proxy-api-plus" 2>/dev/null && echo "  CLIProxyAPI killed" || echo "  CLIProxyAPI not running"
+    # Kill processes matching service_cmds in chain, plus legacy patterns
+    while IFS='|' read -r id name cmd port health type; do
+        [ -z "$cmd" ] && continue  # skip cli_wrappers with no service_cmd
+        local pattern
+        pattern=$(echo "$cmd" | awk '{print $1}' | xargs basename 2>/dev/null || echo "$id")
+        pkill -f "$pattern" 2>/dev/null && echo "  Stopped: $name" || true
+    done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
+    # Legacy cleanup
+    pkill -f "start_proxy.py" 2>/dev/null || true
+    pkill -f "headroom proxy" 2>/dev/null || true
+    pkill -f "cli-proxy-api-plus" 2>/dev/null || true
     tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
     echo ""
 }
 
-# ── Launch all 3 services directly inside a tmux session ──
-_launch_tmux_session() {
-    local mode="$1"
-    local headroom_target
+# ── Launch chain services inside a tmux session ──
+_launch_chain_tmux() {
+    # Read entries to start (reversed = upstream first)
+    mapfile -t entries < <(CHAIN_FILE="$CHAIN_FILE" _chain_services_reversed)
 
-    if [ "$mode" = "full" ] || [ "$mode" = "proxy" ]; then
-        headroom_target="http://127.0.0.1:8082"
-    else
-        headroom_target="http://127.0.0.1:8317"
+    if [ ${#entries[@]} -eq 0 ]; then
+        warn "No enabled chain services with service_cmd found in $CHAIN_FILE"
+        info "Add services via: proxies chain"
+        return 1
     fi
 
-    # ── Pane 0 (top): CLIProxyAPI ──
+    # Always include the main claude-code-proxy in the chain
+    # It starts LAST (after all upstream services are ready)
+    local proxy_cmd="cd $PROXY_DIR && source .venv/bin/activate && LOG_LEVEL=info python start_proxy.py --skip-validation"
+
+    # Create tmux session with first entry
+    local first_entry="${entries[0]}"
+    IFS='|' read -r id name cmd port health <<< "$first_entry"
     tmux new-session -d -s "$TMUX_SESSION" -n "proxies"
     tmux send-keys -t "${TMUX_SESSION}:0.0" \
-        'echo -e "\033[1;32m╔═══════════════════════════════════════════╗"' C-m
-    tmux send-keys -t "${TMUX_SESSION}:0.0" \
-        'echo -e "║  \033[1;32mCLIProxyAPI  →  Antigravity  (:8317)\033[0;32m  ║"' C-m
-    tmux send-keys -t "${TMUX_SESSION}:0.0" \
-        'echo -e "╚═══════════════════════════════════════════╝\033[0m"' C-m
-    tmux send-keys -t "${TMUX_SESSION}:0.0" \
-        "$CLIPROXY_BIN --config $CLIPROXY_CFG" C-m
+        "echo -e \"\\033[1;33m── $name (:$port) ──\\033[0m\"" C-m
+    tmux send-keys -t "${TMUX_SESSION}:0.0" "$cmd" C-m
 
-    # ── Pane 1 (middle): Claude Proxy (full/proxy) or placeholder (comp) ──
-    tmux split-window -v -t "${TMUX_SESSION}:0.0"
-    if [ "$mode" = "full" ]; then
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo -e "\033[1;36m╔═══════════════════════════════════════════════════╗"' C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo -e "║  \033[1;36mClaude Code Proxy  →  CLIProxyAPI  (:8082)\033[0;36m  ║"' C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo -e "╚═══════════════════════════════════════════════════╝\033[0m"' C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            "cd $PROXY_DIR && source .venv/bin/activate && PROVIDER_API_KEY=proxy-secret-key PROVIDER_BASE_URL=http://127.0.0.1:8317/v1 BIG_MODEL=gemini-3.1-pro-high MIDDLE_MODEL=gemini-3-flash SMALL_MODEL=gemini-3.1-flash-lite VIBEPROXY_URL=http://127.0.0.1:8317 LOG_LEVEL=info python start_proxy.py --skip-validation" C-m
-    elif [ "$mode" = "proxy" ]; then
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo -e "\033[1;36m╔═══════════════════════════════════════════════════╗"' C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo -e "║  \033[1;36mClaude Code Proxy  →  OpenRouter   (:8082)\033[0;36m  ║"' C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo -e "╚═══════════════════════════════════════════════════╝\033[0m"' C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            "cd $PROXY_DIR && source .venv/bin/activate && LOG_LEVEL=info python start_proxy.py --skip-validation" C-m
-    else
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo -e "\033[1;33m╔═══════════════════════════════════════════════════╗"' C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo -e "║  \033[1;33mCompression mode — Claude Proxy NOT started\033[0;33m  ║"' C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo -e "║  Chain: tools → :8787 → :8317\033[0;33m              ║"' C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo -e "╚═══════════════════════════════════════════════════╝\033[0m"' C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.1" \
-            'echo "(full mode: proxies up)" && tail -f /dev/null' C-m
-    fi
+    local pane=1
+    # Remaining chain entries
+    for entry in "${entries[@]:1}"; do
+        IFS='|' read -r id name cmd port health <<< "$entry"
+        tmux split-window -v -t "${TMUX_SESSION}:0.$((pane-1))"
+        tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+            "echo -e \"\\033[1;33m── $name (:$port) ──\\033[0m\"" C-m
+        tmux send-keys -t "${TMUX_SESSION}:0.${pane}" "$cmd" C-m
+        pane=$((pane+1))
+    done
 
-    # ── Pane 2 (bottom): Headroom ──
-    tmux split-window -v -t "${TMUX_SESSION}:0.1"
-    tmux send-keys -t "${TMUX_SESSION}:0.2" \
-        "echo -e \"\\033[1;33m╔════════════════════════════════════════════════════╗\"" C-m
-    tmux send-keys -t "${TMUX_SESSION}:0.2" \
-        "echo -e \"║  \\033[1;33mHeadroom Compression  →  $headroom_target  (:8787)\\033[0;33m  ║\"" C-m
-    tmux send-keys -t "${TMUX_SESSION}:0.2" \
-        "echo -e \"╚════════════════════════════════════════════════════╝\\033[0m\"" C-m
-    tmux send-keys -t "${TMUX_SESSION}:0.2" \
-        "ANTHROPIC_TARGET_API_URL=$headroom_target OPENAI_TARGET_API_URL=${headroom_target}/v1 headroom proxy --port 8787" C-m
+    # Final pane: claude-code-proxy itself
+    tmux split-window -v -t "${TMUX_SESSION}:0.$((pane-1))"
+    tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+        "echo -e \"\\033[1;36m── Claude Code Proxy (:8082) ──\\033[0m\"" C-m
+    tmux send-keys -t "${TMUX_SESSION}:0.${pane}" "$proxy_cmd" C-m
 
-    # Equalize panes
     tmux select-layout -t "$TMUX_SESSION" even-vertical
-
-    # Rename window
-    if [ "$mode" = "full" ]; then
-        tmux rename-window -t "$TMUX_SESSION" "full-chain"
-    else
-        tmux rename-window -t "$TMUX_SESSION" "compression"
-    fi
+    tmux rename-window -t "$TMUX_SESSION" "chain"
 }
 
 # ── Main start command ──
 cmd_start() {
-    local mode="full"
-    [[ "${1:-}" == "--comp" ]] && mode="comp"
-    [[ "${1:-}" == "--proxy" ]] && mode="proxy"
+    echo -e "\n${CYAN}Starting proxy chain${NC}\n"
 
-    echo -e "\n${CYAN}Starting proxies (${mode})${NC}\n"
-
-    # If a tmux session already exists, kill it
     if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
         info "Existing tmux session found — killing..."
         tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
         sleep 1
     fi
 
-    # Kill any stale background processes
-    pkill -f "headroom proxy" 2>/dev/null || true
-    pkill -f "start_proxy.py" 2>/dev/null || true
-    pkill -f "cli-proxy-api-plus" 2>/dev/null || true
+    # Kill stale processes
+    cmd_stop 2>/dev/null || true
     sleep 1
 
-    # Launch everything inside tmux from the start
-    info "Launching in tmux with live terminal output..."
-    echo ""
-    _launch_tmux_session "$mode"
+    info "Launching chain in tmux..."
+    _launch_chain_tmux
 
-    # Wait for services to come up inside tmux
     info "Waiting for services to start..."
     sleep 3
 
     local all_ok=true
-    wait_for_cliproxy 20 && ok "CLIProxyAPI :8317" || { fail "CLIProxyAPI :8317"; all_ok=false; }
-    if [ "$mode" = "full" ]; then
-        wait_for_port 8082 30 && ok "Claude Proxy :8082" || { fail "Claude Proxy :8082"; all_ok=false; }
-    fi
-    wait_for_port 8787 30 && ok "Headroom :8787" || { fail "Headroom :8787"; all_ok=false; }
+
+    # Health-check each chain entry (skip CLI wrappers)
+    while IFS='|' read -r id name cmd port health type; do
+        if [ "$port" -gt 0 ]; then
+            wait_for_port "$port" 30 "$health" && ok "$name :$port" || { fail "$name :$port"; all_ok=false; }
+        fi
+    done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
+
+    # Health-check the proxy itself
+    wait_for_port 8082 30 /health && ok "Claude Code Proxy :8082" || { fail "Claude Code Proxy :8082"; all_ok=false; }
 
     echo ""
-    if [ "$mode" = "full" ]; then
-        echo -e "  ${GREEN}Chain:${NC} tools → :8787 → :8082 → :8317"
-    elif [ "$mode" = "proxy" ]; then
-        echo -e "  ${GREEN}Chain:${NC} tools → :8787 → :8082 (OpenRouter)"
-    else
-        echo -e "  ${GREEN}Chain:${NC} tools → :8787 → :8317 (compression only)"
-    fi
-    echo ""
-
     if [ "$all_ok" = true ]; then
         echo -e "  ${CYAN}View live output:${NC} tmux attach -t $TMUX_SESSION"
-        echo -e "  ${CYAN}Detach:${NC}       Ctrl+B, then D"
+        echo -e "  ${CYAN}Detach:${NC}          Ctrl+B, then D"
         echo ""
-
-        # Auto-attach if we're in an interactive terminal
         if [ -t 1 ]; then
             info "Attaching to tmux session..."
             tmux attach -t "$TMUX_SESSION"
@@ -213,156 +199,10 @@ cmd_start() {
     fi
 }
 
-# ── Simple log tailing (no tmux) ──
-cmd_logs() {
-    echo -e "\n${CYAN}Tailing proxy logs (Ctrl+C to stop)${NC}\n"
-
-    if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-        warn "tmux session '$TMUX_SESSION' is running — output goes there, not to logs"
-        warn "Run 'tmux attach -t $TMUX_SESSION' for live output, or 'proxies watch'"
-        echo ""
-        return 1
-    fi
-
-    local found=0
-    for f in "$LOG_DIR/cliproxy.log" "$LOG_DIR/proxy.log" "$LOG_DIR/headroom.log"; do
-        if [ -f "$f" ]; then
-            found=1
-        fi
-    done
-    if [ "$found" -eq 0 ]; then
-        fail "No log files found in $LOG_DIR"
-        info "Start proxies first: proxies up"
-        return 1
-    fi
-
-    # Color-coded tail — match filename to service color
-    tail -f \
-        --pid=$$ \
-        "$LOG_DIR/cliproxy.log" \
-        "$LOG_DIR/proxy.log" \
-        "$LOG_DIR/headroom.log" 2>/dev/null | \
-    while IFS= read -r line; do
-        case "$line" in
-            ==*cliproxy*) echo -e "  ${GREEN}${line}${NC}" ;;
-            ==*proxy.log*) echo -e "  ${CYAN}${line}${NC}" ;;
-            ==*headroom*) echo -e "  ${YELLOW}${line}${NC}" ;;
-            *)            echo "  $line" ;;
-        esac
-    done
-}
-
-# ── Watch tmux pane output in real-time ──
-# Usage: proxies watch [all|headroom|proxy|cliproxy] [lines]
-cmd_watch() {
-    local service="${1:-all}"
-    local lines="${2:-20}"
-
-    if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-        fail "No tmux session '$TMUX_SESSION' — start proxies first"
-        info "Run: proxies up"
-        echo ""
-        return 1
-    fi
-
-    # Determine mode dynamically and use TUI dashboard if requested all streams
-    if [ "$service" = "all" ] && [ -f "scripts/watch_dashboard.py" ]; then
-        local cur_mode="full"
-        local pane1_txt=$(tmux capture-pane -t "${TMUX_SESSION}:0.1" -p 2>/dev/null | head -n 5)
-        if echo "$pane1_txt" | grep -q "OpenRouter"; then
-            cur_mode="proxy"
-        elif echo "$pane1_txt" | grep -q "Compression mode"; then
-            cur_mode="comp"
-        fi
-        
-        source .venv/bin/activate 2>/dev/null || true
-        chmod +x scripts/watch_dashboard.py
-        exec python3 scripts/watch_dashboard.py "$TMUX_SESSION" "$cur_mode" "$lines"
-    fi
-
-    # Map service name to pane index
-    local panes=()
-    case "$service" in
-        all)
-            panes=(0 1 2)
-            ;;
-        cliproxy|cli|8317)
-            panes=(0)
-            ;;
-        proxy|claude|8082)
-            panes=(1)
-            ;;
-        headroom|hr|8787)
-            panes=(2)
-            ;;
-        *)
-            echo -e "${RED}Unknown service: $service${NC}"
-            echo -e "  Valid: ${CYAN}all headroom proxy cliproxy${NC}"
-            return 1
-            ;;
-    esac
-
-    # Pane metadata
-    local names=("CLIProxyAPI  :8317" "Claude Proxy  :8082" "Headroom  :8787")
-    local colors=("$GREEN" "$CYAN" "$YELLOW")
-
-    local prev_hash=()
-    local running=true
-
-    trap 'running=false' INT TERM
-
-    echo -e "\n${CYAN}Monitoring proxy panes (Ctrl+C to stop)${NC}\n"
-
-    while $running; do
-        local idx=0
-        local any_new=false
-
-        for p in "${panes[@]}"; do
-            local color="${colors[$idx]}"
-
-            # Capture pane output (strip tmux ANSI escapes, we add our own)
-            local content
-            content=$(tmux capture-pane -t "${TMUX_SESSION}:0.${p}" -p -S "-$((lines + 5))" 2>/dev/null | head -n "$lines" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g')
-
-            # Hash to detect changes
-            local cur_hash
-            cur_hash=$(printf "%s\n" "$content" | md5sum 2>/dev/null || echo "none")
-
-            if [ "${prev_hash[$idx]:-}" != "$cur_hash" ]; then
-                any_new=true
-                # Print header
-                echo -e "  ${color}── ${names[$p]} ────────────────────────────────────────${NC}"
-                # Print content with color prefix (printf for literal string safety)
-                printf "%s\n" "$content" | while IFS= read -r line; do
-                    [ -z "$line" ] && continue
-                    echo -e "  ${color}${line}${NC}"
-                done
-                echo ""
-            fi
-
-            prev_hash[$idx]="$cur_hash"
-            idx=$((idx + 1))
-        done
-
-        if $any_new; then
-            echo -e "  ${CYAN}Watching... Ctrl+C to stop${NC}"
-        fi
-
-        # Sleep in small increments so trap works
-        for _i in $(seq 1 15); do
-            $running || break
-            sleep 0.1
-        done
-    done
-
-    echo -e "\n${CYAN}Watch stopped.${NC}"
-}
-
-# ── Process-based tracking + HTTP health ──
+# ── Status: show chain entries + health ──
 cmd_status() {
-    echo -e "\n${CYAN}Proxy status${NC}"
+    echo -e "\n${CYAN}Proxy chain status${NC}"
 
-    # Check tmux session
     if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
         local attached
         attached=$(tmux list-clients -t "$TMUX_SESSION" 2>/dev/null | wc -l)
@@ -375,48 +215,134 @@ cmd_status() {
         echo ""
     fi
 
-    for s in "Headroom:headroom proxy:8787:/health" "ClaudeProxy:start_proxy.py:8082:/health" "CLIProxyAPI:cli-proxy-api-plus:8317:/v1/models"; do
-        IFS=':' read -r name proc port endpoint <<< "$s"
-        if pids=$(pgrep -f "$proc" 2>/dev/null | head -1); then
-            if curl -sf --max-time 2 "http://127.0.0.1:$port$endpoint" > /dev/null 2>&1; then
-                echo -e "  ${GREEN}✓${NC} $name  :$port  PID:$pids  ${GREEN}(healthy)${NC}"
+    echo -e "  Chain entries (from $CHAIN_FILE):"
+    local idx=1
+    while IFS='|' read -r id name cmd port health type; do
+        if [ "$type" = "cli_wrapper" ] || [ "$port" -eq 0 ]; then
+            echo -e "  ${YELLOW}[$idx]${NC} $name  ${YELLOW}(CLI wrapper — passive, no port)${NC}"
+        elif [ "$port" -gt 0 ]; then
+            if curl -sf --max-time 2 "http://127.0.0.1:$port$health" > /dev/null 2>&1; then
+                echo -e "  ${GREEN}[$idx]${NC} $name  :$port  ${GREEN}(healthy)${NC}"
             else
-                echo -e "  ${YELLOW}⚠${NC} $name  :$port  PID:$pids  ${YELLOW}(starting…)${NC}"
+                echo -e "  ${RED}[$idx]${NC} $name  :$port  ${RED}(unreachable)${NC}"
             fi
-        else
-            echo -e "  ${RED}✗${NC} $name  :$port  ${RED}(not running)${NC}"
         fi
-    done
+        idx=$((idx+1))
+    done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
+
+    # Always show the proxy itself
+    if curl -sf --max-time 2 "http://127.0.0.1:8082/health" > /dev/null 2>&1; then
+        echo -e "  ${GREEN}[$idx]${NC} Claude Code Proxy  :8082  ${GREEN}(healthy)${NC}"
+    else
+        echo -e "  ${RED}[$idx]${NC} Claude Code Proxy  :8082  ${RED}(not running)${NC}"
+    fi
     echo ""
+}
+
+# ── Chain TUI ──
+cmd_chain() {
+    cd "$PROXY_DIR"
+    source .venv/bin/activate 2>/dev/null || true
+    python -m src.cli.chain_tui
+}
+
+# ── Log tailing ──
+cmd_logs() {
+    echo -e "\n${CYAN}Tailing proxy logs (Ctrl+C to stop)${NC}\n"
+
+    if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+        warn "tmux session '$TMUX_SESSION' is running — run 'tmux attach -t $TMUX_SESSION' for live output"
+        echo ""
+        return 1
+    fi
+
+    local found=0
+    for f in "$LOG_DIR"/*.log; do
+        [ -f "$f" ] && found=1 && break
+    done
+    if [ "$found" -eq 0 ]; then
+        fail "No log files found in $LOG_DIR"
+        info "Start proxies first: proxies up"
+        return 1
+    fi
+
+    tail -f "$LOG_DIR"/*.log 2>/dev/null
+}
+
+# ── Watch tmux pane output ──
+cmd_watch() {
+    local service="${1:-all}"
+    local lines="${2:-20}"
+
+    if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+        fail "No tmux session '$TMUX_SESSION' — start proxies first"
+        info "Run: proxies up"
+        return 1
+    fi
+
+    # Delegate to rich dashboard script if available
+    if [ "$service" = "all" ] && [ -f "$PROXY_DIR/scripts/watch_dashboard.py" ]; then
+        source .venv/bin/activate 2>/dev/null || true
+        exec python3 "$PROXY_DIR/scripts/watch_dashboard.py" "$TMUX_SESSION" "chain" "$lines"
+    fi
+
+    # Simple pane capture
+    local total_panes
+    total_panes=$(tmux list-panes -t "$TMUX_SESSION" 2>/dev/null | wc -l)
+    local colors=("$GREEN" "$YELLOW" "$CYAN" "$GREEN" "$YELLOW" "$CYAN")
+
+    echo -e "\n${CYAN}Monitoring proxy panes (Ctrl+C to stop)${NC}\n"
+    local running=true
+    trap 'running=false' INT TERM
+
+    declare -A prev_hash
+
+    while $running; do
+        for p in $(seq 0 $((total_panes-1))); do
+            local color="${colors[$((p % ${#colors[@]}))]}"
+            local content
+            content=$(tmux capture-pane -t "${TMUX_SESSION}:0.${p}" -p -S "-$((lines+5))" 2>/dev/null | head -n "$lines" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g')
+            local cur_hash
+            cur_hash=$(printf "%s" "$content" | md5sum | cut -d' ' -f1)
+
+            if [ "${prev_hash[$p]:-}" != "$cur_hash" ]; then
+                echo -e "  ${color}── pane $p ────────────────────────────────────${NC}"
+                printf "%s\n" "$content" | while IFS= read -r line; do
+                    [ -z "$line" ] && continue
+                    echo -e "  ${color}${line}${NC}"
+                done
+                echo ""
+                prev_hash[$p]="$cur_hash"
+            fi
+        done
+        for _i in $(seq 1 15); do $running || break; sleep 0.1; done
+    done
+
+    echo -e "\n${CYAN}Watch stopped.${NC}"
 }
 
 # ── Main dispatch ──
 case "${1:-status}" in
-    up|start)       cmd_start "${2:-}" ;;
+    up|start)       cmd_start ;;
     down|stop)      cmd_stop ;;
     status|st)      cmd_status ;;
     logs|log|tail)  cmd_logs ;;
     watch|mon)      cmd_watch "${2:-all}" "${3:-20}" ;;
-    restart)        cmd_stop; sleep 2; cmd_start "${2:-}" ;;
+    chain|tui)      cmd_chain ;;
+    restart)        cmd_stop; sleep 2; cmd_start ;;
     *)
-        echo -e "${CYAN}Usage:${NC} proxies {up|down|status|watch|logs|restart} [--comp|--proxy]"
+        echo -e "${CYAN}Usage:${NC} proxies {up|down|status|watch|logs|chain|restart}"
         echo ""
-        echo "  up              Start full chain in tmux (live terminal output)"
-        echo "  up --comp       Compression only (Headroom → CLIProxyAPI)"
-        echo "  up --proxy      Claude Proxy without CLIProxyAPI (OpenRouter)"
-        echo "  down            Stop all proxies and tmux session"
-        echo "  status          Show running proxies with health checks"
-        echo "  watch [svc]     Monitor tmux pane output in real-time (Ctrl+C to stop)"
-        echo "                  Services: all, headroom, proxy, cliproxy (default: all)"
-        echo "  logs            Tail log files (if not in tmux mode)"
+        echo "  up              Start all chain services in tmux"
+        echo "  down            Stop all services and tmux session"
+        echo "  status          Show service health (from proxy_chain.json)"
+        echo "  watch [n]       Monitor tmux pane output in real-time"
+        echo "  logs            Tail log files"
+        echo "  chain           Open proxy chain manager TUI"
         echo "  restart         Stop and restart"
         echo ""
-        echo -e "  ${CYAN}After 'up':${NC}"
-        echo "    tmux attach -t proxies     # View live output in tmux"
-        echo "    proxies watch              # Monitor all panes in current terminal"
-        echo "    proxies watch headroom     # Monitor just Headroom"
-        echo "    proxies watch proxy        # Monitor just Claude Proxy"
-        echo "    proxies watch cliproxy     # Monitor just CLIProxyAPI"
-        echo "    Ctrl+B, D                  # Detach from tmux (keeps running)"
+        echo -e "  ${CYAN}Configure chain:${NC} proxies chain"
+        echo -e "  ${CYAN}Chain file:${NC}      config/proxy_chain.json"
+        echo ""
         ;;
 esac

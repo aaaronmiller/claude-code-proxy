@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phylogenetic Genealogy of Agentic Management Software</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0f;
+    color: #e0e0e0;
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+    padding: 20px;
+    overflow-x: hidden;
+  }
+  h1 {
+    text-align: center;
+    font-size: 1.4em;
+    margin-bottom: 4px;
+    background: linear-gradient(90deg, #6ee7b7, #3b82f6, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 0.75em;
+    color: #666;
+    margin-bottom: 16px;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.65em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+  }
+  .legend-item:hover {
+    border-color: #444;
+    transform: translateY(-1px);
+  }
+  .legend-item.dimmed { opacity: 0.2; }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+  #chart-container {
+    width: 100%;
+    overflow-x: auto;
+  }
+  svg { display: block; margin: 0 auto; }
+  .flow-band {
+    transition: opacity 0.3s;
+  }
+  .flow-band.dimmed { opacity: 0.03; }
+  .node-rect {
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .node-rect:hover {
+    filter: brightness(1.3);
+    stroke: #fff;
+    stroke-width: 1.5;
+  }
+  .tooltip {
+    position: fixed;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.7em;
+    pointer-events: none;
+    z-index: 100;
+    display: none;
+    max-width: 320px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  .tooltip .tt-name { font-weight: bold; margin-bottom: 2px; }
+  .tooltip .tt-genes { color: #888; }
+  .tooltip .tt-desc { color: #aaa; margin-top: 4px; font-style: italic; }
+  .column-label {
+    font-size: 0.7em;
+    fill: #555;
+    text-anchor: middle;
+  }
+  .node-label {
+    font-size: 0.55em;
+    fill: #ddd;
+    pointer-events: none;
+  }
+  .controls {
+    text-align: center;
+    margin: 12px 0;
+  }
+  .controls button {
+    background: #1a1a2e;
+    color: #ccc;
+    border: 1px solid #333;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.65em;
+    margin: 0 4px;
+  }
+  .controls button:hover { border-color: #6ee7b7; color: #6ee7b7; }
+  .stats {
+    text-align: center;
+    font-size: 0.6em;
+    color: #555;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<h1>A Phylogenetic Genealogy of Local Agentic Management Software</h1>
+<p class="subtitle">Flow of conceptual genes across 21 projects in a single developer's ecosystem — April 2026</p>
+
+<div class="legend" id="legend"></div>
+<div class="controls">
+  <button onclick="resetHighlight()">Reset</button>
+  <button onclick="toggleLayout('leftRight')">Left→Right</button>
+  <button onclick="toggleLayout('rightLeft')">Right→Left</button>
+  <button onclick="toggleLayout('hierarchical')">By Tier</button>
+</div>
+
+<div id="chart-container">
+  <svg id="sankey"></svg>
+</div>
+
+<div class="stats" id="stats"></div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// DATA: Gene families, genes, and project expressions
+// ═══════════════════════════════════════════════════════════
+
+const geneFamilies = {
+  routing: {
+    name: "Routing",
+    color: "#3b82f6",
+    genes: [
+      { id: "proxy", name: "HTTP Proxy", desc: "API translation between client and provider" },
+      { id: "model_tiering", name: "Model Tiering", desc: "BIG/MIDDLE/SMALL routing by task complexity" },
+      { id: "protocol_translation", name: "Protocol Translation", desc: "Anthropic ↔ OpenAI format conversion" }
+    ]
+  },
+  orchestration: {
+    name: "Orchestration",
+    color: "#6ee7b7",
+    genes: [
+      { id: "session_mux", name: "Session Multiplexing", desc: "Running parallel agent sessions" },
+      { id: "task_decomposition", name: "Task Decomposition", desc: "Breaking objectives into subtasks" },
+      { id: "swarm_coord", name: "Swarm Coordination", desc: "Leader/worker agent patterns" }
+    ]
+  },
+  state: {
+    name: "State",
+    color: "#f59e0b",
+    genes: [
+      { id: "memory_tiers", name: "Memory Tiers", desc: "Hot/Warm/Cold cross-session memory" },
+      { id: "file_state", name: "File-Based State", desc: "JSON/YAML config files as database" },
+      { id: "sqlite_persist", name: "SQLite Persistence", desc: "Relational session/usage storage" }
+    ]
+  },
+  compression: {
+    name: "Compression",
+    color: "#ef4444",
+    genes: [
+      { id: "token_compress", name: "Token Compression", desc: "Reducing context window size" },
+      { id: "context_opt", name: "Context Optimization", desc: "Smart context management" }
+    ]
+  },
+  observability: {
+    name: "Observability",
+    color: "#a78bfa",
+    genes: [
+      { id: "hook_intercept", name: "Hook Interception", desc: "Lifecycle event capture" },
+      { id: "dashboard", name: "Dashboard", desc: "Visual monitoring and analytics" },
+      { id: "usage_tracking", name: "Usage Tracking", desc: "Token cost and request analytics" }
+    ]
+  },
+  distribution: {
+    name: "Distribution",
+    color: "#06b6d4",
+    genes: [
+      { id: "cross_sync", name: "Cross-Platform Sync", desc: "Normalizing config across 18+ platforms" },
+      { id: "config_norm", name: "Config Normalization", desc: "SKILL.md / AGENTS.md standards" }
+    ]
+  },
+  auth: {
+    name: "Auth",
+    color: "#ec4899",
+    genes: [
+      { id: "oauth_flow", name: "OAuth Flow", desc: "Web-based authentication" },
+      { id: "api_key_mgmt", name: "API Key Management", desc: "Key rotation and validation" },
+      { id: "passthrough", name: "Auth Passthrough", desc: "Delegating auth to client" }
+    ]
+  },
+  modality: {
+    name: "Modality",
+    color: "#84cc16",
+    genes: [
+      { id: "voice", name: "Voice Interface", desc: "STT/TTS with wake word detection" },
+      { id: "tui", name: "TUI", desc: "Terminal user interface" },
+      { id: "web_ui", name: "Web UI", desc: "Browser-based interface" }
+    ]
+  }
+};
+
+// Projects and which genes they express (strength 1-3)
+const projects = [
+  {
+    name: "claude-code-proxy",
+    tier: "Infrastructure",
+    desc: "HTTP proxy + model router + dashboard",
+    genes: { proxy: 3, model_tiering: 3, protocol_translation: 3, dashboard: 3, usage_tracking: 3, api_key_mgmt: 2, sqlite_persist: 2, hook_intercept: 1, tui: 1 }
+  },
+  {
+    name: "CLIProxyAPI Plus",
+    tier: "Infrastructure",
+    desc: "Multi-provider OAuth proxy with rate limiting",
+    genes: { proxy: 3, oauth_flow: 3, api_key_mgmt: 2, protocol_translation: 2, context_opt: 1 }
+  },
+  {
+    name: "input-compression",
+    tier: "Infrastructure",
+    desc: "RTK + Headroom compression stack",
+    genes: { token_compress: 3, context_opt: 3, proxy: 2, hook_intercept: 2, model_tiering: 1 }
+  },
+  {
+    name: "Hermes Agent",
+    tier: "Agent Framework",
+    desc: "Self-improving agent with memory and skills",
+    genes: { memory_tiers: 3, session_mux: 2, sqlite_persist: 2, file_state: 2, cross_sync: 2, config_norm: 2, dashboard: 1, hook_intercept: 1, tui: 2 }
+  },
+  {
+    name: "ClawTeam-OpenClaw",
+    tier: "Orchestration",
+    desc: "Multi-agent swarm coordination",
+    genes: { swarm_coord: 3, task_decomposition: 3, session_mux: 3, file_state: 3, cross_sync: 1 }
+  },
+  {
+    name: "Switchboard (fork)",
+    tier: "Orchestration",
+    desc: "Electron session browser + visual workflow",
+    genes: { session_mux: 3, task_decomposition: 2, sqlite_persist: 2, web_ui: 3, dashboard: 2, hook_intercept: 1 }
+  },
+  {
+    name: "Switchboard Launcher",
+    tier: "Orchestration",
+    desc: "TUI multiplexer for AI CLI tools",
+    genes: { session_mux: 3, proxy: 2, tui: 3, model_tiering: 1 }
+  },
+  {
+    name: "aaa-memory (omni-loop)",
+    tier: "Memory",
+    desc: "Hot/Warm/Cold tiered memory system",
+    genes: { memory_tiers: 3, hook_intercept: 3, file_state: 2, context_opt: 2 }
+  },
+  {
+    name: "multi-agent-workflow",
+    tier: "Observability",
+    desc: "Real-time observability + GitHub automation",
+    genes: { hook_intercept: 3, sqlite_persist: 2, dashboard: 3, web_ui: 2, usage_tracking: 2 }
+  },
+  {
+    name: "hermes-dashboard",
+    tier: "Observability",
+    desc: "Bun-based Hermes monitoring",
+    genes: { dashboard: 3, web_ui: 3, sqlite_persist: 1 }
+  },
+  {
+    name: "agents/",
+    tier: "Distribution",
+    desc: "Cross-platform config distribution hub",
+    genes: { cross_sync: 3, config_norm: 3, file_state: 2 }
+  },
+  {
+    name: "aaa-voice-assistant",
+    tier: "Modality",
+    desc: "Voice interface with wake word detection",
+    genes: { voice: 3, memory_tiers: 1, tui: 1, web_ui: 1 }
+  },
+  {
+    name: "hermes-harness",
+    tier: "Testing",
+    desc: "Hermes test/config framework",
+    genes: { file_state: 3, session_mux: 1, dashboard: 1, config_norm: 1 }
+  },
+  {
+    name: "autodidactic-omni-loop",
+    tier: "Memory",
+    desc: "Closed-loop learning agent",
+    genes: { memory_tiers: 3, hook_intercept: 2, file_state: 1, context_opt: 1 }
+  },
+  {
+    name: "barter_agent",
+    tier: "Specialized",
+    desc: "Automated negotiation agent",
+    genes: { session_mux: 1, file_state: 1, api_key_mgmt: 1 }
+  },
+  {
+    name: "git-sync-tui",
+    tier: "Utility",
+    desc: "TUI for git synchronization",
+    genes: { tui: 3, cross_sync: 1 }
+  },
+  {
+    name: "ebay-tracker",
+    tier: "Specialized",
+    desc: "eBay listing tracker + analyzer",
+    genes: { sqlite_persist: 2, file_state: 2, api_key_mgmt: 1, dashboard: 1 }
+  },
+  {
+    name: "model-scraper",
+    tier: "Utility",
+    desc: "Model info scraping from providers",
+    genes: { proxy: 1, file_state: 2, api_key_mgmt: 1 }
+  },
+  {
+    name: "just-prompt",
+    tier: "Utility",
+    desc: "Prompt management and templates",
+    genes: { file_state: 3, config_norm: 1 }
+  },
+  {
+    name: "mem2",
+    tier: "Memory",
+    desc: "Alternative memory system design",
+    genes: { memory_tiers: 2, file_state: 2, config_norm: 1 }
+  },
+  {
+    name: "IDE-auto-complete",
+    tier: "Utility",
+    desc: "IDE autocomplete integration",
+    genes: { hook_intercept: 2, proxy: 1, tui: 1 }
+  }
+];
+
+// ═══════════════════════════════════════════════════════════
+// RENDER: Sankey / Alluvial Diagram
+// ═══════════════════════════════════════════════════════════
+
+const svg = document.getElementById('sankey');
+const tooltip = document.getElementById('tooltip');
+const W = Math.min(window.innerWidth - 40, 1600);
+const H = 1200;
+svg.setAttribute('width', W);
+svg.setAttribute('height', H);
+
+const colWidth = 200;
+const nodeWidth = 12;
+const geneGap = 30;
+const colGap = 180;
+
+// Build gene → family mapping
+const geneToFamily = {};
+Object.entries(geneFamilies).forEach(([famKey, fam]) => {
+  fam.genes.forEach(g => { geneToFamily[g.id] = famKey; });
+});
+
+// Build adjacency: gene → projects
+const geneProjectFlows = [];
+Object.entries(geneFamilies).forEach(([famKey, fam]) => {
+  fam.genes.forEach(gene => {
+    projects.forEach(proj => {
+      const strength = proj.genes[gene.id] || 0;
+      if (strength > 0) {
+        geneProjectFlows.push({ gene: gene.id, geneName: gene.name, project: proj.name, strength, family: famKey });
+      }
+    });
+  });
+});
+
+// Layout computation
+const layout = {
+  leftRight: computeLayout,
+  rightLeft: computeLayoutReversed,
+  hierarchical: computeLayoutHierarchical
+};
+
+let currentLayout = 'leftRight';
+let nodes = [];
+let flows = [];
+
+function computeLayout() {
+  const n = [];
+  const f = [];
+  const x0 = 40;
+  const x1 = x0 + colWidth;
+  const x2 = x1 + colGap;
+  const x3 = x2 + colWidth;
+
+  // Column 0: Gene families
+  let yOff = 40;
+  const famNodes = [];
+  Object.entries(geneFamilies).forEach(([famKey, fam]) => {
+    // Total strength for this family
+    const totalStrength = fam.genes.reduce((s, g) => {
+      return s + projects.reduce((ps, p) => ps + (p.genes[g.id] || 0), 0);
+    }, 0);
+    const h = Math.max(20, totalStrength * 2.5);
+
+    fam.genes.forEach((gene, gi) => {
+      const geneStrength = projects.reduce((ps, p) => ps + (p.genes[gene.id] || 0), 0);
+      const geneH = Math.max(12, geneStrength * 2.5);
+      const node = {
+        id: `gene_${gene.id}`,
+        label: gene.name,
+        family: famKey,
+        x: x0,
+        y: yOff,
+        w: nodeWidth,
+        h: geneH,
+        type: 'gene',
+        geneId: gene.id,
+        strength: geneStrength
+      };
+      n.push(node);
+      yOff += geneH + 4;
+    });
+    yOff += geneGap - 4;
+  });
+
+  // Column 1: Projects
+  const projStartY = 40;
+  const totalProjH = projects.length * 30;
+  const gap2 = (H - 80 - totalProjH) / (projects.length - 1);
+
+  projects.forEach((proj, pi) => {
+    const h = 28;
+    const node = {
+      id: `proj_${proj.name}`,
+      label: proj.name,
+      family: null,
+      x: x2,
+      y: projStartY + pi * (h + gap2),
+      w: nodeWidth,
+      h,
+      type: 'project',
+      project: proj,
+      strength: Object.values(proj.genes).reduce((a, b) => a + b, 0)
+    };
+    n.push(node);
+  });
+
+  // Build flows
+  n.filter(nn => nn.type === 'gene').forEach(geneNode => {
+    n.filter(nn => nn.type === 'project').forEach(projNode => {
+      const strength = projNode.project.genes[geneNode.geneId] || 0;
+      if (strength > 0) {
+        f.push({
+          source: geneNode,
+          target: projNode,
+          strength,
+          family: geneNode.family
+        });
+      }
+    });
+  });
+
+  return { nodes: n, flows: f };
+}
+
+function computeLayoutReversed() {
+  const result = computeLayout();
+  // Mirror X positions
+  result.nodes.forEach(n => {
+    n.x = W - n.x - n.w;
+  });
+  return result;
+}
+
+function computeLayoutHierarchical() {
+  const n = [];
+  const f = [];
+  const tiers = ['Infrastructure', 'Agent Framework', 'Orchestration', 'Memory', 'Observability', 'Distribution', 'Modality', 'Specialized', 'Utility', 'Testing'];
+  
+  // Genes on left, sorted by family
+  let yOff = 40;
+  const x0 = 40;
+  const x2 = W - colWidth - 40;
+
+  Object.entries(geneFamilies).forEach(([famKey, fam]) => {
+    fam.genes.forEach(gene => {
+      const geneStrength = projects.reduce((ps, p) => ps + (p.genes[gene.id] || 0), 0);
+      const geneH = Math.max(12, geneStrength * 2.5);
+      n.push({
+        id: `gene_${gene.id}`,
+        label: gene.name,
+        family: famKey,
+        x: x0,
+        y: yOff,
+        w: nodeWidth,
+        h: geneH,
+        type: 'gene',
+        geneId: gene.id,
+        strength: geneStrength
+      });
+      yOff += geneH + 4;
+    });
+    yOff += geneGap - 4;
+  });
+
+  // Projects on right, grouped by tier
+  let yOff2 = 40;
+  const tierGroups = {};
+  projects.forEach(p => {
+    if (!tierGroups[p.tier]) tierGroups[p.tier] = [];
+    tierGroups[p.tier].push(p);
+  });
+
+  const projNodes = [];
+  tiers.forEach(tier => {
+    const projs = tierGroups[tier] || [];
+    projs.forEach((proj, i) => {
+      const h = 28;
+      const node = {
+        id: `proj_${proj.name}`,
+        label: proj.name,
+        family: null,
+        x: x2,
+        y: yOff2,
+        w: nodeWidth,
+        h,
+        type: 'project',
+        project: proj,
+        tier,
+        strength: Object.values(proj.genes).reduce((a, b) => a + b, 0)
+      };
+      n.push(node);
+      projNodes.push(node);
+      yOff2 += h + 6;
+    });
+    yOff2 += 10;
+  });
+
+  // Build flows
+  n.filter(nn => nn.type === 'gene').forEach(geneNode => {
+    projNodes.forEach(projNode => {
+      const strength = projNode.project.genes[geneNode.geneId] || 0;
+      if (strength > 0) {
+        f.push({ source: geneNode, target: projNode, strength, family: geneNode.family });
+      }
+    });
+  });
+
+  return { nodes: n, flows: f };
+}
+
+function render() {
+  const result = layout[currentLayout]();
+  nodes = result.nodes;
+  flows = result.flows;
+
+  let svgContent = '';
+
+  // Defs for gradients
+  svgContent += '<defs>';
+  flows.forEach((flow, i) => {
+    const familyColor = geneFamilies[flow.family]?.color || '#888';
+    svgContent += `<linearGradient id="grad${i}" x1="${flow.source.x + flow.source.w}" y1="0" x2="${flow.target.x}" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="${familyColor}" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="${familyColor}" stop-opacity="0.15"/>
+    </linearGradient>`;
+  });
+  svgContent += '</defs>';
+
+  // Column labels
+  const labels = currentLayout === 'hierarchical' 
+    ? [{ x: 100, text: 'CONCEPTUAL GENES' }, { x: W - 140, text: 'PROJECTS (by tier)' }]
+    : currentLayout === 'rightLeft'
+      ? [{ x: W - 140, text: 'PROJECTS' }, { x: 100, text: 'CONCEPTUAL GENES' }]
+      : [{ x: 100, text: 'CONCEPTUAL GENES' }, { x: W - 140, text: 'PROJECTS' }];
+  labels.forEach(l => {
+    svgContent += `<text x="${l.x}" y="20" class="column-label" fill="#555">${l.text}</text>`;
+  });
+
+  // Draw flow bands (behind nodes)
+  flows.forEach((flow, i) => {
+    const fam = geneFamilies[flow.family];
+    const color = fam?.color || '#888';
+    const sw = Math.max(1.5, flow.strength * 1.2);
+    
+    // Bezier curve
+    const sx = flow.source.x + flow.source.w;
+    const sy = flow.source.y + flow.source.h / 2;
+    const tx = flow.target.x;
+    const ty = flow.target.y + flow.target.h / 2;
+    const cp1x = sx + (tx - sx) * 0.4;
+    const cp2x = sx + (tx - sx) * 0.6;
+
+    svgContent += `<path d="M${sx},${sy} C${cp1x},${sy} ${cp2x},${ty} ${tx},${ty}" 
+      fill="none" stroke="url(#grad${i})" stroke-width="${sw}" 
+      class="flow-band" data-family="${flow.family}" data-gene="${flow.source.geneId || ''}" data-project="${flow.target.project?.name || ''}"
+      opacity="0.7"/>`;
+  });
+
+  // Draw nodes
+  nodes.forEach(node => {
+    const famColor = node.family ? geneFamilies[node.family]?.color : '#666';
+    const strokeW = node.type === 'gene' ? 1 : 1.5;
+    const rx = node.type === 'project' ? 3 : 2;
+    
+    svgContent += `<rect x="${node.x}" y="${node.y}" width="${node.w}" height="${node.h}" 
+      rx="${rx}" fill="${famColor}" fill-opacity="${node.type === 'gene' ? 0.85 : 0.6}" 
+      stroke="${famColor}" stroke-width="${strokeW}"
+      class="node-rect" data-id="${node.id}" data-family="${node.family || ''}"/>`;
+
+    // Labels
+    if (node.type === 'gene') {
+      const labelX = node.x + node.w + 4;
+      const labelY = node.y + node.h / 2 + 3;
+      svgContent += `<text x="${labelX}" y="${labelY}" class="node-label" fill="${famColor}" font-size="9">${node.label}</text>`;
+    } else {
+      const labelX = node.x - 4;
+      const labelY = node.y + node.h / 2 + 3;
+      const proj = node.project;
+      svgContent += `<text x="${labelX}" y="${labelY}" class="node-label" fill="#ccc" text-anchor="end" font-size="9">${node.label}</text>`;
+      if (currentLayout === 'hierarchical') {
+        svgContent += `<text x="${labelX}" y="${labelY + 11}" class="node-label" fill="#555" text-anchor="end" font-size="7">${node.tier || ''}</text>`;
+      }
+    }
+  });
+
+  svg.innerHTML = svgContent;
+
+  // Stats
+  const totalGenes = nodes.filter(n => n.type === 'gene').length;
+  const totalProjects = nodes.filter(n => n.type === 'project').length;
+  const totalFlows = flows.length;
+  const dominantGene = nodes.filter(n => n.type === 'gene').sort((a, b) => b.strength - a.strength)[0];
+  const mostExpressive = nodes.filter(n => n.type === 'project').sort((a, b) => b.strength - a.strength)[0];
+  document.getElementById('stats').textContent = 
+    `${totalGenes} genes · ${totalProjects} projects · ${totalFlows} gene expressions · Most expressed gene: ${dominantGene?.label} · Most expressive project: ${mostExpressive?.label}`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// INTERACTION
+// ═══════════════════════════════════════════════════════════
+
+function resetHighlight() {
+  document.querySelectorAll('.flow-band').forEach(el => el.classList.remove('dimmed'));
+  document.querySelectorAll('.legend-item').forEach(el => el.classList.remove('dimmed'));
+}
+
+function highlightFamily(famKey) {
+  const isDimmed = document.querySelector(`.legend-item[data-family="${famKey}"]`)?.classList.contains('dimmed');
+  if (isDimmed) {
+    document.querySelectorAll(`.legend-item`).forEach(el => el.classList.remove('dimmed'));
+    document.querySelectorAll('.flow-band').forEach(el => el.classList.remove('dimmed'));
+  } else {
+    document.querySelectorAll('.legend-item').forEach(el => {
+      el.classList.toggle('dimmed', el.dataset.family !== famKey);
+    });
+    document.querySelectorAll('.flow-band').forEach(el => {
+      el.classList.toggle('dimmed', el.dataset.family !== famKey);
+    });
+  }
+}
+
+function toggleLayout(type) {
+  currentLayout = type;
+  render();
+}
+
+// Build legend
+const legendEl = document.getElementById('legend');
+Object.entries(geneFamilies).forEach(([famKey, fam]) => {
+  const item = document.createElement('div');
+  item.className = 'legend-item';
+  item.dataset.family = famKey;
+  item.innerHTML = `<span class="legend-dot" style="background:${fam.color}"></span>${fam.name}`;
+  item.onclick = () => highlightFamily(famKey);
+  legendEl.appendChild(item);
+});
+
+// Tooltip on hover
+svg.addEventListener('mousemove', (e) => {
+  const target = e.target;
+  if (target.classList.contains('node-rect')) {
+    const nodeId = target.dataset.id;
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    const fam = node.family ? geneFamilies[node.family] : null;
+    const tt = document.getElementById('tooltip');
+    tt.style.display = 'block';
+    tt.style.left = (e.clientX + 12) + 'px';
+    tt.style.top = (e.clientY + 12) + 'px';
+    if (node.type === 'gene') {
+      const gene = Object.values(geneFamilies).flatMap(f => f.genes).find(g => g.id === node.geneId);
+      tt.innerHTML = `<div class="tt-name" style="color:${fam?.color}">${node.label}</div>
+        <div class="tt-desc">${gene?.desc || ''}</div>
+        <div class="tt-genes">Expressed in ${node.strength} project(s)</div>`;
+    } else {
+      const proj = node.project;
+      const geneList = Object.entries(proj.genes).map(([gId, str]) => {
+        const gene = Object.values(geneFamilies).flatMap(f => f.genes).find(g => g.id === gId);
+        return gene ? `<span style="color:${geneFamilies[geneToFamily[gId]]?.color}">●</span> ${gene.name}` : '';
+      }).filter(Boolean).join(', ');
+      tt.innerHTML = `<div class="tt-name" style="color:${fam?.color || '#ccc'}">${proj.name}</div>
+        <div class="tt-desc">${proj.desc}</div>
+        <div class="tt-genes" style="margin-top:4px">${geneList}</div>`;
+    }
+  } else if (target.classList.contains('flow-band')) {
+    const fam = target.dataset.family;
+    const gene = target.dataset.gene;
+    const proj = target.dataset.project;
+    const famColor = geneFamilies[fam]?.color || '#888';
+    const tt = document.getElementById('tooltip');
+    tt.style.display = 'block';
+    tt.style.left = (e.clientX + 12) + 'px';
+    tt.style.top = (e.clientY + 12) + 'px';
+    tt.innerHTML = `<div class="tt-name" style="color:${famColor}">${gene} → ${proj}</div>`;
+  } else {
+    tooltip.style.display = 'none';
+  }
+});
+
+svg.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+
+// Initial render
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+{
+  "entries": [
+    {
+      "id": "headroom",
+      "name": "Headroom Compression",
+      "url": "http://127.0.0.1:8787/v1",
+      "auth_key": "${OPENROUTER_API_KEY}",
+      "enabled": true,
+      "order": 0,
+      "service_cmd": "headroom proxy --port 8787 --mode token_headroom --openai-api-url https://openrouter.ai/api/v1 --backend openrouter --no-telemetry",
+      "service_stop_cmd": "",
+      "health_path": "/health",
+      "port": 8787,
+      "timeout": 90,
+      "extra_headers": {},
+      "type": "http",
+      "model_prefixes": []
+    },
+    {
+      "id": "rtk",
+      "name": "RTK Terminal Compression",
+      "url": "",
+      "auth_key": "",
+      "enabled": true,
+      "order": 1,
+      "service_cmd": "",
+      "service_stop_cmd": "",
+      "health_path": "/health",
+      "port": 0,
+      "timeout": 90,
+      "extra_headers": {},
+      "type": "cli_wrapper",
+      "model_prefixes": []
+    },
+    {
+      "id": "cliproxyapi",
+      "name": "CLIProxyAPI (Antigravity)",
+      "url": "http://127.0.0.1:8317/v1",
+      "auth_key": "",
+      "enabled": false,
+      "order": 2,
+      "service_cmd": "/home/cheta/code/cliproxyapi/cli-proxy-api-plus --config /home/cheta/code/cliproxyapi/config.yaml",
+      "service_stop_cmd": "",
+      "health_path": "/v1/models",
+      "port": 8317,
+      "timeout": 90,
+      "extra_headers": {},
+      "type": "http",
+      "model_prefixes": []
+    }
+  ],
+  "router": {
+    "default": "",
+    "background": "stepfun/step-3.5-flash:free",
+    "think": "",
+    "long_context": "minimax/minimax-m2.5:free",
+    "long_context_threshold": 60000,
+    "web_search": "",
+    "image": "qwen/qwen2.5-vl-72b-instruct",
+    "custom_router_path": ""
+  }
+}

@@ -1,0 +1,27 @@
+[Unit]
+Description=Claude Code Proxy (LLM API Proxy with Headroom Compression)
+After=network.target headroom-proxy.service
+Wants=headroom-proxy.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/cheta/code/claude-code-proxy
+ExecStart=/home/cheta/code/claude-code-proxy/.venv/bin/python start_proxy.py --skip-validation
+Restart=on-failure
+RestartSec=10
+Environment="OPENAI_BASE_URL=http://127.0.0.1:8787/v1"
+Environment="PROVIDER_BASE_URL=http://127.0.0.1:8787/v1"
+Environment="PROVIDER_API_KEY=passthrough"
+Environment="OPENAI_API_KEY=passthrough"
+Environment="PATH=/home/cheta/code/claude-code-proxy/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="HOME=/home/cheta"
+StandardOutput=journal
+StandardError=journal
+
+# Prevent OOM on WSL
+OOMPolicy=continue
+MemoryHigh=2G
+
+[Install]
+WantedBy=default.target

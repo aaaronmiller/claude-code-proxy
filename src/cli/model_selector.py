@@ -14,6 +14,22 @@ from src.services.models.selection_history import record_selection, get_recent_s
 from src.services.usage.model_limits import get_model_limits
 from src.cli.env_utils import update_env_values
 
+try:
+    from rich.console import Console, Group
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+    from rich.layout import Layout
+    from rich.align import Align
+    from rich import box
+    from rich.spinner import Spinner
+    RICH_AVAILABLE = True
+    console = Console()
+except ImportError:
+    RICH_AVAILABLE = False
+    console = None
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # REFERENCE TERMINAL SIZE: 140 columns × 40 rows
 # Source: Ice-ninja's Ghostty config (~/.config/ghostty/config)
@@ -241,10 +257,13 @@ def pick_provider(slot: str, current_provider: Optional[str] = None) -> Optional
                 break
     
     while True:
-        displayed_providers = draw_provider_menu(cursor, slot, current_provider)
-        # displayed_providers should match 'providers' calculated above if logic is consistent
-        # Update 'providers' just in case capability changed? Unlikely in sub-second.
-        providers = displayed_providers 
+        if RICH_AVAILABLE:
+            console.clear()
+            console.print(draw_menu_rich(cursor, slot, current_provider))
+            providers = all_p # Filtering is handled by draw_menu_rich logic mapping? No, we filter before.
+        else:
+            displayed_providers = draw_provider_menu(cursor, slot, current_provider)
+            providers = displayed_providers 
         
         try:
             if ARROW_SUPPORT:
@@ -555,7 +574,7 @@ def format_model_line(idx: int, model_id: str, selected_for: Optional[str] = Non
     return part1 + part2 + part3 + part4
 
 
-def draw_ui(
+def draw_ui_rich(
     models: List[str],
     page: int,
     per_page: int,
@@ -564,129 +583,129 @@ def draw_ui(
     middle_model: Optional[str],
     small_model: Optional[str],
     show_all: bool
-):
-    """Draw the static UI (no scrolling)."""
-    clear_screen()
-    rows, cols = get_terminal_size()
-    
-    # Header
-    print("╔" + "═" * (cols - 2) + "╗")
-    print("║" + " MODEL SELECTOR ".center(cols - 2) + "║")
-    print("╠" + "═" * (cols - 2) + "╣")
-    
+) -> Panel:
+    """Build the Rich UI for the model selector."""
     # Current selections
-    print(f"║ BIG:    {pad_visual(big_model or 'not set', cols-12)}║")
-    print(f"║ MIDDLE: {pad_visual(middle_model or 'not set', cols-12)}║")
-    print(f"║ SMALL:  {pad_visual(small_model or 'not set', cols-12)}║")
-    print("╠" + "═" * (cols - 2) + "╣")
-    
-    # Model list header
+    sel_table = Table.grid(expand=True)
+    sel_table.add_column(style="bold cyan", width=10)
+    sel_table.add_column(style="cyan")
+    sel_table.add_row("BIG:", big_model or "[dim]not set[/dim]")
+    sel_table.add_row("MIDDLE:", middle_model or "[dim]not set[/dim]", style="bold green")
+    sel_table.add_row("SMALL:", small_model or "[dim]not set[/dim]", style="bold yellow")
+
+    sel_panel = Panel(sel_table, title="[bold]Current Selections[/bold]", border_style="blue", box=box.ROUNDED)
+
+    # Model list
     mode = "ALL MODELS" if show_all else "RECOMMENDED"
     total_models = len(models)
     total_pages = (total_models + per_page - 1) // per_page
     current_page = page + 1
     
-    header = f" {mode} ({total_models} models) - Page {current_page}/{total_pages} "
+    header_text = f"{mode} ({total_models} models) - Page {current_page}/{total_pages}"
     if search_query:
-        header += f"- Search: '{search_query}' "
-    print("║" + header.ljust(cols - 2) + "║")
-    print("╠" + "═" * (cols - 2) + "╣")
-    print(f"║ {'#':<3}  {'Model':<45} {'CTX':>6} {'OUT':>6}  {'Tags':<15}║")
-    print("╠" + "─" * (cols - 2) + "╣")
-    
-    # Model list (paginated)
+        header_text += f" - Search: '{search_query}'"
+
+    model_table = Table(expand=True, box=None, padding=(0, 1), show_header=True, header_style="bold magenta")
+    model_table.add_column("#", justify="right", width=4)
+    model_table.add_column("Model", style="cyan")
+    model_table.add_column("CTX", justify="right", width=6)
+    model_table.add_column("OUT", justify="right", width=6)
+    model_table.add_column("Tags", style="dim")
+
     start_idx = page * per_page
     end_idx = min(start_idx + per_page, total_models)
     
-    # Determine which models are selected
     selected_map = {}
-    if big_model in models:
-        selected_map[big_model] = "B"
-    if middle_model in models:
-        selected_map[middle_model] = "M"
-    if small_model in models:
-        selected_map[small_model] = "S"
-    
+    if big_model in models: selected_map[big_model] = "[bold cyan]B[/]"
+    if middle_model in models: selected_map[middle_model] = "[bold green]M[/]"
+    if small_model in models: selected_map[small_model] = "[bold yellow]S[/]"
+
     for i in range(start_idx, end_idx):
-        model_id = models[i]
-        selected_for = selected_map.get(model_id)
-        line = format_model_line(i + 1, model_id, selected_for, cols - 6)
-        # Truncate to fit terminal width
-        if visual_len(line) > cols - 4:
-            # Need visual truncate
-            line = line[:cols - 7] + "..." # Rough safety
-        print(f"║ {pad_visual(line, cols-4)} ║")
-    
-    # Fill remaining space
-    displayed = end_idx - start_idx
-    max_display = rows - 15  # Reserve space for header/footer
-    for _ in range(max_display - displayed):
-        print("║" + " " * (cols - 2) + "║")
-    
-    # Footer with commands
-    print("╠" + "═" * (cols - 2) + "╣")
-    print("║ COMMANDS:".ljust(cols - 1) + "║")
-    print("║   [number] b/m/s  - Assign model to Big/Middle/Small".ljust(cols - 1) + "║")
-    print("║   n/p             - Next/Previous page".ljust(cols - 1) + "║")
-    print("║   /[text]         - Search models".ljust(cols - 1) + "║")
-    print("║   a               - Toggle All/Recommended".ljust(cols - 1) + "║")
-    print("║   paste [model]   - Paste custom model ID".ljust(cols - 1) + "║")
-    print("║   q               - Save and quit".ljust(cols - 1) + "║")
-    print("╚" + "═" * (cols - 2) + "╝")
-    print()
-
-
-def draw_menu(cursor: int, big_model: str, middle_model: str, small_model: str,
-               big_provider: str = None, middle_provider: str = None, small_provider: str = None):
-    """Draw the main menu for selecting which slot to configure."""
-    clear_screen()
-    rows, cols = get_terminal_size()
-    
-    # Helper to format provider display
-    def fmt_provider(pid: str) -> str:
-        if not pid:
-            return "default"
-        return PROVIDERS.get(pid, {}).get("name", pid).replace("🌌 ", "").replace("🚀 ", "").replace("🌟 ", "").replace("🤖 ", "").replace("🏠 ", "").replace("⚙️  ", "")
-    
-    print("╔" + "═" * (cols - 2) + "╗")
-    print("║" + " MODEL & PROVIDER SELECTOR ".center(cols - 2) + "║")
-    print("╠" + "═" * (cols - 2) + "╣")
-    print("║" + " " * (cols - 2) + "║")
-    
-    # Slot options with provider info
-    options = [
-        ("BIG", big_model or "not set", fmt_provider(big_provider)),
-        ("MIDDLE", middle_model or "not set", fmt_provider(middle_provider)),
-        ("SMALL", small_model or "not set", fmt_provider(small_provider)),
-    ]
-
-    for i, (slot, model, provider) in enumerate(options):
-        marker = "▶" if i == cursor else " "
-        if model and model != "not set":
-            line = f"  {marker} {slot}: {model} @ {provider}"
+        m_id = models[i]
+        tag = selected_map.get(m_id, "")
+        
+        enriched = get_enriched_model_info(m_id)
+        if enriched:
+            ctx, out = enriched.get('context_length', 0), enriched.get('max_completion_tokens', 0)
         else:
-            line = f"  {marker} {slot}: (not configured)"
-        print("║ " + pad_visual(line, cols - 3) + "║")
-    
-    print("║" + " " * (cols - 2) + "║")
-    
-    # Action options
-    actions = [
-        ("VIEW HISTORY", ""),
-        ("MANAGE FREE CASCADE", ""),
-        ("SAVE & QUIT", ""),
-        ("BACK TO SETTINGS", ""),
+            ctx, out = get_model_limits(m_id)
+
+        def fmt_t(tokens):
+            if tokens >= 1000000: return f"{tokens/1000000:.1f}M"
+            if tokens >= 1000: return f"{tokens/1000:.0f}k"
+            return str(tokens) if tokens else "?"
+
+        badges = []
+        if enriched:
+            if enriched.get('pricing', {}).get('is_free', False): badges.append("🆓")
+            if enriched.get('supports_reasoning', False): badges.append("🧠")
+            if enriched.get('supports_vision', False): badges.append("👁️")
+            if enriched.get('supports_tools', False): badges.append("🔧")
+        
+        badge_str = " ".join(badges)
+        if tag: badge_str = f"{tag} {badge_str}"
+
+        model_table.add_row(
+            str(i + 1),
+            m_id,
+            fmt_t(ctx),
+            fmt_t(out),
+            badge_str
+        )
+
+    list_panel = Panel(model_table, title=f"[bold]{header_text}[/bold]", border_style="magenta", box=box.ROUNDED)
+
+    # Footer
+    footer_text = Text.from_markup(
+        "[bold cyan][number] b/m/s[/] Assign  [bold cyan]n/p[/] Paging  [bold cyan]/[/] Search  [bold cyan]a[/] Toggle Recommended  [bold cyan]q[/] Quit",
+        justify="center"
+    )
+    footer_panel = Panel(footer_text, border_style="dim", box=box.ROUNDED)
+
+    # Combine
+    layout = Group(
+        Panel(Align.center(Spinner("dots", text="[bold]MODEL SELECTOR[/bold]")), border_style="blue", box=box.ROUNDED),
+        sel_panel,
+        list_panel,
+        footer_panel
+    )
+    return Panel(layout, box=None)
+
+def draw_menu_rich(cursor: int, big_model: str, middle_model: str, small_model: str,
+                big_provider: str = None, middle_provider: str = None, small_provider: str = None) -> Panel:
+    """Build the Rich UI for the main menu."""
+    def fmt_provider(pid: str) -> str:
+        if not pid: return "default"
+        name = PROVIDERS.get(pid, {}).get("name", pid)
+        for icon in ["🌌 ", "🚀 ", "🌟 ", "🤖 ", "🏠 ", "⚙️  "]:
+            name = name.replace(icon, "")
+        return name
+
+    options = [
+        (f"BIG: {big_model or 'not set'} @ {fmt_provider(big_provider)}", "cyan"),
+        (f"MIDDLE: {middle_model or 'not set'} @ {fmt_provider(middle_provider)}", "green"),
+        (f"SMALL: {small_model or 'not set'} @ {fmt_provider(small_provider)}", "yellow"),
+        ("VIEW SELECTION HISTORY", "white"),
+        ("MANAGE FREE CASCADE", "white"),
+        ("SAVE & QUIT", "bold red"),
+        ("BACK TO SETTINGS", "dim"),
     ]
-    for i, (label, _) in enumerate(actions):
-        marker = "▶" if i + 3 == cursor else " "
-        line = f"  {marker} {label}"
-        print("║ " + pad_visual(line, cols - 3) + "║")
-    
-    print("║" + " " * (cols - 2) + "║")
-    print("╠" + "═" * (cols - 2) + "╣")
-    print("║ CONTROLS:".ljust(cols - 1) + "║")
-    print("║   ↑/↓ or j/k  Navigate    Enter  Configure    q  Quit".ljust(cols - 1) + "║")
-    print("╚" + "═" * (cols - 2) + "╝")
+
+    menu_table = Table.grid(expand=True)
+    menu_table.add_column()
+
+    for i, (label, color) in enumerate(options):
+        if i == cursor:
+            menu_table.add_row(Text(f" ▶ {label}", style=f"bold {color} reverse"))
+        else:
+            menu_table.add_row(Text(f"   {label}", style=color))
+
+    layout = Group(
+        Panel(Align.center(Spinner("bouncingBar", text="[bold]MODEL & PROVIDER SELECTOR[/bold]")), border_style="blue", box=box.ROUNDED),
+        Panel(menu_table, border_style="blue", box=box.ROUNDED, padding=(1, 2)),
+        Panel(Align.center("[bold cyan]↑/↓[/] Navigate  [bold cyan]Enter[/] Configure  [bold cyan]q[/] Quit"), border_style="dim", box=box.ROUNDED)
+    )
+    return Panel(layout, box=None)
 
 
 def get_key():
@@ -1269,7 +1288,11 @@ def run_model_selector_old():
     
     while True:
         # Draw UI
-        draw_ui(models, page, per_page, search_query, big_model, middle_model, small_model, show_all)
+        if RICH_AVAILABLE:
+            console.clear()
+            console.print(draw_ui_rich(models, page, per_page, search_query, big_model, middle_model, small_model, show_all))
+        else:
+            draw_ui(models, page, per_page, search_query, big_model, middle_model, small_model, show_all) or (clear_screen() and print("Fallback UI..."))
         
         # Get command
         try:

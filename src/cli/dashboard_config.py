@@ -27,6 +27,7 @@ try:
     from rich.text import Text
     from rich.box import ROUNDED, HEAVY
     from rich.align import Align
+    from rich.spinner import Spinner
     RICH_AVAILABLE = True
     console = Console()
 except ImportError:
@@ -145,8 +146,12 @@ class DashboardTUI:
         self.clear_screen()
         
         # 1. Header
+        header_text = Text("🚀 API Dashboard Configurator", style="bold cyan")
         console.print(Panel(
-            Align.center("[bold cyan]🚀 API Dashboard Configurator[/bold cyan]\n[dim]Arrow keys to move • Enter to select • s to toggle size • q to save & back[/dim]"),
+            Align.center(Group(
+                Spinner("dots", text=header_text),
+                Text("Arrow keys to move • Enter to select • s to toggle size • q to save & back", style="dim")
+            )),
             border_style="cyan",
             box=ROUNDED
         ))
@@ -205,7 +210,8 @@ class DashboardTUI:
 
         # Center "Terminal" Placeholder
         terminal_view = Panel(
-            "\n[dim]... terminal output ...[/dim]\n" * 8,
+            "\n[dim]  ╰─❯ tail -f /tmp/proxy-logs/headroom.log[/dim]\n" + 
+            "\n[dim]  ... terminal output ...[/dim]\n" * 6,
             title="Terminal Area (Live Output)",
             border_style="dim",
             box=ROUNDED

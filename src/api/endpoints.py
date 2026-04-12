@@ -442,6 +442,57 @@ async def create_message(
         # Update the openai_request with the routed model
         openai_request["model"] = routed_model
 
+        custom_client = None
+        active_api_key = openai_api_key
+
+        # Apply per-use-case model routing (image, long_context, think, background, etc.)
+        # This runs AFTER tier routing so use-case overrides win over tier defaults.
+        # _original_model carries the raw Claude model name (e.g. "claude-haiku-...") so the
+        # router can detect background/lightweight requests even after tier mapping.
+        openai_request["_original_model"] = request.model
+        _use_case_tier: Optional[str] = None  # cascade tier for use-case-routed requests
+        try:
+            from src.core.model_router import get_router
+            _use_case_route = get_router(config).route(openai_request)
+            if _use_case_route:
+                openai_request["model"] = _use_case_route.model
+                
+                # Check for custom endpoint wrapper
+                if _use_case_route.base_url:
+                    endpoint = _use_case_route.base_url
+                    if hasattr(config, 'provider_for_endpoint'):
+                        provider = config.provider_for_endpoint(endpoint)
+                    
+                    active_api_key = _use_case_route.api_key or openai_api_key
+                    custom_client = OpenAIClient(
+                        active_api_key, 
+                        endpoint, 
+                        config.request_timeout, 
+                        api_version=config.azure_api_version,
+                        custom_headers=custom_headers
+                    )
+                    custom_client.configure_per_model_clients(config)
+
+                # Determine which cascade list to use if this model fails.
+                # background → middle tier fallbacks (lighter models)
+                # image/web_search/think → big tier fallbacks (capability matters)
+                # long_context → big tier fallbacks (context window matters)
+                _orig = (openai_request.get("_original_model") or "").lower()
+                
+                # Check background model string handling safely against string or RouteTarget
+                bg_config = getattr(config, "router_background", "")
+                bg_model_str = bg_config.model if hasattr(bg_config, "model") else str(bg_config)
+                
+                if "haiku" in _orig or _use_case_route.model == bg_model_str:
+                    _use_case_tier = "middle"
+                else:
+                    _use_case_tier = "big"
+        except Exception as _router_err:
+            logger.warning(f"ModelRouter error (non-fatal): {_router_err}")
+        # Strip proxy-internal keys before forwarding upstream
+        openai_request.pop("_original_model", None)
+        openai_request.pop("_is_background", None)
+
         def infer_model_tier(model_name: str) -> Optional[str]:
             def norm(name):
                 return name.split("/", 1)[1].lower() if name and "/" in name else (name or "").lower()
@@ -610,20 +661,21 @@ async def create_message(
             # Streaming response - wrap in error handling
             logger.debug(f"Starting streaming response for request_id: {request_id}")
             try:
-                tier = infer_model_tier(openai_request.get("model", ""))
+                active_openai_client = custom_client if custom_client else openai_client
+                tier = infer_model_tier(openai_request.get("model", "")) or _use_case_tier
                 if config.model_cascade and tier:
                     openai_stream = (
-                        openai_client.create_chat_completion_stream_with_cascade(
+                        active_openai_client.create_chat_completion_stream_with_cascade(
                             openai_request,
                             tier=tier,
                             config=config,
                             request_id=request_id,
-                            api_key=openai_api_key,
+                            api_key=active_api_key,
                         )
                     )
                 else:
-                    openai_stream = openai_client.create_chat_completion_stream(
-                        openai_request, request_id, config, api_key=openai_api_key
+                    openai_stream = active_openai_client.create_chat_completion_stream(
+                        openai_request, request_id, config, api_key=active_api_key
                     )
                 logger.debug(f"OpenAI stream created for request_id: {request_id}")
                 return StreamingResponse(
@@ -632,7 +684,7 @@ async def create_message(
                         request,
                         logger,
                         http_request,
-                        openai_client,
+                        active_openai_client,
                         request_id,
                         config,
                         provider,
@@ -699,20 +751,21 @@ async def create_message(
 
             while True:
                 try:
-                    tier = infer_model_tier(openai_request.get("model", ""))
+                    active_openai_client = custom_client if custom_client else openai_client
+                    tier = infer_model_tier(openai_request.get("model", "")) or _use_case_tier
                     if config.model_cascade and tier:
                         openai_response = (
-                            await openai_client.create_chat_completion_with_cascade(
+                            await active_openai_client.create_chat_completion_with_cascade(
                                 openai_request,
                                 tier=tier,
                                 config=config,
                                 request_id=request_id,
-                                api_key=openai_api_key,
+                                api_key=active_api_key,
                             )
                         )
                     else:
-                        openai_response = await openai_client.create_chat_completion(
-                            openai_request, request_id, config, api_key=openai_api_key
+                        openai_response = await active_openai_client.create_chat_completion(
+                            openai_request, request_id, config, api_key=active_api_key
                         )
                     break  # Success!
 
@@ -754,8 +807,12 @@ async def create_message(
 
                         if key_reloader.check_for_updates():
                             logger.info("Key update detected! Retrying request...")
-                            # Re-configure client with new key
-                            openai_client.api_key = config.openai_api_key or ""  # type: ignore
+                            # Re-configure active client with new key
+                            if custom_client:
+                                custom_client.api_key = config.openai_api_key or ""
+                                active_api_key = custom_client.api_key
+                            else:
+                                openai_client.api_key = config.openai_api_key or ""  # type: ignore
                             continue
 
                         # Log progress every 10 seconds

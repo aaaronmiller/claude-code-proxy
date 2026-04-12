@@ -404,6 +404,75 @@ async def reload_config():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/proxy-chain")
+async def get_proxy_chain():
+    """Return the current proxy chain configuration."""
+    try:
+        from src.core.proxy_chain import get_chain
+        chain = get_chain()
+        return chain.to_dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/api/proxy-chain")
+async def update_proxy_chain(body: dict):
+    """
+    Replace the proxy chain configuration and persist to disk.
+
+    Accepts the same JSON shape as GET /api/proxy-chain returns.
+    The running singleton is reloaded immediately.
+    """
+    try:
+        from src.core.proxy_chain import ProxyChain, reload_chain
+        from src.core.model_router import reload_router
+        new_chain = ProxyChain.from_dict(body)
+        new_chain.save()
+        reload_chain()
+        reload_router()
+        logger.info("Proxy chain updated via API")
+        return {"status": "success", "message": "Proxy chain saved and reloaded"}
+    except Exception as e:
+        logger.error(f"Failed to update proxy chain: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/router-config")
+async def get_router_config():
+    """Return the current model router configuration."""
+    try:
+        from src.core.proxy_chain import get_chain
+        from dataclasses import asdict
+        return asdict(get_chain().router)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/api/router-config")
+async def update_router_config(body: dict):
+    """
+    Update the model router configuration and persist to disk.
+
+    Accepts the same JSON shape as GET /api/router-config returns.
+    """
+    try:
+        from src.core.proxy_chain import RouterConfig, get_chain, reload_chain
+        from src.core.model_router import reload_router
+        chain = get_chain()
+        # Merge supplied fields into current RouterConfig
+        current = {k: v for k, v in vars(chain.router).items()}
+        current.update({k: v for k, v in body.items() if hasattr(chain.router, k)})
+        chain.router = RouterConfig(**current)
+        chain.save()
+        reload_chain()
+        reload_router()
+        logger.info("Router config updated via API")
+        return {"status": "success", "message": "Router config saved and reloaded"}
+    except Exception as e:
+        logger.error(f"Failed to update router config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/profiles")
 async def list_profiles():
     """List all saved profiles"""
