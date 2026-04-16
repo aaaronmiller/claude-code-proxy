@@ -119,7 +119,12 @@ def _get_fallback_limits() -> Dict[str, Dict[str, int]]:
         "openrouter/gpt-oss-120b-medium": {"context": 128000, "output": 4096},
         "openrouter/hunter-alpha": {"context": 128000, "output": 4096},
         "openai/gpt-oss-120b:free": {"context": 128000, "output": 4096},
-        "stepfun/step-3.5-flash:free": {"context": 128000, "output": 4096},
+        "nvidia/nemotron-nano-9b-v2:free": {"context": 128000, "output": 16384},
+        "nvidia/nemotron-3-super-120b-a12b:free": {"context": 131072, "output": 16384},
+        "minimax/minimax-m2.5:free": {"context": 196608, "output": 16384},
+        "openai/gpt-oss-120b:free": {"context": 131072, "output": 16384},
+        "qwen/qwen3-235b-a22b:free": {"context": 40960, "output": 8192},
+        "qwen/qwen3-30b-a3b:free": {"context": 40960, "output": 8192},
         # VibeProxy/CLIProxyAPI model limits are dynamic — use conservative defaults
         # Meta Llama
         "meta-llama/llama-3.3-70b": {"context": 128000, "output": 4096},

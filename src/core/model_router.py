@@ -198,6 +198,7 @@ class ModelRouter:
         Return the RouteTarget to use, or None to leave the existing model unchanged.
 
         Priority:
+          0. Disabled/passthrough flags (short-circuit)
           1. Custom router script
           2. Image detection
           3. Web search detection
@@ -207,6 +208,10 @@ class ModelRouter:
           7. Default model (or None → caller keeps original)
         """
         rc = self._rc
+
+        # 0. Passthrough or disabled — skip all routing
+        if rc.passthrough or rc.disabled:
+            return None
 
         # 1. Custom router — Python
         python_router = self._get_python_router()

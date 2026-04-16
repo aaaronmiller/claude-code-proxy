@@ -50,7 +50,9 @@ def _build_or_models_list(primary: str, fallback_models: list) -> list:
     if not filtered:
         # All breakers open — fall back to primary only so OR still gets a valid request
         filtered = [primary]
-    return filtered
+    # OpenRouter currently rejects `models` arrays longer than 3 total entries.
+    # Keep the primary model first, then cap the native list to fit OR's limit.
+    return filtered[:3]
 
 
 def _get_dynamic_fallback_models(limit: int = 10) -> list:
@@ -524,11 +526,13 @@ class OpenAIClient:
             self.active_requests[request_id] = cancel_event
 
         try:
-            # Ensure stream is enabled
-            request["stream"] = True
+            # Ensure stream options are set for usage tracking
             if "stream_options" not in request:
                 request["stream_options"] = {}
             request["stream_options"]["include_usage"] = True
+            # stream=True is already in the request dict from the converter;
+            # the SDK's create() accepts it via **request unpacking.
+            request["stream"] = True
 
             # Create the streaming completion
             streaming_completion = await client.chat.completions.create(**request)

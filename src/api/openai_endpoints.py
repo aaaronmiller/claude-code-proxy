@@ -281,6 +281,11 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
             )
         tier = infer_model_tier(openai_request.get("model", ""))
 
+        # Check if passthrough mode is active (disables cascade + routing)
+        from src.core.proxy_chain import get_chain
+        _chain = get_chain()
+        cascade_enabled = config.model_cascade and not _chain.router.passthrough
+
         if body.stream:
             # Streaming response
             async def generate_stream():
@@ -326,7 +331,7 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
 
                         return [f"data: {json.dumps(chunk_dict)}\n\n"]
 
-                    if config.model_cascade and tier:
+                    if cascade_enabled and tier:
                         stream_lines = openai_client.create_chat_completion_stream_with_cascade(
                             openai_request,
                             tier=tier,
@@ -346,6 +351,7 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                             for output in transform_chunk_dict(chunk_dict):
                                 yield output
                     else:
+                        openai_request.pop("stream", None)  # avoid duplicate kwarg
                         stream = await client.chat.completions.create(
                             **openai_request, stream=True
                         )
@@ -393,7 +399,7 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
             )
         else:
             # Non-streaming response
-            if config.model_cascade and tier:
+            if cascade_enabled and tier:
                 response_dict = await openai_client.create_chat_completion_with_cascade(
                     openai_request,
                     tier=tier,

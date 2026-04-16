@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **`proxies statusline` / `proxies sl`** — Visual TUI for building the Claude Code
+  status line. Toggle 23 available segments (CC stdin-JSON fields, system metrics,
+  proxy/headroom/RTK metrics), assign each to line 1 or 2 with left/right alignment,
+  reorder within groups. Live preview updates on every keystroke. Saves to
+  `~/.claude/statusline-config.json` and patches `settings.json` to wire up the
+  universal renderer. Keybindings: space=toggle, l/r=align, 1/2=line, j/k=reorder,
+  s=save, q=quit.
+- **`scripts/statusline_segments.sh`** — Library of 23 reusable segment renderers
+  (`seg_<id>`): model, cwd, cwd_full, git_branch, session_cost, transcript_lines,
+  clock, cpu, memory, disk, proxy_health, headroom_health, routing_mode,
+  proxy_requests, proxy_cost, proxy_latency, cascade_events, tokens_per_sec,
+  session_tokens, tool_stats, headroom_savings, rtk_savings, last_proxy_error.
+  Self-describes via `seg_list` (id|label|category|sample) for TUI consumption.
+- **`scripts/statusline_render.sh`** — Universal statusline renderer. Reads stdin
+  JSON from Claude Code + config from `~/.claude/statusline-config.json`, emits
+  two lines with left-flowing + right-anchored segments using ANSI cursor
+  positioning (`\033[<col>G`) to pin right items regardless of left content width.
+- **`proxies config` subcommand** — Full proxy chain management from CLI without the TUI.
+  Subcommands: `show`, `set <id> <key> <value>`, `toggle <id>`, `order <id> up|down`,
+  `add <id> <name> <url>`, `rm <id>`, `env`. Edits `config/proxy_chain.json` directly.
+  Example: `proxies config toggle cliproxyapi` to enable/disable an entry.
+- **`proxies router` subcommand** — Task-based model substitution management.
+  Subcommands: `show`, `set <slot> <model>`, `clear <slot>`, `disable`, `enable`,
+  `passthrough`. The `passthrough` mode disables ALL routing AND cascade fallback
+  (for Anthropic Pro subscription direct mode). `disable` keeps tier models but
+  skips all per-use-case routing. Changes persist to both `proxy_chain.json` and `.env`.
+- **`proxies metrics` subcommand** — Detailed usage metrics: `summary` (tokens/cost/latency
+  + cascade events + RTK savings), `models` (per-model token breakdown with success/fail),
+  `tools` (24h tool call analytics), `daily` (7-day usage history). Pulls from existing
+  `/api/stats`, `/api/metrics/aggregate`, `/api/metrics/tool-analytics`, `/api/metrics/history`.
+- **Router disabled/passthrough runtime enforcement** — `RouterConfig.disabled` and
+  `RouterConfig.passthrough` now short-circuit `ModelRouter.route()` to return `None`
+  (tier fallback). `passthrough` additionally disables cascade in `openai_endpoints.py`
+  by gating on `not chain.router.passthrough`.
+- **Tmux pane status bars** — `proxies up` now configures a bottom status bar across
+  the session showing live proxy stats (left) and Headroom + RTK compression stats (right).
+  Refreshed every 5 seconds. Powered by `scripts/tmux_status.sh`.
+- **`scripts/cc_statusline_metrics.sh`** — Claude Code status line integration module.
+  Exposes sourceable functions (`get_proxy_health`, `get_session_tokens`, `get_tool_stats`,
+  `get_headroom_savings`, `get_rtk_savings`, `get_last_proxy_error`, `get_routing_mode`,
+  `get_fixed_width_model`) plus a standalone `all` mode that prints a one-line joined
+  status. Caches API responses for 5s in a PID-scoped tmpdir. See `docs/STATUS_BARS.md`.
+- **`docs/STATUS_BARS.md`** — Integration guide for tmux status bars and Claude Code
+  status line, including a fix for variable-width layout jitter (fixed-column positioning).
 - **RTK visibility** — fixed RTK visibility in `proxies status` output.
 - **Hermes proxy routing** — updated `~/.hermes/config.yaml` `base_url` to `127.0.0.1:8082` so it routes through proxy.
 - **Web UI Fixes** — fixed Tool and Cache icon imports in `realtime/+page.svelte`.
@@ -65,35 +109,33 @@ All notable changes to this project will be documented in this file.
 - **`config.py` auto-derives `PROVIDER_BASE_URL`** from proxy chain when env var not set.
   `ROUTER_*` env vars loaded into `Config` fields and merged into `ModelRouter` on init.
 
-### Added
-- **RTK visibility** — fixed RTK visibility in `proxies status` output.
-- **Hermes proxy routing** — updated `~/.hermes/config.yaml` `base_url` to `127.0.0.1:8082` so it routes through proxy.
-- **Web UI Fixes** — fixed Tool and Cache icon imports in `realtime/+page.svelte`.
-- **Chain management UI** — built a new web UI page for proxy chain/router management (`/chain`).
-- **Use Case Endpoint Overrides** — added configurable provider and endpoint overrides (URL/API Key) for role-based model switching (e.g. background, think, long_context) allowing complete delegation of tool calls or specific contexts to dedicated model platforms (like Nvidia Nemotron API).
-- **Circuit breaker → OR `models` array feedback** (`client.py`) — `_build_or_models_list()` now
-  filters OPEN circuit breakers from the OpenRouter native `models` array before injecting into
-  requests. Dead models no longer waste OR's routing budget; if all breakers are OPEN, primary model
-  is kept as the only entry so OR still receives a valid request.
-- **`parse_ok` structural tracking** (`circuit_breaker.py`) — `record_parse_ok()` and
-  `record_stream_finish()` methods on `CircuitBreaker` detect structurally broken HTTP 200 responses
-  (empty content, missing `tool_calls`, `finish_reason: length`). Two soft failures accumulate to one
-  hard-failure equivalent toward the circuit-open threshold. Wired into both non-streaming and
-  streaming cascade success paths.
-- **Background routing cascade fallback** (`endpoints.py`) — Use-case-routed requests (background,
-  image, long_context, think) now carry a `_use_case_tier` that flows into `infer_model_tier` as a
-  fallback. Background/haiku requests fall back to `MIDDLE_CASCADE`; image/long_context/think fall
-  back to `BIG_CASCADE`. Previously, a single failure of `ROUTER_BACKGROUND` was a hard client error.
-- **Circuit breaker state persistence** (`circuit_breaker.py`) — State is saved to
-  `data/circuit_breaker_state.json` when the cascade exhausts all models. On startup, breakers are
-  restored from disk: OPEN breakers recalculate their remaining cooldown, breakers whose cooldown
-  elapsed during the restart come back as HALF_OPEN. Eliminates quota waste re-discovering dead models
-  after every proxy restart.
-- **Streaming cascade circuit breaker skip** (`client.py`) — The streaming cascade was missing the
-  OPEN circuit breaker skip that existed in the non-streaming path. Fixed: both paths now skip OPEN
-  breakers before attempting a model.
-
 ### Fixed
+- **OpenRouter native fallback overflow** — `src/core/client.py` now caps the injected
+  OpenRouter `models` array at 3 total entries (primary + fallbacks), matching OpenRouter's
+  request limit and preventing `400 "'models' array must have 3 items or fewer"` failures.
+- **`.envrc` / `.env` fallback split-brain** — trimmed `.envrc`
+  `OPENROUTER_FALLBACK_MODELS` to 2 entries so shell-started proxy sessions match `.env`
+  and stop overriding the safe native fallback count.
+- **Proxy chain self-loop on auto-derived upstreams** — `src/core/proxy_chain.py`
+  now skips the local Claude Code Proxy entry when deriving `PROVIDER_BASE_URL`, so
+  chain-managed launches resolve to Headroom/upstream instead of routing `:8082` back into itself.
+- **Dead model `stepfun/step-3.5-flash:free` removed** — Model no longer exists on OpenRouter (404).
+  Replaced with `nvidia/nemotron-nano-9b-v2:free` across all configs: `proxy_chain.json`, `.env`,
+  `.envrc`, `proxy_chain.py` defaults, `model_catalog.py`, `chain_tui.py` placeholder.
+- **Model limits missing for all active free models** — Added correct context/output limits for
+  `nvidia/nemotron-3-super-120b-a12b:free`, `minimax/minimax-m2.5:free`, `openai/gpt-oss-120b:free`,
+  `nvidia/nemotron-nano-9b-v2:free`, `qwen/qwen3-235b-a22b:free`, `qwen/qwen3-30b-a3b:free` to both
+  static fallback in `model_limits.py` and `data/model_limits.json`.
+- **Fixed 114 models with `output: None`** — Set reasonable output defaults (16384 for ≥64K ctx, 8192
+  for smaller) so proxy doesn't fall back to 4096 for every free model.
+- **Context overflow on minimax-m2.5** — Added `max_tokens` capping in `request_converter.py` that
+  caps output tokens to the model's actual output limit (e.g. 16384 for minimax-m2.5) instead of
+  sending 128K output that blows past the 196K context window.
+- **`.envrc` model overrides** — BIG_MODEL/MIDDLE_MODEL/SMALL_MODEL were set to CLIProxyAPI-only models
+  (gemini-3.1-pro-high) but CLIProxyAPI is disabled. Changed to OpenRouter free models as defaults.
+- **Streaming duplicate `stream` parameter** — `openai_endpoints.py` passed `stream=True` as both a
+  dict key and keyword arg to `create()`, causing `got multiple values for keyword argument 'stream'`.
+  Fixed by popping `stream` from dict before passing as kwarg.
 - **Crash on manual startup without `PROVIDER_API_KEY`** — `crosstalk.py` line 511 has a module-level
   `CrosstalkOrchestrator(config)` that runs at import time. In passthrough mode (`openai_api_key=None`),
   `AsyncOpenAI(api_key=None)` raised `OpenAIError`. Fixed in `src/core/client.py`: substitute
@@ -104,6 +146,15 @@ All notable changes to this project will be documented in this file.
   `src/core/config.py` so it correctly enables passthrough mode (was treated as a real key before).
   `"pass"` was already in the list. `"passthrough"` intentionally NOT added — the systemd service uses
   that value in proxy mode (not passthrough mode) and CLIProxyAPI replaces it with real auth downstream.
+
+### Added
+- **`proxies stats` command** — Pulls usage statistics from proxy API: requests today, total tokens,
+  avg latency, recent requests, cascade events. Also shows RTK token savings if installed.
+- **Installer Headroom configuration** — `install-all.sh` now passes `--openai-api-url` and
+  `--backend` args to Headroom, configurable via `HEADROOM_BACKEND` and `HEADROOM_API_URL` env vars.
+  Also configures `proxy_chain.json` and sets up RTK in CLAUDE.md during install.
+- **Centralized Headroom config** — Added `HEADROOM_BACKEND`, `HEADROOM_API_URL`, `HEADROOM_MODE`
+  env vars so all proxy configuration lives in `.envrc`.
 
 ### Changed
 - **Starship `scan_timeout`** raised from 30ms → 500ms in `~/.config/starship.toml` to stop timeout

@@ -1,5 +1,6 @@
 import json
 import re
+import time
 import uuid
 import logging
 import os
@@ -695,6 +696,18 @@ async def convert_openai_streaming_to_claude(
     tool_text_mode = False
     tool_text_parsed_any = False
 
+    # Option C reasoning handling: if client did NOT request extended thinking,
+    # reasoning_content from the upstream model is swallowed (kept out of history)
+    # but a liveness heartbeat is emitted into the text stream so the client
+    # paints something instead of hanging. Full reasoning is teed to a log file.
+    thinking_requested = original_request.thinking is not None
+    reasoning_active = False
+    reasoning_placeholder_emitted = False
+    reasoning_chars_since_heartbeat = 0
+    reasoning_last_beat = time.monotonic()
+    reasoning_log_file = None
+    reasoning_log_path = None
+
     try:
         async for line in openai_stream:
             if line.strip():
@@ -718,26 +731,95 @@ async def convert_openai_streaming_to_claude(
                     delta = choice.get("delta", {})
                     finish_reason = choice.get("finish_reason")
 
+                    # Detect upstream error payloads (OpenRouter forwards 429/500
+                    # as chunks with an "error" field). Without this, the stream
+                    # quietly stalls until the client times out.
+                    if chunk.get("error"):
+                        err = chunk["error"]
+                        if isinstance(err, dict):
+                            err_msg = err.get("message", "Upstream error")
+                            err_code = err.get("code", "upstream_error")
+                        else:
+                            err_msg = str(err)
+                            err_code = "upstream_error"
+                        logger.error(
+                            f"Upstream error in stream: {err_code} - {err_msg}"
+                        )
+                        yield f"event: error\ndata: {json.dumps({'type': 'error', 'error': {'type': 'api_error', 'message': f'Upstream error ({err_code}): {err_msg}'}}, ensure_ascii=False)}\n\n"
+                        return
+
                     # Handle reasoning/thinking content
                     reasoning_content = delta.get("reasoning_content") or delta.get(
                         "thinking"
                     )
 
                     if reasoning_content:
-                        # Handle switching to thinking block
-                        if current_block_type != "thinking":
-                            if current_block_index >= 0:
-                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+                        if thinking_requested:
+                            # Client asked for extended thinking — emit as native
+                            # thinking block (original behavior).
+                            if current_block_type != "thinking":
+                                if current_block_index >= 0:
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+                                current_block_index += 1
+                                current_block_type = "thinking"
+                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_THINKING, 'thinking': ''}}, ensure_ascii=False)}\n\n"
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_THINKING, 'thinking': reasoning_content}}, ensure_ascii=False)}\n\n"
+                        else:
+                            # Option C: client did NOT request thinking. Tee
+                            # reasoning to a log file and emit a liveness heartbeat
+                            # into the already-open text block at index 0 so the
+                            # client paints *something* during long chain-of-thought.
+                            if reasoning_log_file is None:
+                                try:
+                                    log_dir = os.path.expanduser(
+                                        "~/.cache/claude-code-proxy/reasoning"
+                                    )
+                                    os.makedirs(log_dir, exist_ok=True)
+                                    reasoning_log_path = os.path.join(
+                                        log_dir, f"{message_id}.log"
+                                    )
+                                    reasoning_log_file = open(
+                                        reasoning_log_path, "w", encoding="utf-8"
+                                    )
+                                except Exception as _log_err:
+                                    logger.warning(
+                                        f"Could not open reasoning log: {_log_err}"
+                                    )
+                                    reasoning_log_file = False  # sentinel: give up
 
-                            current_block_index += 1
-                            current_block_type = "thinking"
-                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_THINKING, 'thinking': ''}}, ensure_ascii=False)}\n\n"
+                            if reasoning_log_file:
+                                try:
+                                    reasoning_log_file.write(reasoning_content)
+                                    reasoning_log_file.flush()
+                                except Exception:
+                                    pass
 
-                        yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_THINKING, 'thinking': reasoning_content}}, ensure_ascii=False)}\n\n"
+                            reasoning_active = True
+                            reasoning_chars_since_heartbeat += len(reasoning_content)
+
+                            if not reasoning_placeholder_emitted:
+                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': '💭 thinking'}}, ensure_ascii=False)}\n\n"
+                                reasoning_placeholder_emitted = True
+                                reasoning_last_beat = time.monotonic()
+                                reasoning_chars_since_heartbeat = 0
+                            else:
+                                now = time.monotonic()
+                                if (
+                                    now - reasoning_last_beat >= 1.5
+                                    or reasoning_chars_since_heartbeat >= 400
+                                ):
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': '.'}}, ensure_ascii=False)}\n\n"
+                                    reasoning_last_beat = now
+                                    reasoning_chars_since_heartbeat = 0
 
                     # Handle standard text content
                     text_content = delta.get("content")
                     if text_content is not None:
+                        # If we just finished a reasoning heartbeat phase, break
+                        # the placeholder line before the real answer streams in.
+                        if reasoning_active and text_content.strip():
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': '\n\n'}}, ensure_ascii=False)}\n\n"
+                            reasoning_active = False
                         if tool_text_mode or "<tool_call>" in text_content:
                             tool_text_mode = True
                             tool_text_buffer += text_content
@@ -963,8 +1045,15 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     request_id: str,
     config=None,
     provider: str = "gemini",
+    on_complete=None,
 ):
-    """Convert OpenAI streaming response to Claude streaming format with cancellation support and provider-aware normalization."""
+    """Convert OpenAI streaming response to Claude streaming format with cancellation support and provider-aware normalization.
+
+    Args:
+        on_complete: Optional async callback invoked when the stream finishes.
+            Signature: async (usage_data: dict, stop_reason: str, error: str | None) -> None
+    """
+    stream_start_time = time.monotonic()
 
     message_id = f"msg_{uuid.uuid4().hex[:24]}"
 
@@ -1007,6 +1096,16 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     tool_text_buffer = ""
     tool_text_mode = False
     tool_text_parsed_any = False
+
+    # Option C reasoning handling state (see convert_openai_streaming_to_claude
+    # for the full explanation — same logic replicated here for parity).
+    thinking_requested = original_request.thinking is not None
+    reasoning_active = False
+    reasoning_placeholder_emitted = False
+    reasoning_chars_since_heartbeat = 0
+    reasoning_last_beat = time.monotonic()
+    reasoning_log_file = None
+    reasoning_log_path = None
 
     try:
         async for line in openai_stream:
@@ -1057,27 +1156,94 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                     delta = choice.get("delta", {})
                     finish_reason = choice.get("finish_reason")
 
+                    # Detect upstream error payloads (OpenRouter forwards 429/500
+                    # as chunks with an "error" field). Without this, the stream
+                    # quietly stalls until the client times out.
+                    if chunk.get("error"):
+                        err = chunk["error"]
+                        if isinstance(err, dict):
+                            err_msg = err.get("message", "Upstream error")
+                            err_code = err.get("code", "upstream_error")
+                        else:
+                            err_msg = str(err)
+                            err_code = "upstream_error"
+                        logger.error(
+                            f"Upstream error in stream: {err_code} - {err_msg}"
+                        )
+                        yield f"event: error\ndata: {json.dumps({'type': 'error', 'error': {'type': 'api_error', 'message': f'Upstream error ({err_code}): {err_msg}'}}, ensure_ascii=False)}\n\n"
+                        return
+
                     # Handle reasoning/thinking content
                     reasoning_content = delta.get("reasoning_content") or delta.get(
                         "thinking"
                     )
 
                     if reasoning_content:
-                        # Handle switching to thinking block
-                        if current_block_type != "thinking":
-                            if current_block_index >= 0:
-                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+                        if thinking_requested:
+                            # Client asked for extended thinking — emit as native
+                            # thinking block (original behavior).
+                            if current_block_type != "thinking":
+                                if current_block_index >= 0:
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': current_block_index}, ensure_ascii=False)}\n\n"
+                                current_block_index += 1
+                                current_block_type = "thinking"
+                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_THINKING, 'thinking': ''}}, ensure_ascii=False)}\n\n"
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_THINKING, 'thinking': reasoning_content}}, ensure_ascii=False)}\n\n"
+                        else:
+                            # Option C: client did NOT request thinking. Tee
+                            # reasoning to a log file and emit a liveness heartbeat
+                            # into the already-open text block at index 0 so the
+                            # client paints *something* during long chain-of-thought.
+                            if reasoning_log_file is None:
+                                try:
+                                    log_dir = os.path.expanduser(
+                                        "~/.cache/claude-code-proxy/reasoning"
+                                    )
+                                    os.makedirs(log_dir, exist_ok=True)
+                                    reasoning_log_path = os.path.join(
+                                        log_dir, f"{message_id}.log"
+                                    )
+                                    reasoning_log_file = open(
+                                        reasoning_log_path, "w", encoding="utf-8"
+                                    )
+                                except Exception as _log_err:
+                                    logger.warning(
+                                        f"Could not open reasoning log: {_log_err}"
+                                    )
+                                    reasoning_log_file = False  # sentinel: give up
 
-                            current_block_index += 1
-                            current_block_type = "thinking"
-                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_THINKING, 'thinking': ''}}, ensure_ascii=False)}\n\n"
+                            if reasoning_log_file:
+                                try:
+                                    reasoning_log_file.write(reasoning_content)
+                                    reasoning_log_file.flush()
+                                except Exception:
+                                    pass
 
-                        yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_THINKING, 'thinking': reasoning_content}}, ensure_ascii=False)}\n\n"
+                            reasoning_active = True
+                            reasoning_chars_since_heartbeat += len(reasoning_content)
+
+                            if not reasoning_placeholder_emitted:
+                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': '💭 thinking'}}, ensure_ascii=False)}\n\n"
+                                reasoning_placeholder_emitted = True
+                                reasoning_last_beat = time.monotonic()
+                                reasoning_chars_since_heartbeat = 0
+                            else:
+                                now = time.monotonic()
+                                if (
+                                    now - reasoning_last_beat >= 1.5
+                                    or reasoning_chars_since_heartbeat >= 400
+                                ):
+                                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': '.'}}, ensure_ascii=False)}\n\n"
+                                    reasoning_last_beat = now
+                                    reasoning_chars_since_heartbeat = 0
 
                     # Handle standard text content
                     text_content = delta.get("content")
                     # Only process if content is non-empty (skip null/empty during tool calls)
                     if text_content:
+                        if reasoning_active and text_content.strip():
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': '\n\n'}}, ensure_ascii=False)}\n\n"
+                            reasoning_active = False
                         if tool_text_mode or "<tool_call>" in text_content:
                             tool_text_mode = True
                             tool_text_buffer += text_content
@@ -1386,6 +1552,13 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                 },
             }
         yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+        if on_complete:
+            try:
+                duration_ms = (time.monotonic() - stream_start_time) * 1000
+                import asyncio
+                asyncio.ensure_future(on_complete(usage_data, final_stop_reason, duration_ms, str(e)))
+            except Exception:
+                pass
         return
     except Exception as e:
         # Handle any streaming errors gracefully
@@ -1398,9 +1571,17 @@ async def convert_openai_streaming_to_claude_with_cancellation(
             "error": {"type": "api_error", "message": f"Streaming error: {str(e)}"},
         }
         yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+        if on_complete:
+            try:
+                duration_ms = (time.monotonic() - stream_start_time) * 1000
+                import asyncio
+                asyncio.ensure_future(on_complete(usage_data, final_stop_reason, duration_ms, str(e)))
+            except Exception:
+                pass
         return
 
     # Send final SSE events
+    stream_error = None
     if tool_text_mode and not tool_text_parsed_any and tool_text_buffer.strip():
         # Fallback: emit buffered text if we never parsed a tool call
         if current_block_type != "text":
@@ -1422,3 +1603,12 @@ async def convert_openai_streaming_to_claude_with_cancellation(
 
     yield f"event: {Constants.EVENT_MESSAGE_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_MESSAGE_DELTA, 'delta': {'stop_reason': final_stop_reason, 'stop_sequence': None}, 'usage': usage_data}, ensure_ascii=False)}\n\n"
     yield f"event: {Constants.EVENT_MESSAGE_STOP}\ndata: {json.dumps({'type': Constants.EVENT_MESSAGE_STOP}, ensure_ascii=False)}\n\n"
+
+    # Fire completion callback with accumulated metrics
+    if on_complete:
+        try:
+            duration_ms = (time.monotonic() - stream_start_time) * 1000
+            import asyncio
+            asyncio.ensure_future(on_complete(usage_data, final_stop_reason, duration_ms, stream_error))
+        except Exception as cb_err:
+            logger.warning(f"on_complete callback failed: {cb_err}")

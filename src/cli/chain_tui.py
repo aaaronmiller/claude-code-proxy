@@ -165,7 +165,7 @@ class RouterPanel(Container):
         yield Label("Default  (general tasks, blank = BIG_MODEL)")
         yield Input(rc.default, id="r-default", placeholder="")
         yield Label("Background  (lightweight background tasks)")
-        yield Input(rc.background, id="r-background", placeholder="stepfun/step-3.5-flash:free")
+        yield Input(rc.background, id="r-background", placeholder="nvidia/nemotron-nano-9b-v2:free")
         yield Label("Think  (reasoning / Plan Mode)")
         yield Input(rc.think, id="r-think", placeholder="")
         yield Label("Long-context model")

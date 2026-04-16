@@ -254,7 +254,7 @@ class ModelCatalogService:
                 # MiniMax M2.5: BEST benchmarks - Intelligence 41.9, Coding 37.4, Agentic 55.6
                 "minimax/minimax-m2.5:free",  # 197K ctx - BEST (better than 91%!)
                 "nvidia/nemotron-3-super-120b-a12b:free",  # 1M ctx - best context, good benchmarks
-                "stepfun/step-3.5-flash:free",  # 256K ctx - excellent benchmarks
+                "nvidia/nemotron-nano-9b-v2:free",  # 128K ctx - fast background model
                 "qwen/qwen3-next-80b-a3b-instruct:free",  # 262K ctx
                 "openrouter/free",  # Router (unpredictable)
             ],

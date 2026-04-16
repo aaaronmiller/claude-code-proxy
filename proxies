@@ -117,9 +117,8 @@ _launch_chain_tmux() {
         return 1
     fi
 
-    # Always include the main claude-code-proxy in the chain
-    # It starts LAST (after all upstream services are ready)
-    local proxy_cmd="cd $PROXY_DIR && source .venv/bin/activate && LOG_LEVEL=info python start_proxy.py --skip-validation"
+    # Note: Claude Code Proxy is now a first-class entry in proxy_chain.json
+    # (order=0, so reversed-start puts it last — upstream services ready first).
 
     # Create tmux session with first entry
     local first_entry="${entries[0]}"
@@ -140,14 +139,28 @@ _launch_chain_tmux() {
         pane=$((pane+1))
     done
 
-    # Final pane: claude-code-proxy itself
-    tmux split-window -v -t "${TMUX_SESSION}:0.$((pane-1))"
-    tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
-        "echo -e \"\\033[1;36m── Claude Code Proxy (:8082) ──\\033[0m\"" C-m
-    tmux send-keys -t "${TMUX_SESSION}:0.${pane}" "$proxy_cmd" C-m
+    # (Claude Code Proxy is launched via the entry loop above, as order=0 in
+    # proxy_chain.json — reversed-start puts it in the final pane.)
 
     tmux select-layout -t "$TMUX_SESSION" even-vertical
     tmux rename-window -t "$TMUX_SESSION" "chain"
+
+    # ── Pane status bars ──
+    # Show a per-pane status line at the bottom of each pane, refreshed every 5s.
+    # Uses pane-border-status for a compact per-pane label at the top border.
+    local status_script="$PROXY_DIR/scripts/tmux_status.sh"
+    if [ -x "$status_script" ]; then
+        tmux set-option -t "$TMUX_SESSION" -g pane-border-status top
+        tmux set-option -t "$TMUX_SESSION" -g pane-border-format "#{pane_title}"
+        tmux set-option -t "$TMUX_SESSION" -g status-interval 5
+        tmux set-option -t "$TMUX_SESSION" -g status-left-length 200
+        tmux set-option -t "$TMUX_SESSION" -g status-right-length 200
+        # Bottom status bar: proxy summary + headroom summary + rtk summary
+        tmux set-option -t "$TMUX_SESSION" -g status-left "#(${status_script} proxy) "
+        tmux set-option -t "$TMUX_SESSION" -g status-right "#(${status_script} headroom) │ #(${status_script} rtk)"
+        tmux set-option -t "$TMUX_SESSION" -g status-bg "colour235"
+        tmux set-option -t "$TMUX_SESSION" -g status-fg "white"
+    fi
 }
 
 # ── Main start command ──
@@ -246,6 +259,15 @@ cmd_chain() {
     python -m src.cli.chain_tui
 }
 
+# ── Statusline builder TUI ──
+cmd_statusline() {
+    cd "$PROXY_DIR"
+    source .venv/bin/activate 2>/dev/null || true
+    # Ensure textual is installed (silent no-op if already present)
+    python -c "import textual" 2>/dev/null || pip install -q "textual>=0.47.0"
+    python -m src.cli.statusline_tui
+}
+
 # ── Log tailing ──
 cmd_logs() {
     echo -e "\n${CYAN}Tailing proxy logs (Ctrl+C to stop)${NC}\n"
@@ -321,28 +343,931 @@ cmd_watch() {
     echo -e "\n${CYAN}Watch stopped.${NC}"
 }
 
+# ── Stats: compression metrics + usage summary ──
+cmd_stats() {
+    echo -e "\n${CYAN}Proxy Statistics${NC}\n"
+
+    # Check proxy is running
+    if ! curl -sf --max-time 2 "http://127.0.0.1:8082/health" > /dev/null 2>&1; then
+        fail "Claude Code Proxy is not running on :8082"
+        return 1
+    fi
+
+    # Fetch stats from API
+    local stats
+    stats=$(curl -sf --max-time 5 "http://127.0.0.1:8082/api/stats" 2>/dev/null)
+    if [ -z "$stats" ]; then
+        fail "Could not fetch stats from proxy API"
+        return 1
+    fi
+
+    # Parse and display
+    local requests tokens cost latency
+    requests=$(echo "$stats" | _python -c "import json,sys; d=json.load(sys.stdin); print(d.get('requests_today',0))" 2>/dev/null)
+    tokens=$(echo "$stats" | _python -c "import json,sys; d=json.load(sys.stdin); t=d.get('total_tokens',0); print(f'{t:,}' if t else '0')" 2>/dev/null)
+    cost=$(echo "$stats" | _python -c "import json,sys; d=json.load(sys.stdin); print(f\"\${d.get('est_cost',0):.4f}\")" 2>/dev/null)
+    latency=$(echo "$stats" | _python -c "import json,sys; d=json.load(sys.stdin); print(f\"{d.get('avg_latency',0)}ms\")" 2>/dev/null)
+
+    echo -e "  ${GREEN}Requests today:${NC}  $requests"
+    echo -e "  ${GREEN}Total tokens:${NC}    $tokens"
+    echo -e "  ${GREEN}Est. cost:${NC}       $cost"
+    echo -e "  ${GREEN}Avg latency:${NC}     $latency"
+
+    # RTK compression stats (if rtk is installed)
+    echo ""
+    if command -v rtk &>/dev/null; then
+        echo -e "  ${CYAN}RTK Token Savings:${NC}"
+        rtk gain 2>/dev/null | while IFS= read -r line; do
+            echo "    $line"
+        done
+    else
+        echo -e "  ${YELLOW}RTK not installed — no terminal compression stats${NC}"
+    fi
+
+    # Recent requests
+    echo ""
+    echo -e "  ${CYAN}Recent requests:${NC}"
+    echo "$stats" | _python -c "
+import json, sys
+d = json.load(sys.stdin)
+for r in d.get('recent_requests', [])[:5]:
+    model = r.get('model','?')[:35]
+    tokens = r.get('tokens', 0)
+    dur = r.get('duration', 0)
+    status = r.get('status', '?')
+    icon = '✓' if status == 'success' else '✗'
+    print(f'    {icon} {model:<35} {tokens:>7} tok  {dur:>5}ms')
+" 2>/dev/null
+
+    # Cascade stats
+    echo ""
+    echo -e "  ${CYAN}Cascade events:${NC}"
+    echo "$stats" | _python -c "
+import json, sys
+d = json.load(sys.stdin)
+cascade = d.get('cascade', {})
+events = cascade.get('events', [])
+if not events:
+    print('    (none)')
+else:
+    for e in events[:5]:
+        model = e.get('model','?')[:30]
+        action = e.get('action','?')
+        reason = e.get('reason','')[:25]
+        print(f'    {action:<10} {model:<30} {reason}')
+" 2>/dev/null
+
+    echo ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CONFIG — View/edit all proxy settings interactively
+# ══════════════════════════════════════════════════════════════════════════════
+
+cmd_config() {
+    local action="${1:-show}"
+    shift 2>/dev/null || true
+
+    case "$action" in
+        show)   _config_show ;;
+        set)    _config_set "$@" ;;
+        toggle) _config_toggle "$@" ;;
+        order)  _config_reorder "$@" ;;
+        add)    _config_add "$@" ;;
+        rm)     _config_remove "$@" ;;
+        env)    _config_env ;;
+        *)
+            echo -e "\n${CYAN}Usage:${NC} proxies config {show|set|toggle|order|add|rm|env}"
+            echo ""
+            echo "  show                    Show all chain entries and settings"
+            echo "  set <id> <key> <value>  Set a property on a chain entry"
+            echo "  toggle <id>             Toggle a chain entry enabled/disabled"
+            echo "  order <id> up|down      Move a chain entry up or down"
+            echo "  add <id> <name> <url>   Add a new chain entry"
+            echo "  rm <id>                 Remove a chain entry"
+            echo "  env                     Show all relevant env vars"
+            echo ""
+            echo -e "  ${CYAN}Examples:${NC}"
+            echo "    proxies config show"
+            echo "    proxies config toggle cliproxyapi"
+            echo "    proxies config set headroom port 8787"
+            echo "    proxies config set headroom service_cmd 'headroom proxy --port 8787 --mode cost_savings'"
+            echo "    proxies config order headroom down"
+            echo "    proxies config add myproxy 'My Proxy' http://127.0.0.1:9000/v1"
+            echo ""
+            ;;
+    esac
+}
+
+_config_show() {
+    echo -e "\n${CYAN}Proxy Chain Configuration${NC}"
+    echo -e "  ${YELLOW}File:${NC} $CHAIN_FILE\n"
+
+    _python - "$CHAIN_FILE" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+try:
+    data = json.loads(open(path).read())
+except Exception as e:
+    print(f"  Error reading {path}: {e}")
+    sys.exit(1)
+
+entries = data.get("entries", [])
+for i, e in enumerate(entries):
+    enabled = "✓" if e.get("enabled") else "✗"
+    color = "\033[0;32m" if e.get("enabled") else "\033[0;31m"
+    nc = "\033[0m"
+    etype = e.get("type", "http")
+    port_str = f":{e['port']}" if e.get("port", 0) > 0 else ""
+    url = e.get("url", "") or "(no URL)"
+    if etype == "cli_wrapper":
+        url = "(CLI wrapper)"
+
+    print(f"  {color}[{enabled}]{nc} {i+1}. {e.get('name','?')}  {url}{port_str}")
+    print(f"       id={e['id']}  type={etype}  order={e.get('order',0)}  timeout={e.get('timeout',90)}s")
+    if e.get("service_cmd"):
+        cmd = e["service_cmd"]
+        if len(cmd) > 70:
+            cmd = cmd[:67] + "..."
+        print(f"       cmd: {cmd}")
+    if e.get("health_path") and e.get("health_path") != "/health":
+        print(f"       health: {e['health_path']}")
+    print()
+
+# Router section
+router = data.get("router", {})
+if router:
+    print(f"  \033[0;36mModel Router:\033[0m")
+    slots = ["default", "background", "think", "long_context", "web_search", "image"]
+    for slot in slots:
+        val = router.get(slot, "")
+        if isinstance(val, dict):
+            val = val.get("model", "")
+        label = f"    {slot:<20}"
+        if val:
+            print(f"{label} → {val}")
+        else:
+            print(f"{label}   (tier fallback)")
+    threshold = router.get("long_context_threshold", 60000)
+    print(f"    {'threshold':<20} → {threshold:,} tokens")
+    custom = router.get("custom_router_path", "")
+    if custom:
+        print(f"    {'custom_router':<20} → {custom}")
+    print()
+PYEOF
+}
+
+_config_set() {
+    local entry_id="$1" key="$2" value="$3"
+    if [ -z "$entry_id" ] || [ -z "$key" ] || [ -z "$value" ]; then
+        fail "Usage: proxies config set <entry_id> <key> <value>"
+        return 1
+    fi
+
+    _python - "$CHAIN_FILE" "$entry_id" "$key" "$value" <<'PYEOF'
+import json, sys
+path, entry_id, key, value = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+data = json.loads(open(path).read())
+
+found = False
+for e in data.get("entries", []):
+    if e["id"] == entry_id:
+        found = True
+        # Type coercion for known fields
+        if key in ("port", "order", "timeout"):
+            value = int(value)
+        elif key in ("enabled",):
+            value = value.lower() in ("true", "1", "yes")
+        e[key] = value
+        break
+
+if not found:
+    print(f"  ✗ Entry '{entry_id}' not found")
+    sys.exit(1)
+
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+print(f"  ✓ {entry_id}.{key} = {value}")
+PYEOF
+}
+
+_config_toggle() {
+    local entry_id="$1"
+    if [ -z "$entry_id" ]; then
+        fail "Usage: proxies config toggle <entry_id>"
+        return 1
+    fi
+
+    _python - "$CHAIN_FILE" "$entry_id" <<'PYEOF'
+import json, sys
+path, entry_id = sys.argv[1], sys.argv[2]
+data = json.loads(open(path).read())
+
+for e in data.get("entries", []):
+    if e["id"] == entry_id:
+        e["enabled"] = not e.get("enabled", True)
+        state = "enabled" if e["enabled"] else "disabled"
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=2)
+        color = "\033[0;32m" if e["enabled"] else "\033[0;31m"
+        print(f"  {color}✓\033[0m {e.get('name', entry_id)}: {state}")
+        sys.exit(0)
+
+print(f"  ✗ Entry '{entry_id}' not found")
+sys.exit(1)
+PYEOF
+}
+
+_config_reorder() {
+    local entry_id="$1" direction="$2"
+    if [ -z "$entry_id" ] || [ -z "$direction" ]; then
+        fail "Usage: proxies config order <entry_id> up|down"
+        return 1
+    fi
+
+    _python - "$CHAIN_FILE" "$entry_id" "$direction" <<'PYEOF'
+import json, sys
+path, entry_id, direction = sys.argv[1], sys.argv[2], sys.argv[3]
+data = json.loads(open(path).read())
+entries = data.get("entries", [])
+
+idx = next((i for i, e in enumerate(entries) if e["id"] == entry_id), -1)
+if idx < 0:
+    print(f"  ✗ Entry '{entry_id}' not found")
+    sys.exit(1)
+
+if direction == "up" and idx > 0:
+    entries[idx-1], entries[idx] = entries[idx], entries[idx-1]
+elif direction == "down" and idx < len(entries) - 1:
+    entries[idx], entries[idx+1] = entries[idx+1], entries[idx]
+else:
+    print(f"  ⚠ Cannot move {entry_id} {direction} (already at boundary)")
+    sys.exit(0)
+
+for i, e in enumerate(entries):
+    e["order"] = i
+data["entries"] = entries
+
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+
+for i, e in enumerate(entries):
+    marker = " ←" if e["id"] == entry_id else ""
+    print(f"  {i+1}. {e.get('name','?')}{marker}")
+PYEOF
+}
+
+_config_add() {
+    local entry_id="$1" name="$2" url="$3"
+    if [ -z "$entry_id" ] || [ -z "$name" ]; then
+        fail "Usage: proxies config add <id> <name> [url]"
+        return 1
+    fi
+
+    _python - "$CHAIN_FILE" "$entry_id" "$name" "${url:-}" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+entry_id, name = sys.argv[2], sys.argv[3]
+url = sys.argv[4] if len(sys.argv) > 4 else ""
+data = json.loads(open(path).read())
+entries = data.get("entries", [])
+
+if any(e["id"] == entry_id for e in entries):
+    print(f"  ✗ Entry '{entry_id}' already exists")
+    sys.exit(1)
+
+entry_type = "cli_wrapper" if not url else "http"
+port = 0
+if url:
+    import re
+    m = re.search(r":(\d+)", url)
+    if m:
+        port = int(m.group(1))
+
+new_entry = {
+    "id": entry_id,
+    "name": name,
+    "url": url,
+    "auth_key": "",
+    "enabled": True,
+    "order": len(entries),
+    "service_cmd": "",
+    "service_stop_cmd": "",
+    "health_path": "/health",
+    "port": port,
+    "timeout": 90,
+    "extra_headers": {},
+    "type": entry_type,
+    "model_prefixes": [],
+}
+entries.append(new_entry)
+data["entries"] = entries
+
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+print(f"  ✓ Added '{name}' (id={entry_id}, type={entry_type})")
+PYEOF
+}
+
+_config_remove() {
+    local entry_id="$1"
+    if [ -z "$entry_id" ]; then
+        fail "Usage: proxies config rm <entry_id>"
+        return 1
+    fi
+
+    _python - "$CHAIN_FILE" "$entry_id" <<'PYEOF'
+import json, sys
+path, entry_id = sys.argv[1], sys.argv[2]
+data = json.loads(open(path).read())
+entries = data.get("entries", [])
+original_len = len(entries)
+entries = [e for e in entries if e["id"] != entry_id]
+
+if len(entries) == original_len:
+    print(f"  ✗ Entry '{entry_id}' not found")
+    sys.exit(1)
+
+for i, e in enumerate(entries):
+    e["order"] = i
+data["entries"] = entries
+
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+print(f"  ✓ Removed '{entry_id}'")
+PYEOF
+}
+
+_config_env() {
+    echo -e "\n${CYAN}Proxy Environment Variables${NC}\n"
+    echo -e "  ${YELLOW}From .env + shell (shell wins):${NC}\n"
+
+    local vars=(
+        PROVIDER_API_KEY PROVIDER_BASE_URL PROXY_AUTH_KEY
+        HOST PORT LOG_LEVEL
+        BIG_MODEL MIDDLE_MODEL SMALL_MODEL
+        MODEL_CASCADE FALLBACK_METHOD
+        BIG_CASCADE MIDDLE_CASCADE SMALL_CASCADE
+        OPENROUTER_FALLBACK_MODELS
+        ROUTER_DEFAULT ROUTER_BACKGROUND ROUTER_THINK
+        ROUTER_LONG_CONTEXT ROUTER_LONG_CONTEXT_THRESHOLD
+        ROUTER_WEB_SEARCH ROUTER_CUSTOM_PATH
+        REASONING_EFFORT REASONING_MAX_TOKENS
+        HEADROOM_BACKEND HEADROOM_API_URL HEADROOM_MODE
+        TRACK_USAGE ENABLE_DASHBOARD
+    )
+
+    for var in "${vars[@]}"; do
+        local val="${!var:-}"
+        if [ -n "$val" ]; then
+            # Mask API keys
+            if [[ "$var" == *API_KEY* || "$var" == *AUTH_KEY* ]]; then
+                local masked="${val:0:8}...${val: -4}"
+                echo -e "  ${GREEN}$var${NC} = $masked"
+            else
+                echo -e "  ${GREEN}$var${NC} = $val"
+            fi
+        else
+            echo -e "  ${YELLOW}$var${NC} = (not set)"
+        fi
+    done
+    echo ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ROUTER — View/edit task-based model substitutions
+# ══════════════════════════════════════════════════════════════════════════════
+
+cmd_router() {
+    local action="${1:-show}"
+    shift 2>/dev/null || true
+
+    case "$action" in
+        show)       _router_show ;;
+        set)        _router_set "$@" ;;
+        clear)      _router_clear "$@" ;;
+        disable)    _router_disable ;;
+        enable)     _router_enable ;;
+        passthrough) _router_passthrough ;;
+        *)
+            echo -e "\n${CYAN}Usage:${NC} proxies router {show|set|clear|disable|enable|passthrough}"
+            echo ""
+            echo "  show                  Show current task-based model routing"
+            echo "  set <slot> <model>    Set model for a routing slot"
+            echo "  clear <slot>          Clear override (fall back to tier model)"
+            echo "  disable               Disable ALL task substitutions (tier models only)"
+            echo "  enable                Re-enable task substitutions"
+            echo "  passthrough           Anthropic Pro mode (bypass all routing)"
+            echo ""
+            echo -e "  ${CYAN}Slots:${NC} default, background, think, long_context, web_search, image"
+            echo ""
+            echo -e "  ${CYAN}Examples:${NC}"
+            echo "    proxies router set background nvidia/nemotron-nano-9b-v2:free"
+            echo "    proxies router set think tngtech/tng-r1t-chimera:free"
+            echo "    proxies router clear web_search"
+            echo "    proxies router disable"
+            echo "    proxies router passthrough"
+            echo ""
+            ;;
+    esac
+}
+
+_router_show() {
+    echo -e "\n${CYAN}Task-Based Model Router${NC}\n"
+
+    _python - "$CHAIN_FILE" <<'PYEOF'
+import json, sys, os
+path = sys.argv[1]
+data = json.loads(open(path).read())
+router = data.get("router", {})
+
+# Check if routing is disabled
+disabled = router.get("_disabled", False)
+passthrough = router.get("_passthrough", False)
+
+if passthrough:
+    print("  \033[0;33m⚠ PASSTHROUGH MODE\033[0m — All requests go directly to Anthropic API")
+    print("    No model substitution, no cascade, no routing.\n")
+elif disabled:
+    print("  \033[0;33m⚠ ROUTING DISABLED\033[0m — All slots fall through to tier models")
+    print("    Use 'proxies router enable' to re-activate.\n")
+
+slots = [
+    ("default",      "General tasks"),
+    ("background",   "Haiku-class / tool summaries"),
+    ("think",        "Reasoning / Plan Mode"),
+    ("long_context", "Large context (>threshold)"),
+    ("web_search",   "Web search tool calls"),
+    ("image",        "Vision / image requests"),
+]
+
+for slot, desc in slots:
+    val = router.get(slot, "")
+    if isinstance(val, dict):
+        val = val.get("model", "")
+
+    env_var = f"ROUTER_{slot.upper()}"
+    env_val = os.environ.get(env_var, "")
+
+    if env_val and env_val != val:
+        # Env override active
+        print(f"  {slot:<16} → \033[0;32m{env_val}\033[0m  \033[0;33m(env override)\033[0m")
+        if val:
+            print(f"  {'':16}   \033[0;90m(json: {val})\033[0m")
+    elif val:
+        print(f"  {slot:<16} → \033[0;32m{val}\033[0m")
+    else:
+        print(f"  {slot:<16}   \033[0;90m(tier fallback)\033[0m")
+
+    print(f"  {'':16}   {desc}")
+    print()
+
+threshold = router.get("long_context_threshold", 60000)
+print(f"  {'threshold':<16} → {threshold:,} tokens")
+custom = router.get("custom_router_path", "")
+if custom:
+    print(f"  {'custom_router':<16} → {custom}")
+print()
+PYEOF
+}
+
+_router_set() {
+    local slot="$1" model="$2"
+    if [ -z "$slot" ] || [ -z "$model" ]; then
+        fail "Usage: proxies router set <slot> <model>"
+        return 1
+    fi
+
+    local valid_slots="default background think long_context web_search image long_context_threshold custom_router_path"
+    if [[ ! " $valid_slots " =~ " $slot " ]]; then
+        fail "Invalid slot '$slot'. Valid: $valid_slots"
+        return 1
+    fi
+
+    _python - "$CHAIN_FILE" "$slot" "$model" <<'PYEOF'
+import json, sys
+path, slot, model = sys.argv[1], sys.argv[2], sys.argv[3]
+data = json.loads(open(path).read())
+router = data.setdefault("router", {})
+
+if slot == "long_context_threshold":
+    router[slot] = int(model)
+elif slot == "custom_router_path":
+    router[slot] = model
+else:
+    # Store as RouteTarget dict for consistency with proxy_chain.py
+    router[slot] = {"model": model, "base_url": "", "api_key": ""}
+
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+print(f"  ✓ router.{slot} = {model}")
+PYEOF
+
+    # Also update .env if it exists
+    local env_file="$PROXY_DIR/.env"
+    if [ -f "$env_file" ]; then
+        local env_var="ROUTER_${slot^^}"
+        if grep -q "^${env_var}=" "$env_file" 2>/dev/null; then
+            sed -i "s|^${env_var}=.*|${env_var}=${model}|" "$env_file"
+            ok "Updated $env_var in .env"
+        else
+            echo "${env_var}=${model}" >> "$env_file"
+            ok "Added $env_var to .env"
+        fi
+    fi
+}
+
+_router_clear() {
+    local slot="$1"
+    if [ -z "$slot" ]; then
+        fail "Usage: proxies router clear <slot>"
+        return 1
+    fi
+
+    _python - "$CHAIN_FILE" "$slot" <<'PYEOF'
+import json, sys
+path, slot = sys.argv[1], sys.argv[2]
+data = json.loads(open(path).read())
+router = data.setdefault("router", {})
+router[slot] = {"model": "", "base_url": "", "api_key": ""}
+
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+print(f"  ✓ router.{slot} cleared (tier fallback)")
+PYEOF
+
+    # Clear from .env too
+    local env_file="$PROXY_DIR/.env"
+    local env_var="ROUTER_${slot^^}"
+    if [ -f "$env_file" ] && grep -q "^${env_var}=" "$env_file" 2>/dev/null; then
+        sed -i "s|^${env_var}=.*|${env_var}=|" "$env_file"
+        ok "Cleared $env_var in .env"
+    fi
+}
+
+_router_disable() {
+    _python - "$CHAIN_FILE" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+data = json.loads(open(path).read())
+router = data.setdefault("router", {})
+router["_disabled"] = True
+router.pop("_passthrough", None)
+
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+print("  ✓ All task-based routing DISABLED — tier models only")
+print("    Use 'proxies router enable' to re-activate")
+PYEOF
+}
+
+_router_enable() {
+    _python - "$CHAIN_FILE" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+data = json.loads(open(path).read())
+router = data.setdefault("router", {})
+router.pop("_disabled", None)
+router.pop("_passthrough", None)
+
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+print("  ✓ Task-based routing ENABLED")
+PYEOF
+}
+
+_router_passthrough() {
+    echo -e "\n${CYAN}Anthropic Pro Passthrough Mode${NC}\n"
+    echo "  This disables ALL model routing and cascade fallback."
+    echo "  Requests go directly to Anthropic with your Pro subscription."
+    echo ""
+
+    _python - "$CHAIN_FILE" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+data = json.loads(open(path).read())
+router = data.setdefault("router", {})
+router["_passthrough"] = True
+router.pop("_disabled", None)
+
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+print("  ✓ PASSTHROUGH MODE enabled")
+print("    • No model substitution")
+print("    • No cascade fallback")
+print("    • Compression proxies (Headroom/RTK) still active if enabled")
+print()
+print("  To revert: proxies router enable")
+PYEOF
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# METRICS — Comprehensive usage metrics from proxy API
+# ══════════════════════════════════════════════════════════════════════════════
+
+cmd_metrics() {
+    local scope="${1:-summary}"
+    shift 2>/dev/null || true
+
+    case "$scope" in
+        summary)  _metrics_summary ;;
+        models)   _metrics_models ;;
+        tools)    _metrics_tools ;;
+        daily)    _metrics_daily ;;
+        *)
+            echo -e "\n${CYAN}Usage:${NC} proxies metrics {summary|models|tools|daily}"
+            echo ""
+            echo "  summary     Overview: requests, tokens, cost, latency"
+            echo "  models      Per-model token usage breakdown"
+            echo "  tools       Tool call success/fail rates"
+            echo "  daily       Daily usage history"
+            echo ""
+            ;;
+    esac
+}
+
+_metrics_summary() {
+    echo -e "\n${CYAN}Metrics Summary${NC}\n"
+
+    if ! curl -sf --max-time 2 "http://127.0.0.1:8082/health" > /dev/null 2>&1; then
+        fail "Proxy not running on :8082"
+        return 1
+    fi
+
+    local stats agg
+    stats=$(curl -sf --max-time 5 "http://127.0.0.1:8082/api/stats" 2>/dev/null)
+    agg=$(curl -sf --max-time 5 "http://127.0.0.1:8082/api/metrics/aggregate" 2>/dev/null)
+
+    _python - <<PYEOF
+import json, sys
+
+stats = json.loads('''$stats''') if '''$stats''' else {}
+agg_raw = json.loads('''$agg''') if '''$agg''' else {}
+agg = agg_raw.get("metrics", agg_raw)
+
+# Basic stats
+requests = stats.get("requests_today", 0)
+tokens = stats.get("total_tokens", 0)
+cost = stats.get("est_cost", 0)
+latency = stats.get("avg_latency", 0)
+
+print(f"  Requests today:    {requests}")
+print(f"  Total tokens:      {tokens:,}")
+print(f"  Est. cost:         \${cost:.4f}")
+print(f"  Avg latency:       {latency}ms")
+print()
+
+# Aggregate metrics
+if agg:
+    total_req = agg.get("total_requests", 0)
+    total_tok = agg.get("total_tokens", 0)
+    sessions = agg.get("active_sessions", agg.get("sessions", 0))
+    print(f"  Total requests:    {total_req}")
+    print(f"  Lifetime tokens:   {total_tok:,}")
+    if sessions:
+        print(f"  Active sessions:   {sessions}")
+
+# Cascade
+cascade = stats.get("cascade", {})
+events = cascade.get("events", [])
+if events:
+    print()
+    print("  Cascade events (recent):")
+    for e in events[:5]:
+        model = e.get("model","?")[:30]
+        action = e.get("action","?")
+        print(f"    {action:<10} {model}")
+print()
+PYEOF
+
+    # RTK stats
+    if command -v rtk &>/dev/null; then
+        echo -e "  ${CYAN}RTK Token Savings:${NC}"
+        rtk gain 2>/dev/null | while IFS= read -r line; do
+            echo "    $line"
+        done
+        echo ""
+    fi
+}
+
+_metrics_models() {
+    echo -e "\n${CYAN}Per-Model Token Usage${NC}\n"
+
+    if ! curl -sf --max-time 2 "http://127.0.0.1:8082/health" > /dev/null 2>&1; then
+        fail "Proxy not running on :8082"
+        return 1
+    fi
+
+    # Query the usage tracker directly via the stats/requests endpoint
+    local recent
+    recent=$(curl -sf --max-time 5 "http://127.0.0.1:8082/api/stats/requests" 2>/dev/null)
+
+    _python - <<PYEOF
+import json, sys
+from collections import defaultdict
+
+data = json.loads('''$recent''') if '''$recent''' else []
+
+# Aggregate by model
+models = defaultdict(lambda: {"requests": 0, "tokens": 0, "success": 0, "fail": 0})
+for r in data:
+    model = r.get("model", "unknown")
+    models[model]["requests"] += 1
+    models[model]["tokens"] += r.get("tokens", 0)
+    if r.get("status") == "success":
+        models[model]["success"] += 1
+    else:
+        models[model]["fail"] += 1
+
+if not models:
+    print("  (no request data)")
+    sys.exit(0)
+
+# Sort by token count descending
+sorted_models = sorted(models.items(), key=lambda x: x[1]["tokens"], reverse=True)
+
+print(f"  {'Model':<40} {'Reqs':>5} {'Tokens':>10} {'OK':>4} {'Fail':>4}")
+print(f"  {'─'*40} {'─'*5} {'─'*10} {'─'*4} {'─'*4}")
+for model, stats in sorted_models:
+    name = model[:40]
+    print(f"  {name:<40} {stats['requests']:>5} {stats['tokens']:>10,} {stats['success']:>4} {stats['fail']:>4}")
+print()
+PYEOF
+}
+
+_metrics_tools() {
+    echo -e "\n${CYAN}Tool Call Analytics${NC}\n"
+
+    if ! curl -sf --max-time 2 "http://127.0.0.1:8082/health" > /dev/null 2>&1; then
+        fail "Proxy not running on :8082"
+        return 1
+    fi
+
+    local tools
+    tools=$(curl -sf --max-time 5 "http://127.0.0.1:8082/api/metrics/tool-analytics?hours=24" 2>/dev/null)
+
+    _python - <<PYEOF
+import json, sys
+
+data = json.loads('''$tools''') if '''$tools''' else {}
+
+if data.get("status") == "no_data":
+    print("  (no tool analytics data yet)")
+    sys.exit(0)
+
+tools = data.get("tools", data.get("tool_stats", {}))
+if isinstance(tools, list):
+    for t in tools[:15]:
+        name = t.get("name", "?")[:30]
+        success = t.get("success", 0)
+        fail = t.get("failure", t.get("fail", 0))
+        total = success + fail
+        rate = (success / total * 100) if total > 0 else 0
+        print(f"  {name:<30} {success:>4}✓ {fail:>3}✗  ({rate:.0f}% success)")
+elif isinstance(tools, dict):
+    for name, stats in sorted(tools.items(), key=lambda x: x[1].get("success",0), reverse=True)[:15]:
+        success = stats.get("success", 0)
+        fail = stats.get("failure", stats.get("fail", 0))
+        total = success + fail
+        rate = (success / total * 100) if total > 0 else 0
+        print(f"  {name[:30]:<30} {success:>4}✓ {fail:>3}✗  ({rate:.0f}% success)")
+else:
+    print("  (unexpected data format)")
+print()
+PYEOF
+}
+
+_metrics_daily() {
+    echo -e "\n${CYAN}Daily Usage History${NC}\n"
+
+    if ! curl -sf --max-time 2 "http://127.0.0.1:8082/health" > /dev/null 2>&1; then
+        fail "Proxy not running on :8082"
+        return 1
+    fi
+
+    local history
+    history=$(curl -sf --max-time 5 "http://127.0.0.1:8082/api/metrics/history?days=7" 2>/dev/null)
+
+    _python - <<PYEOF
+import json, sys
+
+data = json.loads('''$history''') if '''$history''' else {}
+
+days = data.get("daily", data.get("history", []))
+if not days:
+    print("  (no history data)")
+    sys.exit(0)
+
+if isinstance(days, list):
+    print(f"  {'Date':<12} {'Requests':>8} {'Tokens':>12} {'Cost':>8}")
+    print(f"  {'─'*12} {'─'*8} {'─'*12} {'─'*8}")
+    for d in days:
+        date = d.get("date", "?")
+        reqs = d.get("requests", 0)
+        tokens = d.get("tokens", 0)
+        cost = d.get("cost", 0)
+        print(f"  {date:<12} {reqs:>8} {tokens:>12,} \${cost:>7.4f}")
+elif isinstance(days, dict):
+    print(f"  {'Date':<12} {'Requests':>8} {'Tokens':>12}")
+    print(f"  {'─'*12} {'─'*8} {'─'*12}")
+    for date, stats in sorted(days.items()):
+        reqs = stats.get("requests", 0)
+        tokens = stats.get("tokens", 0)
+        print(f"  {date:<12} {reqs:>8} {tokens:>12,}")
+print()
+PYEOF
+}
+
+cmd_help() {
+    cat <<HELP
+$(echo -e "${CYAN}proxies${NC} — Manage the Claude Code proxy chain lifecycle")
+
+$(echo -e "${CYAN}USAGE${NC}")
+  proxies                         # no args → runs 'status' (chain health)
+  proxies <command> [args...]
+  proxies help | --help | -h
+
+$(echo -e "${CYAN}LIFECYCLE${NC}")
+  up, start                       Start all chain services in tmux
+  down, stop                      Stop all services and kill tmux session
+  restart                         Stop and restart
+
+$(echo -e "${CYAN}MONITORING${NC}")
+  status, st                      Show service health (default when no args)
+  stats                           Compression metrics + usage summary
+  metrics <type>                  Detailed metrics (see METRICS below)
+  watch [lines]                   Live monitor tmux pane output
+  logs, tail                      Tail log files
+
+$(echo -e "${CYAN}CONFIGURATION${NC}")
+  config <cmd> [args]             Edit proxy chain (see CONFIG below)
+  router <cmd> [args]             Edit task-based routing (see ROUTER below)
+  chain, tui                      Open interactive chain manager TUI
+  statusline, sl                  Build Claude Code status line (visual TUI)
+
+$(echo -e "${CYAN}CONFIG subcommands${NC}")  (edits config/proxy_chain.json)
+  config show                              Show all entries + router config
+  config set <id> <key> <value>            Set a property on an entry
+                                           e.g. config set headroom port 8787
+  config toggle <id>                       Enable/disable an entry
+                                           e.g. config toggle cliproxyapi
+  config order <id> up|down                Move entry up/down in chain
+  config add <id> <name> [url]             Add a new chain entry
+  config rm <id>                           Remove a chain entry
+  config env                               Dump all relevant env vars (masks keys)
+
+$(echo -e "${CYAN}ROUTER subcommands${NC}")  (task-based model substitution)
+  router show                              Show current routing + env overrides
+  router set <slot> <model>                Route a slot to a specific model
+                                           slots: default, background, think,
+                                                  long_context, web_search, image
+  router clear <slot>                      Remove override (fall back to tier model)
+  router disable                           Disable ALL task routing (tier only)
+  router enable                            Re-enable task routing
+  router passthrough                       Anthropic Pro mode — no routing, no cascade
+
+$(echo -e "${CYAN}METRICS subcommands${NC}")  (requires proxy running)
+  metrics summary                          Tokens, cost, latency, cascade, RTK savings
+  metrics models                           Per-model token breakdown
+  metrics tools                            24h tool call success/fail rates
+  metrics daily                            7-day usage history
+
+$(echo -e "${CYAN}FILES${NC}")
+  config/proxy_chain.json         Chain topology (entries + router config)
+  .env                            Env vars (ROUTER_*, BIG/MIDDLE/SMALL_MODEL, cascades)
+  /tmp/proxy-logs/                Service log files
+
+$(echo -e "${CYAN}EXAMPLES${NC}")
+  proxies                                  # quick health check
+  proxies up                               # start the chain in tmux
+  proxies router set background nvidia/nemotron-nano-9b-v2:free
+  proxies router passthrough               # direct Anthropic Pro mode
+  proxies config toggle cliproxyapi        # disable CLIProxyAPI entry
+  proxies config order headroom up         # move Headroom earlier in chain
+  proxies metrics models                   # see which models got most tokens today
+
+HELP
+}
+
 # ── Main dispatch ──
 case "${1:-status}" in
     up|start)       cmd_start ;;
     down|stop)      cmd_stop ;;
     status|st)      cmd_status ;;
+    stats)          cmd_stats ;;
+    config|cfg)     shift; cmd_config "$@" ;;
+    router|route)   shift; cmd_router "$@" ;;
+    metrics|met)    shift; cmd_metrics "$@" ;;
     logs|log|tail)  cmd_logs ;;
     watch|mon)      cmd_watch "${2:-all}" "${3:-20}" ;;
     chain|tui)      cmd_chain ;;
+    statusline|sl)  cmd_statusline ;;
     restart)        cmd_stop; sleep 2; cmd_start ;;
+    help|--help|-h) cmd_help ;;
     *)
-        echo -e "${CYAN}Usage:${NC} proxies {up|down|status|watch|logs|chain|restart}"
+        fail "Unknown command: $1"
         echo ""
-        echo "  up              Start all chain services in tmux"
-        echo "  down            Stop all services and tmux session"
-        echo "  status          Show service health (from proxy_chain.json)"
-        echo "  watch [n]       Monitor tmux pane output in real-time"
-        echo "  logs            Tail log files"
-        echo "  chain           Open proxy chain manager TUI"
-        echo "  restart         Stop and restart"
-        echo ""
-        echo -e "  ${CYAN}Configure chain:${NC} proxies chain"
-        echo -e "  ${CYAN}Chain file:${NC}      config/proxy_chain.json"
-        echo ""
+        cmd_help
+        exit 1
         ;;
 esac

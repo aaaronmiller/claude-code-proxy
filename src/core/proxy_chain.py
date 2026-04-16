@@ -17,6 +17,7 @@ import subprocess
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 # Default location — override with PROXY_CHAIN_FILE env var
 DEFAULT_CHAIN_FILE = Path(__file__).parent.parent.parent / "config" / "proxy_chain.json"
@@ -100,13 +101,15 @@ class RouterConfig:
     """Per-use-case model routing (mirrors Claude Code Router semantics)."""
 
     default: RouteTarget = field(default_factory=lambda: RouteTarget(""))
-    background: RouteTarget = field(default_factory=lambda: RouteTarget("stepfun/step-3.5-flash:free"))
+    background: RouteTarget = field(default_factory=lambda: RouteTarget("nvidia/nemotron-nano-9b-v2:free"))
     think: RouteTarget = field(default_factory=lambda: RouteTarget(""))
     long_context: RouteTarget = field(default_factory=lambda: RouteTarget("minimax/minimax-m2.5:free"))
     long_context_threshold: int = 60000
     web_search: RouteTarget = field(default_factory=lambda: RouteTarget(""))
     image: RouteTarget = field(default_factory=lambda: RouteTarget("qwen/qwen2.5-vl-72b-instruct"))
     custom_router_path: str = ""
+    disabled: bool = False        # When True, all slots return None (tier fallback only)
+    passthrough: bool = False     # When True, no routing/cascade at all (Anthropic Pro mode)
 
 
 @dataclass
@@ -133,7 +136,14 @@ class ProxyChain:
         router_data = data.get("router", {})
         
         parsed_router_data = {}
+        # Map JSON underscore-prefixed flags to dataclass fields
+        if router_data.get("_disabled"):
+            parsed_router_data["disabled"] = True
+        if router_data.get("_passthrough"):
+            parsed_router_data["passthrough"] = True
         for k, v in router_data.items():
+            if k.startswith("_"):
+                continue  # Already handled above
             if not hasattr(RouterConfig, k):
                 continue
             if k in ["default", "background", "think", "long_context", "web_search", "image"]:
@@ -195,11 +205,11 @@ class ProxyChain:
     def upstream_url(self) -> str:
         """
         The URL this proxy should use as PROVIDER_BASE_URL.
-        Returns the URL of the first enabled HTTP entry in the chain.
+        Returns the URL of the first enabled upstream HTTP entry in the chain.
         Falls back to empty string (direct OpenRouter via env) if no HTTP entries.
         """
         for e in self.entries:
-            if e.enabled and e.is_http:
+            if e.enabled and e.is_http and not _is_local_proxy_entry(e):
                 return e.url
         return ""
 
@@ -292,7 +302,7 @@ class ProxyChain:
         ]
         router = RouterConfig(
             default=RouteTarget(""),
-            background=RouteTarget("stepfun/step-3.5-flash:free"),
+            background=RouteTarget("nvidia/nemotron-nano-9b-v2:free"),
             think=RouteTarget(""),
             long_context=RouteTarget("minimax/minimax-m2.5:free"),
             long_context_threshold=60000,
@@ -321,3 +331,17 @@ def reload_chain() -> ProxyChain:
     global _chain
     _chain = ProxyChain.load()
     return _chain
+
+
+def _is_local_proxy_entry(entry: ProxyEntry) -> bool:
+    """Skip self-referential chain entries when deriving the proxy upstream URL."""
+    if entry.id == "claude_code_proxy":
+        return True
+
+    try:
+        parsed = urlparse(entry.url)
+    except Exception:
+        return False
+
+    hostname = (parsed.hostname or "").lower()
+    return hostname in {"127.0.0.1", "localhost", "0.0.0.0"} and parsed.port == 8082

@@ -56,7 +56,7 @@
   },
   "mistralai/voxtral-small-24b-2507": {
     "context": 32000,
-    "output": null,
+    "output": 8192,
     "name": "Mistral: Voxtral Small 24B 2507"
   },
   "openai/gpt-oss-safeguard-20b": {
@@ -71,7 +71,7 @@
   },
   "nvidia/nemotron-nano-12b-v2-vl": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "NVIDIA: Nemotron Nano 12B 2 VL"
   },
   "minimax/minimax-m2": {
@@ -81,22 +81,22 @@
   },
   "liquid/lfm2-8b-a1b": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "LiquidAI/LFM2-8B-A1B"
   },
   "liquid/lfm-2.2-6b": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "LiquidAI/LFM2-2.6B"
   },
   "ibm-granite/granite-4.0-h-micro": {
     "context": 131000,
-    "output": null,
+    "output": 16384,
     "name": "IBM: Granite 4.0 Micro"
   },
   "deepcogito/cogito-v2-preview-llama-405b": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Deep Cogito: Cogito V2 Preview Llama 405B"
   },
   "openai/gpt-5-image-mini": {
@@ -136,7 +136,7 @@
   },
   "nvidia/llama-3.3-nemotron-super-49b-v1.5": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "NVIDIA: Llama 3.3 Nemotron Super 49B V1.5"
   },
   "baidu/ernie-4.5-21b-a3b-thinking": {
@@ -156,7 +156,7 @@
   },
   "qwen/qwen3-vl-30b-a3b-instruct": {
     "context": 262144,
-    "output": null,
+    "output": 16384,
     "name": "Qwen: Qwen3 VL 30B A3B Instruct"
   },
   "openai/gpt-5-pro": {
@@ -171,7 +171,7 @@
   },
   "z-ai/glm-4.6:exacto": {
     "context": 202752,
-    "output": null,
+    "output": 16384,
     "name": "Z.AI: GLM 4.6 (exacto)"
   },
   "anthropic/claude-sonnet-4.5": {
@@ -181,7 +181,7 @@
   },
   "deepseek/deepseek-v3.2-exp": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "DeepSeek: DeepSeek V3.2 Exp"
   },
   "thedrummer/cydonia-24b-v4.1": {
@@ -261,7 +261,7 @@
   },
   "arcee-ai/afm-4.5b": {
     "context": 65536,
-    "output": null,
+    "output": 16384,
     "name": "Arcee AI: AFM 4.5B"
   },
   "opengvlab/internvl3-78b": {
@@ -301,12 +301,12 @@
   },
   "nvidia/nemotron-nano-9b-v2:free": {
     "context": 128000,
-    "output": null,
+    "output": 16384,
     "name": "NVIDIA: Nemotron Nano 9B V2 (free)"
   },
   "nvidia/nemotron-nano-9b-v2": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "NVIDIA: Nemotron Nano 9B V2"
   },
   "moonshotai/kimi-k2-0905": {
@@ -316,22 +316,22 @@
   },
   "moonshotai/kimi-k2-0905:exacto": {
     "context": 262144,
-    "output": null,
+    "output": 16384,
     "name": "MoonshotAI: Kimi K2 0905 (exacto)"
   },
   "deepcogito/cogito-v2-preview-llama-70b": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Deep Cogito: Cogito V2 Preview Llama 70B"
   },
   "deepcogito/cogito-v2-preview-llama-109b-moe": {
     "context": 32767,
-    "output": null,
+    "output": 8192,
     "name": "Cogito V2 Preview Llama 109B"
   },
   "deepcogito/cogito-v2-preview-deepseek-671b": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "Deep Cogito: Cogito V2 Preview Deepseek 671B"
   },
   "stepfun-ai/step3": {
@@ -366,7 +366,7 @@
   },
   "deepseek/deepseek-chat-v3.1:free": {
     "context": 163800,
-    "output": null,
+    "output": 16384,
     "name": "DeepSeek: DeepSeek V3.1 (free)"
   },
   "deepseek/deepseek-chat-v3.1": {
@@ -381,7 +381,7 @@
   },
   "mistralai/mistral-medium-3.1": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Mistral Medium 3.1"
   },
   "baidu/ernie-4.5-21b-a3b": {
@@ -436,7 +436,7 @@
   },
   "openai/gpt-oss-120b:exacto": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "OpenAI: gpt-oss-120b (exacto)"
   },
   "openai/gpt-oss-20b:free": {
@@ -446,7 +446,7 @@
   },
   "openai/gpt-oss-20b": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "OpenAI: gpt-oss-20b"
   },
   "anthropic/claude-opus-4.1": {
@@ -456,7 +456,7 @@
   },
   "mistralai/codestral-2508": {
     "context": 256000,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Codestral 2508"
   },
   "qwen/qwen3-coder-30b-a3b-instruct": {
@@ -491,7 +491,7 @@
   },
   "z-ai/glm-4-32b": {
     "context": 128000,
-    "output": null,
+    "output": 16384,
     "name": "Z.AI: GLM 4 32B "
   },
   "qwen/qwen3-coder:free": {
@@ -526,17 +526,17 @@
   },
   "switchpoint/router": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Switchpoint Router"
   },
   "moonshotai/kimi-k2:free": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "MoonshotAI: Kimi K2 0711 (free)"
   },
   "moonshotai/kimi-k2": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "MoonshotAI: Kimi K2 0711"
   },
   "thudm/glm-4.1v-9b-thinking": {
@@ -546,22 +546,22 @@
   },
   "mistralai/devstral-medium": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Devstral Medium"
   },
   "mistralai/devstral-small": {
     "context": 128000,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Devstral Small 1.1"
   },
   "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Venice: Uncensored (free)"
   },
   "x-ai/grok-4": {
     "context": 256000,
-    "output": null,
+    "output": 16384,
     "name": "xAI: Grok 4"
   },
   "google/gemma-3n-e2b-it:free": {
@@ -576,7 +576,7 @@
   },
   "tngtech/deepseek-r1t2-chimera:free": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "TNG: DeepSeek R1T2 Chimera (free)"
   },
   "tngtech/deepseek-r1t2-chimera": {
@@ -616,7 +616,7 @@
   },
   "mistralai/mistral-small-3.2-24b-instruct:free": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Mistral Small 3.2 24B (free)"
   },
   "mistralai/mistral-small-3.2-24b-instruct": {
@@ -656,12 +656,12 @@
   },
   "x-ai/grok-3-mini": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "xAI: Grok 3 Mini"
   },
   "x-ai/grok-3": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "xAI: Grok 3"
   },
   "mistralai/magistral-small-2506": {
@@ -686,7 +686,7 @@
   },
   "deepseek/deepseek-r1-0528-qwen3-8b:free": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "DeepSeek: DeepSeek R1 0528 Qwen3 8B (free)"
   },
   "deepseek/deepseek-r1-0528-qwen3-8b": {
@@ -696,7 +696,7 @@
   },
   "deepseek/deepseek-r1-0528:free": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "DeepSeek: R1 0528 (free)"
   },
   "deepseek/deepseek-r1-0528": {
@@ -716,7 +716,7 @@
   },
   "mistralai/devstral-small-2505": {
     "context": 128000,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Devstral Small 2505"
   },
   "google/gemma-3n-e4b-it:free": {
@@ -726,7 +726,7 @@
   },
   "google/gemma-3n-e4b-it": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Google: Gemma 3n 4B"
   },
   "openai/codex-mini": {
@@ -741,7 +741,7 @@
   },
   "mistralai/mistral-medium-3": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Mistral Medium 3"
   },
   "google/gemini-2.5-pro-preview-05-06": {
@@ -766,12 +766,12 @@
   },
   "arcee-ai/coder-large": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Arcee AI: Coder Large"
   },
   "microsoft/phi-4-reasoning-plus": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Microsoft: Phi 4 Reasoning Plus"
   },
   "inception/mercury-coder": {
@@ -781,22 +781,22 @@
   },
   "qwen/qwen3-4b:free": {
     "context": 40960,
-    "output": null,
+    "output": 8192,
     "name": "Qwen: Qwen3 4B (free)"
   },
   "deepseek/deepseek-prover-v2": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "DeepSeek: DeepSeek Prover V2"
   },
   "meta-llama/llama-guard-4-12b": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "Meta: Llama Guard 4 12B"
   },
   "qwen/qwen3-30b-a3b:free": {
     "context": 40960,
-    "output": null,
+    "output": 8192,
     "name": "Qwen: Qwen3 30B A3B (free)"
   },
   "qwen/qwen3-30b-a3b": {
@@ -811,7 +811,7 @@
   },
   "qwen/qwen3-14b:free": {
     "context": 40960,
-    "output": null,
+    "output": 8192,
     "name": "Qwen: Qwen3 14B (free)"
   },
   "qwen/qwen3-14b": {
@@ -826,7 +826,7 @@
   },
   "qwen/qwen3-235b-a22b:free": {
     "context": 40960,
-    "output": null,
+    "output": 8192,
     "name": "Qwen: Qwen3 235B A22B (free)"
   },
   "qwen/qwen3-235b-a22b": {
@@ -836,7 +836,7 @@
   },
   "tngtech/deepseek-r1t-chimera:free": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "TNG: DeepSeek R1T Chimera (free)"
   },
   "tngtech/deepseek-r1t-chimera": {
@@ -846,7 +846,7 @@
   },
   "microsoft/mai-ds-r1:free": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "Microsoft: MAI DS R1 (free)"
   },
   "microsoft/mai-ds-r1": {
@@ -871,7 +871,7 @@
   },
   "qwen/qwen2.5-coder-7b-instruct": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Qwen: Qwen2.5 Coder 7B Instruct"
   },
   "openai/gpt-4.1": {
@@ -901,7 +901,7 @@
   },
   "arliai/qwq-32b-arliai-rpr-v1:free": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "ArliAI: QwQ 32B RpR v1 (free)"
   },
   "arliai/qwq-32b-arliai-rpr-v1": {
@@ -911,27 +911,27 @@
   },
   "agentica-org/deepcoder-14b-preview:free": {
     "context": 96000,
-    "output": null,
+    "output": 16384,
     "name": "Agentica: Deepcoder 14B Preview (free)"
   },
   "agentica-org/deepcoder-14b-preview": {
     "context": 96000,
-    "output": null,
+    "output": 16384,
     "name": "Agentica: Deepcoder 14B Preview"
   },
   "x-ai/grok-3-mini-beta": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "xAI: Grok 3 Mini Beta"
   },
   "x-ai/grok-3-beta": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "xAI: Grok 3 Beta"
   },
   "nvidia/llama-3.1-nemotron-ultra-253b-v1": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "NVIDIA: Llama 3.1 Nemotron Ultra 253B v1"
   },
   "meta-llama/llama-4-maverick": {
@@ -946,7 +946,7 @@
   },
   "qwen/qwen2.5-vl-32b-instruct:free": {
     "context": 16384,
-    "output": null,
+    "output": 8192,
     "name": "Qwen: Qwen2.5 VL 32B Instruct (free)"
   },
   "qwen/qwen2.5-vl-32b-instruct": {
@@ -956,7 +956,7 @@
   },
   "deepseek/deepseek-chat-v3-0324:free": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "DeepSeek: DeepSeek V3 0324 (free)"
   },
   "deepseek/deepseek-chat-v3-0324": {
@@ -991,7 +991,7 @@
   },
   "google/gemma-3-4b-it": {
     "context": 96000,
-    "output": null,
+    "output": 16384,
     "name": "Google: Gemma 3 4B"
   },
   "google/gemma-3-12b-it:free": {
@@ -1021,7 +1021,7 @@
   },
   "google/gemma-3-27b-it:free": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Google: Gemma 3 27B (free)"
   },
   "google/gemma-3-27b-it": {
@@ -1036,12 +1036,12 @@
   },
   "microsoft/phi-4-multimodal-instruct": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Microsoft: Phi 4 Multimodal Instruct"
   },
   "perplexity/sonar-reasoning-pro": {
     "context": 128000,
-    "output": null,
+    "output": 16384,
     "name": "Perplexity: Sonar Reasoning Pro"
   },
   "perplexity/sonar-pro": {
@@ -1051,12 +1051,12 @@
   },
   "perplexity/sonar-deep-research": {
     "context": 128000,
-    "output": null,
+    "output": 16384,
     "name": "Perplexity: Sonar Deep Research"
   },
   "qwen/qwq-32b": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Qwen: QwQ 32B"
   },
   "google/gemini-2.0-flash-lite-001": {
@@ -1076,12 +1076,12 @@
   },
   "mistralai/mistral-saba": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Mistral: Saba"
   },
   "meta-llama/llama-guard-3-8b": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Llama Guard 3 8B"
   },
   "openai/o3-mini-high": {
@@ -1146,7 +1146,7 @@
   },
   "mistralai/mistral-small-24b-instruct-2501:free": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Mistral: Mistral Small 3 (free)"
   },
   "mistralai/mistral-small-24b-instruct-2501": {
@@ -1156,7 +1156,7 @@
   },
   "deepseek/deepseek-r1-distill-qwen-32b": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "DeepSeek: R1 Distill Qwen 32B"
   },
   "deepseek/deepseek-r1-distill-qwen-14b": {
@@ -1166,12 +1166,12 @@
   },
   "perplexity/sonar-reasoning": {
     "context": 127000,
-    "output": null,
+    "output": 16384,
     "name": "Perplexity: Sonar Reasoning"
   },
   "perplexity/sonar": {
     "context": 127072,
-    "output": null,
+    "output": 16384,
     "name": "Perplexity: Sonar"
   },
   "deepseek/deepseek-r1-distill-llama-70b:free": {
@@ -1186,12 +1186,12 @@
   },
   "deepseek/deepseek-r1:free": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "DeepSeek: R1 (free)"
   },
   "deepseek/deepseek-r1": {
     "context": 163840,
-    "output": null,
+    "output": 16384,
     "name": "DeepSeek: R1"
   },
   "minimax/minimax-01": {
@@ -1201,17 +1201,17 @@
   },
   "mistralai/codestral-2501": {
     "context": 256000,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Codestral 2501"
   },
   "microsoft/phi-4": {
     "context": 16384,
-    "output": null,
+    "output": 8192,
     "name": "Microsoft: Phi 4"
   },
   "sao10k/l3.1-70b-hanami-x1": {
     "context": 16000,
-    "output": null,
+    "output": 8192,
     "name": "Sao10K: Llama 3.1 70B Hanami x1"
   },
   "deepseek/deepseek-chat": {
@@ -1241,7 +1241,7 @@
   },
   "meta-llama/llama-3.3-70b-instruct:free": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Meta: Llama 3.3 70B Instruct (free)"
   },
   "meta-llama/llama-3.3-70b-instruct": {
@@ -1271,22 +1271,22 @@
   },
   "mistralai/mistral-large-2411": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Mistral Large 2411"
   },
   "mistralai/mistral-large-2407": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Mistral Large 2407"
   },
   "mistralai/pixtral-large-2411": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Pixtral Large 2411"
   },
   "qwen/qwen-2.5-coder-32b-instruct:free": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Qwen2.5 Coder 32B Instruct (free)"
   },
   "qwen/qwen-2.5-coder-32b-instruct": {
@@ -1296,12 +1296,12 @@
   },
   "raifle/sorcererlm-8x22b": {
     "context": 16000,
-    "output": null,
+    "output": 8192,
     "name": "SorcererLM 8x22B"
   },
   "thedrummer/unslopnemo-12b": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "TheDrummer: UnslopNemo 12B"
   },
   "anthropic/claude-3.5-haiku-20241022": {
@@ -1326,17 +1326,17 @@
   },
   "mistralai/ministral-8b": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Ministral 8B"
   },
   "mistralai/ministral-3b": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Ministral 3B"
   },
   "qwen/qwen-2.5-7b-instruct": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Qwen: Qwen2.5 7B Instruct"
   },
   "nvidia/llama-3.1-nemotron-70b-instruct": {
@@ -1356,12 +1356,12 @@
   },
   "thedrummer/rocinante-12b": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "TheDrummer: Rocinante 12B"
   },
   "meta-llama/llama-3.2-3b-instruct:free": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Meta: Llama 3.2 3B Instruct (free)"
   },
   "meta-llama/llama-3.2-3b-instruct": {
@@ -1371,7 +1371,7 @@
   },
   "meta-llama/llama-3.2-1b-instruct": {
     "context": 60000,
-    "output": null,
+    "output": 8192,
     "name": "Meta: Llama 3.2 1B Instruct"
   },
   "meta-llama/llama-3.2-90b-vision-instruct": {
@@ -1386,7 +1386,7 @@
   },
   "qwen/qwen-2.5-72b-instruct:free": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Qwen2.5 72B Instruct (free)"
   },
   "qwen/qwen-2.5-72b-instruct": {
@@ -1396,12 +1396,12 @@
   },
   "neversleep/llama-3.1-lumimaid-8b": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "NeverSleep: Lumimaid v0.2 8B"
   },
   "mistralai/pixtral-12b": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Mistral: Pixtral 12B"
   },
   "cohere/command-r-08-2024": {
@@ -1416,27 +1416,27 @@
   },
   "sao10k/l3.1-euryale-70b": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Sao10K: Llama 3.1 Euryale 70B v2.2"
   },
   "qwen/qwen-2.5-vl-7b-instruct": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Qwen: Qwen2.5-VL 7B Instruct"
   },
   "microsoft/phi-3.5-mini-128k-instruct": {
     "context": 128000,
-    "output": null,
+    "output": 16384,
     "name": "Microsoft: Phi-3.5 Mini 128K Instruct"
   },
   "nousresearch/hermes-3-llama-3.1-70b": {
     "context": 65536,
-    "output": null,
+    "output": 16384,
     "name": "Nous: Hermes 3 70B Instruct"
   },
   "nousresearch/hermes-3-llama-3.1-405b:free": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Nous: Hermes 3 405B Instruct (free)"
   },
   "nousresearch/hermes-3-llama-3.1-405b": {
@@ -1451,7 +1451,7 @@
   },
   "sao10k/l3-lunaris-8b": {
     "context": 8192,
-    "output": null,
+    "output": 8192,
     "name": "Sao10K: Llama 3 8B Lunaris"
   },
   "openai/gpt-4o-2024-08-06": {
@@ -1471,12 +1471,12 @@
   },
   "meta-llama/llama-3.1-405b-instruct": {
     "context": 130815,
-    "output": null,
+    "output": 16384,
     "name": "Meta: Llama 3.1 405B Instruct"
   },
   "meta-llama/llama-3.1-70b-instruct": {
     "context": 131072,
-    "output": null,
+    "output": 16384,
     "name": "Meta: Llama 3.1 70B Instruct"
   },
   "mistralai/mistral-nemo:free": {
@@ -1501,12 +1501,12 @@
   },
   "google/gemma-2-27b-it": {
     "context": 8192,
-    "output": null,
+    "output": 8192,
     "name": "Google: Gemma 2 27B"
   },
   "google/gemma-2-9b-it": {
     "context": 8192,
-    "output": null,
+    "output": 8192,
     "name": "Google: Gemma 2 9B"
   },
   "sao10k/l3-euryale-70b": {
@@ -1536,17 +1536,17 @@
   },
   "microsoft/phi-3-mini-128k-instruct": {
     "context": 128000,
-    "output": null,
+    "output": 16384,
     "name": "Microsoft: Phi-3 Mini 128K Instruct"
   },
   "microsoft/phi-3-medium-128k-instruct": {
     "context": 128000,
-    "output": null,
+    "output": 16384,
     "name": "Microsoft: Phi-3 Medium 128K Instruct"
   },
   "meta-llama/llama-guard-2-8b": {
     "context": 8192,
-    "output": null,
+    "output": 8192,
     "name": "Meta: LlamaGuard 2 8B"
   },
   "openai/gpt-4o-2024-05-13": {
@@ -1576,7 +1576,7 @@
   },
   "mistralai/mixtral-8x22b-instruct": {
     "context": 65536,
-    "output": null,
+    "output": 16384,
     "name": "Mistral: Mixtral 8x22B Instruct"
   },
   "microsoft/wizardlm-2-8x22b": {
@@ -1601,7 +1601,7 @@
   },
   "mistralai/mistral-large": {
     "context": 128000,
-    "output": null,
+    "output": 16384,
     "name": "Mistral Large"
   },
   "openai/gpt-3.5-turbo-0613": {
@@ -1616,17 +1616,17 @@
   },
   "mistralai/mistral-small": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Mistral Small"
   },
   "mistralai/mistral-tiny": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Mistral Tiny"
   },
   "mistralai/mistral-7b-instruct-v0.2": {
     "context": 32768,
-    "output": null,
+    "output": 8192,
     "name": "Mistral: Mistral 7B Instruct v0.2"
   },
   "mistralai/mixtral-8x7b-instruct": {
@@ -1636,7 +1636,7 @@
   },
   "neversleep/noromaid-20b": {
     "context": 4096,
-    "output": null,
+    "output": 8192,
     "name": "Noromaid 20B"
   },
   "alpindale/goliath-120b": {
@@ -1646,7 +1646,7 @@
   },
   "openrouter/auto": {
     "context": 2000000,
-    "output": null,
+    "output": 16384,
     "name": "Auto Router"
   },
   "openai/gpt-4-1106-preview": {
@@ -1661,7 +1661,7 @@
   },
   "mistralai/mistral-7b-instruct-v0.1": {
     "context": 2824,
-    "output": null,
+    "output": 8192,
     "name": "Mistral: Mistral 7B Instruct v0.1"
   },
   "openai/gpt-3.5-turbo-16k": {
@@ -1676,12 +1676,12 @@
   },
   "undi95/remm-slerp-l2-13b": {
     "context": 6144,
-    "output": null,
+    "output": 8192,
     "name": "ReMM SLERP 13B"
   },
   "gryphe/mythomax-l2-13b": {
     "context": 4096,
-    "output": null,
+    "output": 8192,
     "name": "MythoMax 13B"
   },
   "openai/gpt-4-0314": {
@@ -1698,5 +1698,25 @@
     "context": 16385,
     "output": 4096,
     "name": "OpenAI: GPT-3.5 Turbo"
+  },
+  "nvidia/nemotron-3-super-120b-a12b:free": {
+    "context": 131072,
+    "output": 16384,
+    "name": "NVIDIA Nemotron 3 Super 120B (free)"
+  },
+  "minimax/minimax-m2.5:free": {
+    "context": 196608,
+    "output": 16384,
+    "name": "MiniMax M2.5 (free)"
+  },
+  "openai/gpt-oss-120b:free": {
+    "context": 131072,
+    "output": 16384,
+    "name": "OpenAI GPT-OSS 120B (free)"
+  },
+  "arcee-ai/trinity-large-preview:free": {
+    "context": 131072,
+    "output": 16384,
+    "name": "Arcee Trinity Large (free)"
   }
 }

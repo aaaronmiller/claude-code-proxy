@@ -348,11 +348,20 @@ def convert_claude_to_openai(
     # Check if this is a newer OpenAI model (o1, o3, o4, gpt-5)
     is_newer_model = model_manager.is_newer_openai_model(openai_model)
 
-    # Calculate token limit - use larger default for modern models
+    # Calculate token limit - cap to model's actual output limit to prevent
+    # context overflow errors (e.g. requesting 128K output on a 196K context model)
+    from src.services.usage.model_limits import get_output_limit
+    model_output_limit = get_output_limit(openai_model)
+    effective_max = min(config.max_tokens_limit, model_output_limit)
     token_limit = min(
         max(claude_request.max_tokens, config.min_tokens_limit),
-        config.max_tokens_limit,
+        effective_max,
     )
+    if token_limit < claude_request.max_tokens:
+        logger.debug(
+            f"Capped max_tokens {claude_request.max_tokens} → {token_limit} "
+            f"(model {openai_model} output limit: {model_output_limit})"
+        )
 
     openai_request = {
         "model": openai_model,

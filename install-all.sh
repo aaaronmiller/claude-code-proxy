@@ -494,9 +494,12 @@ configure_integration() {
             cat >> "$envrc" << EOF
 
 # Compression stack integration
-export OPENAI_BASE_URL="http://127.0.0.1:8787/v1"
-export PROVIDER_BASE_URL="http://127.0.0.1:8787/v1"
-export HEADROOM_PORT="8787"
+export PROVIDER_BASE_URL="http://127.0.0.1:${HEADROOM_PORT}/v1"
+export HEADROOM_PORT="${HEADROOM_PORT}"
+# Headroom configuration (all settings in one place)
+export HEADROOM_BACKEND="${HEADROOM_BACKEND:-openrouter}"
+export HEADROOM_API_URL="${HEADROOM_API_URL:-https://openrouter.ai/api/v1}"
+export HEADROOM_MODE="${HEADROOM_MODE:-token_headroom}"
 EOF
             log_success "Environment configured"
         else
@@ -527,6 +530,37 @@ alias qw-resume='OPENAI_BASE_URL=http://127.0.0.1:8787/v1 qwen --continue' # Qwe
         log_success "Compression aliases added to ~/.zshrc"
     else
         log_warn "Compression aliases already in ~/.zshrc"
+    fi
+
+    # Configure proxy_chain.json with correct Headroom args
+    local chain_file="${PROXY_DIR}/config/proxy_chain.json"
+    if [[ -f "$chain_file" ]]; then
+        local headroom_backend="${HEADROOM_BACKEND:-openrouter}"
+        local headroom_api_url="${HEADROOM_API_URL:-https://openrouter.ai/api/v1}"
+        _python -c "
+import json
+data = json.load(open('$chain_file'))
+for e in data.get('entries', []):
+    if e.get('id') == 'headroom':
+        e['service_cmd'] = (
+            'headroom proxy --port $HEADROOM_PORT --mode token_headroom'
+            ' --openai-api-url $headroom_api_url'
+            ' --backend $headroom_backend --no-telemetry'
+        )
+json.dump(data, open('$chain_file', 'w'), indent=2)
+print('Updated proxy_chain.json')
+" 2>/dev/null && log_success "proxy_chain.json configured" || log_warn "proxy_chain.json update failed"
+    fi
+
+    # Set up RTK instructions in CLAUDE.md if not already present
+    if command -v rtk &>/dev/null; then
+        if [[ -f "${PROXY_DIR}/CLAUDE.md" ]]; then
+            if ! grep -q "RTK" "${PROXY_DIR}/CLAUDE.md" 2>/dev/null; then
+                rtk init 2>/dev/null && log_success "RTK instructions added to CLAUDE.md" || log_warn "RTK init failed"
+            else
+                log_warn "RTK already configured in CLAUDE.md"
+            fi
+        fi
     fi
 
     # Install systemd services
@@ -564,7 +598,14 @@ start_services() {
     if command -v headroom &>/dev/null; then
         if ! pgrep -f "headroom proxy" &>/dev/null; then
             log_info "Starting headroom proxy on :$HEADROOM_PORT..."
-            headroom proxy --port "$HEADROOM_PORT" --mode token_headroom --no-telemetry &
+            local headroom_backend="${HEADROOM_BACKEND:-openrouter}"
+            local headroom_api_url="${HEADROOM_API_URL:-https://openrouter.ai/api/v1}"
+            headroom proxy \
+                --port "$HEADROOM_PORT" \
+                --mode token_headroom \
+                --openai-api-url "$headroom_api_url" \
+                --backend "$headroom_backend" \
+                --no-telemetry &
             sleep 3
 
             if pgrep -f "headroom proxy" &>/dev/null; then

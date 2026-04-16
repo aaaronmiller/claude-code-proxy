@@ -241,10 +241,9 @@ class Config:
         _default_fallback_models = (
             "qwen/qwen3-235b-a22b:free,"
             "minimax/minimax-m2.5:free,"
-            "stepfun/step-3.5-flash:free,"
             "nvidia/nemotron-3-super-120b-a12b:free,"
             "openai/gpt-oss-120b:free,"
-            "arcee-ai/trinity-large-preview:free"
+            "nvidia/nemotron-nano-9b-v2:free"
         )
         self.openrouter_fallback_models: list = [
             m.strip() for m in
