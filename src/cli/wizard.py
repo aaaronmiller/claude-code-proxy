@@ -100,8 +100,16 @@ class SetupWizard:
         from src.core.config import config
         
         # Check for provider key
-        api_key = os.environ.get("PROVIDER_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        base_url = os.environ.get("PROVIDER_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
+        api_key = (
+            os.environ.get("PROVIDER_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("OPENROUTER_API_KEY")
+        )
+        base_url = (
+            os.environ.get("PROVIDER_BASE_URL")
+            or os.environ.get("OPENAI_BASE_URL")
+            or os.environ.get("OPENROUTER_BASE_URL")
+        )
         
         if not api_key or "dummy" in api_key or "your-" in api_key:
             return False

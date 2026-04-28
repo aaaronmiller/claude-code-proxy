@@ -60,27 +60,37 @@ class ConfigValidator:
             console.print("\n[bold red]❌ Configuration validation failed[/bold red]\n")
             return False
         else:
-            console.print("\n[bold green]✅ Configuration validated successfully[/bold green]\n")
+            console.print(
+                "\n[bold green]✅ Configuration validated successfully[/bold green]\n"
+            )
             return True
 
     def _check_required_variables(self):
         """Check that required environment variables are set"""
         # Core variables
-        provider_key = os.getenv("PROVIDER_API_KEY") or os.getenv("OPENAI_API_KEY")
-        provider_url = os.getenv("PROVIDER_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+        provider_key = (
+            os.getenv("PROVIDER_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+            or os.getenv("OPENROUTER_API_KEY")
+        )
+        provider_url = (
+            os.getenv("PROVIDER_BASE_URL")
+            or os.getenv("OPENAI_BASE_URL")
+            or os.getenv("OPENROUTER_BASE_URL")
+        )
 
         if not provider_key:
             self.errors.append(
                 "PROVIDER_API_KEY is not set\n"
                 "  → Run: python setup_wizard.py\n"
-                "  → Or add to .env: PROVIDER_API_KEY=\"your-key-here\""
+                '  → Or add to .env: PROVIDER_API_KEY="your-key-here"'
             )
 
         if not provider_url:
             self.errors.append(
                 "PROVIDER_BASE_URL is not set\n"
                 "  → Run: python setup_wizard.py\n"
-                "  → Or add to .env: PROVIDER_BASE_URL=\"https://api.provider.com/v1\""
+                '  → Or add to .env: PROVIDER_BASE_URL="https://api.provider.com/v1"'
             )
 
         # Model configuration (at least one should be set)
@@ -92,7 +102,7 @@ class ConfigValidator:
             self.errors.append(
                 "No models configured (BIG_MODEL, MIDDLE_MODEL, SMALL_MODEL)\n"
                 "  → Run: python setup_wizard.py\n"
-                "  → Or add to .env: BIG_MODEL=\"your-model-name\""
+                '  → Or add to .env: BIG_MODEL="your-model-name"'
             )
 
     def _check_deprecated_variables(self):
@@ -109,14 +119,20 @@ class ConfigValidator:
 
         # Check if models are set
         if not big_model:
-            self.warnings.append("BIG_MODEL not configured (Claude Opus requests will fail)")
+            self.warnings.append(
+                "BIG_MODEL not configured (Claude Opus requests will fail)"
+            )
 
         # MIDDLE_MODEL defaults to BIG_MODEL in config.py, so only warn if neither is set
         if not middle_model and not big_model:
-            self.warnings.append("MIDDLE_MODEL not configured (Claude Sonnet requests will fail)")
+            self.warnings.append(
+                "MIDDLE_MODEL not configured (Claude Sonnet requests will fail)"
+            )
 
         if not small_model:
-            self.warnings.append("SMALL_MODEL not configured (Claude Haiku requests will fail)")
+            self.warnings.append(
+                "SMALL_MODEL not configured (Claude Haiku requests will fail)"
+            )
 
         # Check for OpenRouter format
         provider_url = os.getenv("PROVIDER_BASE_URL", "")
@@ -128,7 +144,7 @@ class ConfigValidator:
             ]:
                 if model_name and "/" not in model_name:
                     self.warnings.append(
-                        f"{model_var}=\"{model_name}\" may be incorrect for OpenRouter\n"
+                        f'{model_var}="{model_name}" may be incorrect for OpenRouter\n'
                         f"  → OpenRouter models use format: provider/model\n"
                         f"  → Example: anthropic/claude-sonnet-4\n"
                         f"  → Run: python -m src.cli.model_selector"
@@ -141,38 +157,43 @@ class ConfigValidator:
             from src.core.config import config as resolved_config
         except Exception as _e:
             resolved_config = None
-            
+
         for tier in ["BIG", "MIDDLE", "SMALL"]:
             enabled = os.getenv(f"ENABLE_{tier}_ENDPOINT", "").lower() == "true"
 
             if enabled:
                 endpoint = os.getenv(f"{tier}_ENDPOINT")
                 api_key = os.getenv(f"{tier}_API_KEY")
-                
+
                 # Also check if config has auto-resolved a key
                 config_has_key = False
                 if resolved_config:
-                    config_key = getattr(resolved_config, f"{tier.lower()}_api_key", None)
+                    config_key = getattr(
+                        resolved_config, f"{tier.lower()}_api_key", None
+                    )
                     config_has_key = config_key is not None
 
                 if not endpoint:
                     self.errors.append(
                         f"ENABLE_{tier}_ENDPOINT is true but {tier}_ENDPOINT not set\n"
-                        f"  → Add: {tier}_ENDPOINT=\"https://api.provider.com/v1\""
+                        f'  → Add: {tier}_ENDPOINT="https://api.provider.com/v1"'
                     )
 
                 if not api_key and not config_has_key:
                     self.warnings.append(
                         f"ENABLE_{tier}_ENDPOINT is true but {tier}_API_KEY not set\n"
-                        f"  → Add: {tier}_API_KEY=\"your-key\" (or \"dummy\" for local)"
+                        f'  → Add: {tier}_API_KEY="your-key" (or "dummy" for local)'
                     )
                 elif not api_key and config_has_key:
                     # Auto-detection worked - show info instead of warning
-                    provider = getattr(resolved_config, f"{tier.lower()}_provider", "auto")
-                    self.info.append(f"{tier} endpoint using auto-detected {provider.upper()} API key")
+                    provider = getattr(
+                        resolved_config, f"{tier.lower()}_provider", "auto"
+                    )
+                    self.info.append(
+                        f"{tier} endpoint using auto-detected {provider.upper()} API key"
+                    )
 
                 self.info.append(f"Hybrid mode enabled for {tier} tier → {endpoint}")
-
 
     def _check_reasoning_config(self):
         """Validate reasoning configuration"""
@@ -183,7 +204,7 @@ class ConfigValidator:
             valid_efforts = ["low", "medium", "high"]
             if reasoning_effort not in valid_efforts:
                 self.warnings.append(
-                    f"REASONING_EFFORT=\"{reasoning_effort}\" is invalid\n"
+                    f'REASONING_EFFORT="{reasoning_effort}" is invalid\n'
                     f"  → Valid values: {', '.join(valid_efforts)}\n"
                     f"  → For OpenAI o-series models"
                 )
@@ -199,7 +220,7 @@ class ConfigValidator:
                     )
             except ValueError:
                 self.errors.append(
-                    f"REASONING_MAX_TOKENS=\"{reasoning_max_tokens}\" is not a valid number"
+                    f'REASONING_MAX_TOKENS="{reasoning_max_tokens}" is not a valid number'
                 )
 
     def _check_api_keys(self):
@@ -244,7 +265,9 @@ class ConfigValidator:
         result = {
             "name": name,
             "endpoint": base_url,
-            "key_preview": f"{api_key[:10]}..." if api_key and len(api_key) > 10 else api_key,
+            "key_preview": f"{api_key[:8]}..."
+            if api_key and len(api_key) > 8
+            else api_key,
             "is_valid": False,
             "is_connected": False,
             "status": "unknown",
@@ -288,7 +311,7 @@ class ConfigValidator:
                     f"{name}: Invalid API key (401 Unauthorized)\n"
                     f"  → Check your API key in .env\n"
                     f"  → URL: {base_url}\n"
-                    f"  → Key: {api_key[:10]}..."
+                    f"  → Key: {api_key[:8]}..."
                 )
                 result["status"] = "invalid_key"
             elif response.status_code == 403:
@@ -301,7 +324,9 @@ class ConfigValidator:
                 result["is_valid"] = True  # Key is valid, just lacks permissions
             elif response.status_code == 404:
                 # Some providers don't have /models endpoint
-                self.info.append(f"{name}: Cannot validate (no /models endpoint, assuming valid)")
+                self.info.append(
+                    f"{name}: Cannot validate (no /models endpoint, assuming valid)"
+                )
                 result["status"] = "assumed_valid"
                 result["is_valid"] = True
             elif response.status_code == 200:
@@ -355,8 +380,16 @@ class ConfigValidator:
         providers_to_test = [
             ("openrouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"),
             ("openai", "OPENAI_API_KEY", "https://api.openai.com/v1"),
-            ("google", "GOOGLE_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai"),
-            ("gemini", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai"),
+            (
+                "google",
+                "GOOGLE_API_KEY",
+                "https://generativelanguage.googleapis.com/v1beta/openai",
+            ),
+            (
+                "gemini",
+                "GEMINI_API_KEY",
+                "https://generativelanguage.googleapis.com/v1beta/openai",
+            ),
             ("anthropic", "ANTHROPIC_API_KEY", "https://api.anthropic.com/v1"),
             ("azure", "AZURE_API_KEY", None),  # Azure needs custom endpoint
         ]
@@ -365,34 +398,47 @@ class ConfigValidator:
             api_key = os.getenv(env_var)
             if not api_key:
                 # No key set - mark as unavailable
-                set_provider_status(provider_name, {
-                    "name": provider_name,
-                    "status": "no_key",
-                    "is_valid": False,
-                    "is_connected": False,
-                })
+                set_provider_status(
+                    provider_name,
+                    {
+                        "name": provider_name,
+                        "status": "no_key",
+                        "is_valid": False,
+                        "is_connected": False,
+                    },
+                )
                 continue
 
             # Validate format first
-            is_format_valid, format_msg = validate_api_key_format(api_key, provider_name)
+            is_format_valid, format_msg = validate_api_key_format(
+                api_key, provider_name
+            )
             if not is_format_valid:
-                set_provider_status(provider_name, {
-                    "name": provider_name,
-                    "status": "invalid_format",
-                    "is_valid": False,
-                    "is_connected": False,
-                    "message": format_msg,
-                })
+                set_provider_status(
+                    provider_name,
+                    {
+                        "name": provider_name,
+                        "status": "invalid_format",
+                        "is_valid": False,
+                        "is_connected": False,
+                        "message": format_msg,
+                    },
+                )
                 continue
 
             # Skip live testing for now (too slow on startup) - just mark as format-valid
-            set_provider_status(provider_name, {
-                "name": provider_name,
-                "status": "key_set",
-                "is_valid": True,  # Format valid, assume working
-                "is_connected": False,  # Not tested yet
-                "key_preview": f"{api_key[:10]}..." if len(api_key) > 10 else api_key,
-            })
+            set_provider_status(
+                provider_name,
+                {
+                    "name": provider_name,
+                    "status": "key_set",
+                    "is_valid": True,  # Format valid, assume working
+                    "is_connected": False,  # Not tested yet
+                    "key_preview": f"{api_key[:10]}..."
+                    if len(api_key) > 10
+                    else api_key,
+                },
+            )
 
     def _check_common_mistakes(self):
         """Check for common configuration mistakes"""
@@ -429,7 +475,7 @@ class ConfigValidator:
                     f"  → Current value: {provider_url}\n"
                     f"  → Example: https://api.openai.com/v1"
                 )
-            
+
             # Check for localhost loop
             if "localhost" in provider_url or "127.0.0.1" in provider_url:
                 # Check if it matches the server port
@@ -508,7 +554,9 @@ def main():
     """CLI entry point for config validation"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Validate Claude Code Proxy configuration")
+    parser = argparse.ArgumentParser(
+        description="Validate Claude Code Proxy configuration"
+    )
     parser.add_argument(
         "--strict",
         action="store_true",
