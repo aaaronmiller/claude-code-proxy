@@ -146,6 +146,114 @@ def log_request(
     )
 
 
+def _cascade_terminal(
+    action: str,
+    from_model: Optional[str],
+    to_model: Optional[str],
+    model: str,
+    reason: Optional[str],
+    error: Optional[str],
+    request_id: Optional[str],
+    tier: Optional[str],
+) -> None:
+    """Emit a rich terminal line for cascade events. Called synchronously inside log_cascade()."""
+    try:
+        from datetime import datetime as _dt
+        ts = _dt.now().strftime("%H:%M:%S")
+        rid = (request_id or "")[:6]
+
+        # Error classification → short label + color
+        _err_low = (error or "").lower()
+        if "401" in _err_low or "unauthorized" in _err_low or "auth" in _err_low:
+            err_tag, err_color = "401 UNAUTH", "bold red"
+        elif "429" in _err_low or "rate" in _err_low or "limit" in _err_low:
+            err_tag, err_color = "429 RATELIM", "bold yellow"
+        elif "timeout" in _err_low or "timed out" in _err_low:
+            err_tag, err_color = "TIMEOUT", "bold yellow"
+        elif "400" in _err_low or "bad request" in _err_low:
+            err_tag, err_color = "400 BADREQ", "bold red"
+        elif "context" in _err_low or "too long" in _err_low:
+            err_tag, err_color = "CTX LIMIT", "bold magenta"
+        elif "ssl" in _err_low or "cert" in _err_low:
+            err_tag, err_color = "SSL ERROR", "bold red"
+        elif "connect" in _err_low or "refused" in _err_low:
+            err_tag, err_color = "CONN FAIL", "bold red"
+        elif "503" in _err_low or "502" in _err_low or "overload" in _err_low:
+            err_tag, err_color = "OVERLOADED", "bold yellow"
+        elif error:
+            err_tag, err_color = "FAIL", "red"
+        else:
+            err_tag, err_color = "", "dim"
+
+        # Short model names
+        def _short(m: Optional[str]) -> str:
+            if not m:
+                return ""
+            parts = m.split("/")
+            return parts[-1] if len(parts) > 1 else m
+
+        try:
+            from rich.console import Console as _Console
+            from rich.text import Text as _Text
+            _con = _Console()
+
+            if action == "switch" and from_model and to_model:
+                t = _Text()
+                t.append(f"{ts} ", style="dim white")
+                t.append("↷ ", style="bold yellow")
+                if rid:
+                    t.append(f"{rid}  ", style="dim cyan")
+                t.append(_short(from_model), style="dim white")
+                t.append(" [", style="dim")
+                t.append(err_tag, style=err_color)
+                t.append("]", style="dim")
+                t.append(" → ", style="yellow")
+                t.append(_short(to_model), style="bold cyan")
+                if tier:
+                    t.append(f"  [{tier}]", style="dim yellow")
+                if reason:
+                    t.append(f"  {reason}", style="dim yellow")
+                _con.print(t)
+
+            elif action == "exhausted":
+                t = _Text()
+                t.append(f"{ts} ", style="dim white")
+                t.append("✗✗ ", style="bold red")
+                if rid:
+                    t.append(f"{rid}  ", style="dim cyan")
+                t.append("ALL CASCADE MODELS FAILED", style="bold red")
+                t.append(f"  primary={_short(model)}", style="dim red")
+                if tier:
+                    t.append(f"  [{tier}]", style="dim red")
+                _con.print(t)
+                if error:
+                    _con.print(f"{'':>10}last error: {error[:120]}", style="dim red")
+
+            elif action == "success" and from_model:
+                t = _Text()
+                t.append(f"{ts} ", style="dim white")
+                t.append("↷✓ ", style="bold green")
+                if rid:
+                    t.append(f"{rid}  ", style="dim cyan")
+                t.append("cascade success: ", style="dim green")
+                t.append(_short(model), style="bold green")
+                _con.print(t)
+
+        except Exception:
+            # Plain text fallback if rich unavailable
+            import logging as _log
+            _logger = _log.getLogger("src.core.cascade")
+            if action == "switch" and from_model and to_model:
+                _logger.warning(
+                    f"CASCADE ↷ {rid}  {_short(from_model)} [{err_tag}] → {_short(to_model)}"
+                    + (f"  [{tier}]" if tier else "")
+                )
+            elif action == "exhausted":
+                _logger.error(f"CASCADE ✗✗ {rid}  ALL FAILED  primary={_short(model)}")
+    except Exception:
+        pass  # Never let terminal output break the request path
+
+
 def log_cascade(
     model: str,
     action: str,
@@ -157,7 +265,7 @@ def log_cascade(
     retry_count: int = 0,
     error: Optional[str] = None
 ):
-    """Log a cascade event."""
+    """Log a cascade event — both to the WebSocket stream and rich terminal."""
     event = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model,
@@ -177,6 +285,12 @@ def log_cascade(
         message = f"Cascade {action}: {from_model} -> {to_model}"
     if reason:
         message = f"{message} ({reason})"
+
+    # ── Rich terminal output ──────────────────────────────────────────────
+    # Cascade switches are exactly the events users need to see: which model
+    # failed, why, and what we're trying next. Previously these were buried
+    # in DEBUG logs or never shown at all.
+    _cascade_terminal(action, from_model, to_model, model, reason, error, request_id, tier)
 
     log_broadcaster.log(
         level="warning" if action == "switch" else "info",

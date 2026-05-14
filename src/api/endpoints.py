@@ -1140,39 +1140,48 @@ async def create_message(
                     if (
                         e.status_code == 401 and not openai_api_key
                     ):  # Only retry for server-side keys (proxy mode)
-                        # Build diagnostic context for every 401
                         _key_in_use = config.openai_api_key or ""
                         _key_display = (
-                            _key_in_use[:10] + "..." + _key_in_use[-4:]
+                            _key_in_use[:10] + "…" + _key_in_use[-4:]
                             if len(_key_in_use) > 14
-                            else (_key_in_use[:4] + "..." if _key_in_use else "(NO KEY SET)")
+                            else (_key_in_use[:4] + "…" if _key_in_use else "(NO KEY SET)")
                         )
-                        _endpoint_url = getattr(config, "openai_base_url", None) or "unknown endpoint"
+                        _endpoint_url = getattr(config, "openai_base_url", None) or "unknown"
                         _model_used = openai_request.get("model", "unknown")
-                        _err_detail = str(e.detail) if hasattr(e, "detail") else str(e)
+                        _err_detail = str(getattr(e, "detail", e))[:200]
 
                         if retry_count == 0:
-                            logger.error(
-                                f"[401 Unauthorized] model={_model_used} "
-                                f"endpoint={_endpoint_url} key={_key_display}\n"
-                                f"  Provider error: {_err_detail}\n"
-                                f"  → Check OPENROUTER_API_KEY / BIG_API_KEY in .env or shell env\n"
-                                f"  → Run: python start_proxy.py --fix-keys"
+                            # Use proxy_logger for rich terminal display
+                            proxy_logger.log_error(
+                                request_id=request_id,
+                                error=(
+                                    f"401 Unauthorized — {_err_detail}\n"
+                                    f"          endpoint: {_endpoint_url}\n"
+                                    f"          key:      {_key_display}\n"
+                                    f"          fix:      check OPENROUTER_API_KEY in .env  |  python start_proxy.py --fix-keys"
+                                ),
+                                model_name=_model_used,
+                                original_model=_model_used,
+                                endpoint=_endpoint_url,
                             )
 
                         if retry_count >= max_retries:
-                            logger.error(
-                                f"[401] Auth still failing after {retry_count * 2}s. "
-                                f"No key update detected. model={_model_used} key={_key_display}"
+                            proxy_logger.log_error(
+                                request_id=request_id,
+                                error=(
+                                    f"401 auth still failing after {retry_count * 2}s — no key update detected\n"
+                                    f"          model={_model_used}  key={_key_display}"
+                                ),
+                                model_name=_model_used,
+                                endpoint=_endpoint_url,
                             )
                             raise e
 
-                        # Wait briefly and check for a hot-reloaded key
                         await asyncio.sleep(2)
                         retry_count += 1
 
                         if key_reloader.check_for_updates():
-                            logger.info("Key update detected! Retrying request...")
+                            logger.info("[401] Key update detected — retrying request")
                             if custom_client:
                                 custom_client.api_key = config.openai_api_key or ""
                                 active_api_key = custom_client.api_key

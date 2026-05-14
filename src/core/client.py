@@ -1106,8 +1106,8 @@ class OpenAIClient:
                 current_request = {**request, "model": model}
 
                 if model_idx > 0 and retry_counts[model] == 0:
-                    logger.debug(
-                        f"[CASCADE {timestamp}] ⚡ Trying fallback model: {model}"
+                    logger.info(
+                        f"[CASCADE] ↷ trying fallback: {model}"
                     )
                     log_cascade(
                         model=model,
@@ -1465,24 +1465,20 @@ class OpenAIClient:
                 # still try fallback models rather than propagating the error immediately.
                 code = e.status_code
                 if code == 429:
-                    # Rate-limit: cascade after 1 retry (not full MAX_RETRIES)
-                    # to avoid long backoff loops blocking the fallback chain.
                     retry_counts[model] += 1
-                    logger.debug(f"[CASCADE] HTTPException 429 on {model} ({retry_counts[model]}/1), cascading next")
+                    logger.info(f"[CASCADE] {model} → 429 rate-limit, cascading to next")
                     last_error = e
                     model_idx += 1
                     continue
                 elif code in (400, 401, 403):
-                    # Bad request / auth: cascade immediately
                     _get_circuit_breaker(model)._record_failure(e)
-                    logger.debug(f"[CASCADE] HTTPException {code} on {model} — cascading immediately")
+                    logger.info(f"[CASCADE] {model} → {code} auth/bad-request, cascading to next")
                     last_error = e
                     model_idx += 1
                     continue
                 elif code in (500, 502, 503, 504):
-                    # Server error: retry then cascade
                     retry_counts[model] += 1
-                    logger.debug(f"[CASCADE] HTTPException {code} on {model} ({retry_counts[model]}/{MAX_RETRIES_BEFORE_CASCADE})")
+                    logger.info(f"[CASCADE] {model} → {code} server error ({retry_counts[model]}/{MAX_RETRIES_BEFORE_CASCADE})")
                     last_error = e
                     if retry_counts[model] >= MAX_RETRIES_BEFORE_CASCADE:
                         model_idx += 1
@@ -1719,7 +1715,7 @@ class OpenAIClient:
 
             try:
                 if model_idx > 0 and retry_counts[model] == 0:
-                    logger.debug(f"[CASCADE] Trying fallback model (stream): {model}")
+                    logger.info(f"[CASCADE] ↷ stream fallback: {model}")
                     log_cascade(
                         model=model,
                         action="switch",
@@ -1853,8 +1849,8 @@ class OpenAIClient:
                             )
                         except Exception:
                             pass
-                        logger.debug(
-                            f"[CASCADE {timestamp}] 🚫 Streaming request error on {model} - switching immediately: {e.detail}"
+                        logger.info(
+                            f"[CASCADE] {model} → {status_code} (context limit), cascading"
                         )
                     next_model = (
                         models_to_try[model_idx + 1]
@@ -1883,8 +1879,8 @@ class OpenAIClient:
                         or "scale requests more smoothly" in error_str
                     )
                     if is_alibaba_rampup:
-                        logger.debug(
-                            f"[CASCADE] Alibaba ramp-up limit on {model} (stream) — cascading immediately to next provider"
+                        logger.info(
+                            f"[CASCADE] {model} → 429 ramp-up burst, cascading to next provider"
                         )
                         next_model = (
                             models_to_try[model_idx + 1]

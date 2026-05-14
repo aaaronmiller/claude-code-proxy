@@ -662,6 +662,13 @@ def main(env_updates: dict = None, skip_validation: bool = False):
     _access_logger = _logging.getLogger("uvicorn.access")
     _access_logger.addFilter(_QuietPollFilter())
 
+    # Suppress raw httpx/openai SDK HTTP lines — they show "POST .../chat/completions 401"
+    # with zero context (no model, no why, no fix). Our cascade logger emits richer
+    # contextual lines instead. Errors still surface through proxy_logger.log_error().
+    for _noisy_logger in ("httpx", "openai._base_client", "openai.http_client"):
+        _l = _logging.getLogger(_noisy_logger)
+        _l.setLevel(_logging.WARNING)
+
     # Prune reasoning logs older than 7 days. The Option C heartbeat path
     # tees unrequested reasoning to disk per-message; without pruning, this
     # directory grows without bound on a busy proxy.

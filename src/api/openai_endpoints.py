@@ -181,6 +181,145 @@ def normalize_tool_call_response(
 
 
 # ═══════════════════════════════════════════════════════════════
+# TERMINAL DIAGNOSTICS
+# ═══════════════════════════════════════════════════════════════
+
+def _classify_api_error(e: Exception) -> str:
+    """Return a short human-readable error class for terminal display."""
+    status = getattr(e, "status_code", None)
+    msg = str(e).lower()
+    if status == 401 or "unauthorized" in msg or "invalid api key" in msg:
+        return "401 Unauthorized"
+    if status == 429 or "rate limit" in msg or "too many requests" in msg:
+        return "429 Rate Limited"
+    if status == 400 or "bad request" in msg:
+        return "400 Bad Request"
+    if "timeout" in msg or "timed out" in msg:
+        return "Timeout"
+    if "connect" in msg or "connection refused" in msg:
+        return "Connection Failed"
+    if status and status >= 500:
+        return f"{status} Server Error"
+    return type(e).__name__
+
+
+def _emit_terminal_error(
+    request_id: str,
+    routed_model: str,
+    orig_model: str,
+    provider: str,
+    endpoint: str,
+    api_key: str,
+    error_str: str,
+    status_code=None,
+) -> None:
+    """Emit a rich-formatted error line to the terminal for every API failure."""
+    try:
+        from rich.console import Console as _Console
+        from rich.text import Text as _Text
+        import datetime as _datetime
+
+        ts = _datetime.datetime.now().strftime("%H:%M:%S")
+        rid = request_id[:6]
+        _con = _Console()
+
+        # Masked key for diagnostics — first 10 + last 4 chars
+        key_display = (
+            api_key[:10] + "…" + api_key[-4:] if api_key and len(api_key) > 14
+            else (api_key[:6] + "…" if api_key else "NO KEY SET")
+        )
+
+        # Status tag color
+        status_str = str(status_code) if status_code else ""
+        if status_code == 401:
+            sc, tag = "bold red", f"[{status_str} UNAUTH]"
+        elif status_code == 429:
+            sc, tag = "bold yellow", f"[{status_str} RATELIM]"
+        elif status_code in (502, 503, 504):
+            sc, tag = "bold yellow", f"[{status_str} SERVER]"
+        elif status_code and status_code >= 400:
+            sc, tag = "red", f"[{status_str}]"
+        else:
+            sc, tag = "red", "[ERROR]"
+
+        t = _Text()
+        t.append(f"{ts} ", style="dim white")
+        t.append("✗ ", style="bold red")
+        t.append(f"{rid}  ", style="dim cyan")
+        if orig_model and orig_model != routed_model:
+            t.append(f"{orig_model} → ", style="dim white")
+        t.append(routed_model or "?", style="bold white")
+        if provider:
+            t.append(f" @{provider}", style="dim yellow")
+        t.append(f"  {tag}", style=sc)
+        _con.print(t)
+
+        # Detail lines — always show on errors so user knows what to do
+        _con.print(
+            f"{'':>10}error:    {error_str[:200]}",
+            style="red",
+        )
+        if endpoint:
+            _con.print(f"{'':>10}endpoint: {endpoint}", style="dim yellow")
+        if api_key:
+            _con.print(f"{'':>10}key:      {key_display}", style="dim yellow")
+        else:
+            _con.print(
+                f"{'':>10}key:      (NONE — set OPENROUTER_API_KEY or BIG_API_KEY)",
+                style="bold red",
+            )
+        if status_code == 401:
+            _con.print(
+                f"{'':>10}fix:      check key at openrouter.ai/account  |  python start_proxy.py --fix-keys",
+                style="dim cyan",
+            )
+        elif status_code == 429:
+            _con.print(
+                f"{'':>10}fix:      rate limited — add cascade fallbacks (BIG_CASCADE=...)",
+                style="dim cyan",
+            )
+    except Exception:
+        # Bare fallback — never silence errors, even if rich breaks
+        import logging as _log
+        _log.getLogger("src.api.openai_endpoints").error(
+            f"[{request_id}] {routed_model} @{provider} → {error_str[:200]}"
+        )
+
+
+def _emit_terminal_complete(
+    request_id: str,
+    routed_model: str,
+    orig_model: str,
+    provider: str,
+    duration_ms: float,
+) -> None:
+    """Emit a rich success line for completed OpenAI-path requests."""
+    try:
+        from rich.console import Console as _Console
+        from rich.text import Text as _Text
+        import datetime as _datetime
+
+        ts = _datetime.datetime.now().strftime("%H:%M:%S")
+        rid = request_id[:6]
+        dur = f"{duration_ms:.0f}ms" if duration_ms < 1000 else f"{duration_ms/1000:.1f}s"
+        _con = _Console()
+
+        t = _Text()
+        t.append(f"{ts} ", style="dim white")
+        t.append("✓ ", style="bold green")
+        t.append(f"{rid}  ", style="dim cyan")
+        if orig_model and orig_model != routed_model:
+            t.append(f"{orig_model} → ", style="dim white")
+        t.append(routed_model or "?", style="bold white")
+        if provider:
+            t.append(f" @{provider}", style="dim yellow")
+        t.append(f"  {dur}", style="dim green")
+        _con.print(t)
+    except Exception:
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════
 # MAIN ENDPOINT
 # ═══════════════════════════════════════════════════════════════
 
@@ -385,8 +524,18 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                         )
 
                 except Exception as e:
-                    logger.error(f"[{request_id}] Streaming error: {e}")
-                    error_chunk = {"error": {"message": str(e), "type": "server_error"}}
+                    _err_str = str(e)
+                    _status = getattr(e, "status_code", None)
+                    _err_type = _classify_api_error(e)
+                    logger.error(
+                        f"[{request_id}] Stream error {_err_type}: {_err_str[:200]}"
+                        f"  model={routed_model} endpoint={endpoint}"
+                    )
+                    _emit_terminal_error(
+                        request_id, routed_model, openai_request.get("model", ""),
+                        provider, endpoint, api_key, _err_str, _status
+                    )
+                    error_chunk = {"error": {"message": _err_str, "type": "server_error"}}
                     yield f"data: {json.dumps(error_chunk)}\n\n"
 
             return StreamingResponse(
@@ -422,17 +571,29 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                     )
 
             duration_ms = (time.time() - start_time) * 1000
+            _emit_terminal_complete(request_id, routed_model, openai_request.get("model",""), provider, duration_ms)
             logger.info(f"[{request_id}] Completed in {duration_ms:.0f}ms")
 
             return response_dict
 
     except Exception as e:
+        _err_str = str(e)
+        _status = getattr(e, "status_code", None)
+        _emit_terminal_error(
+            request_id,
+            routed_model if "routed_model" in dir() else openai_request.get("model",""),
+            openai_request.get("model", ""),
+            provider if "provider" in dir() else "",
+            endpoint if "endpoint" in dir() else "",
+            api_key,
+            _err_str, _status,
+        )
         logger.error(f"[{request_id}] Error: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
                 "error": {
-                    "message": str(e),
+                    "message": _err_str,
                     "type": "server_error",
                     "code": "internal_error",
                 }
