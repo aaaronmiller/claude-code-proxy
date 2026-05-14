@@ -255,13 +255,31 @@ class ProxyChain:
         return cls.from_dict(migrated_data)
 
     def save(self, path: Optional[Path] = None) -> None:
-        """Persist to disk atomically (write-to-temp + fsync + rename)."""
+        """Persist to disk atomically (write-to-temp + fsync + rename).
+
+        Safety: if this chain object has no entries but the on-disk file has
+        entries, preserve the on-disk entries. This prevents API calls that
+        update only assignments/router from accidentally wiping the service
+        startup entries that `proxies up` depends on.
+        """
         p = Path(os.environ.get("PROXY_CHAIN_FILE", path or DEFAULT_CHAIN_FILE))
         p.parent.mkdir(parents=True, exist_ok=True)
-        # Write to temp file first, then atomic rename
+
+        payload = self.to_dict()
+
+        # Guard: preserve on-disk entries if we're about to write an empty list.
+        if not payload.get("entries") and p.exists():
+            try:
+                import json as _json
+                on_disk = _json.loads(p.read_text(encoding="utf-8"))
+                existing_entries = on_disk.get("entries", [])
+                if existing_entries:
+                    payload["entries"] = existing_entries
+            except Exception:
+                pass  # if we can't read on-disk, proceed with what we have
+
         tmp_path = p.with_suffix(".tmp")
-        tmp_path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
-        # TODO: fsync for durability (optional in v1)
+        tmp_path.write_text(__import__("json").dumps(payload, indent=2), encoding="utf-8")
         tmp_path.replace(p)  # atomic on POSIX
 
     # ── Chain manipulation ────────────────────────────────────────────────────

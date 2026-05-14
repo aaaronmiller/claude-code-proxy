@@ -268,9 +268,12 @@ _launch_chain_tmux() {
 
 # ── Main start command ──
 cmd_start() {
+    # ── Idempotent: always results in all services UP, regardless of current state ──
+    # Single invocation is sufficient: checks each service individually,
+    # starts only what's down, never requires a separate `proxies down` first.
+
     echo -e "\n${CYAN}Starting proxy chain${NC}\n"
 
-    # Report GPU so the user knows what kompressor backend will be used
     local _gpu_env
     _gpu_env=$(_detect_gpu_env)
     if [[ "$_gpu_env" == "ONEAPI_DEVICE_SELECTOR="* ]]; then
@@ -282,49 +285,75 @@ cmd_start() {
     fi
     echo ""
 
-    # If session already exists, check health before deciding to restart.
-    # After Ctrl+C from tmux attach, the session and processes keep running —
-    # killing+restarting everything is wrong and forces the user to run twice.
-    if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-        local all_healthy=true
-        while IFS='|' read -r id name cmd port health type; do
-            [ "$port" -gt 0 ] || continue
-            curl -sf --max-time 1 "http://127.0.0.1:$port$health" > /dev/null 2>&1 || { all_healthy=false; break; }
-        done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
+    # Guard: no services configured
+    local _svc_count
+    _svc_count=$(CHAIN_FILE="$CHAIN_FILE" _chain_services_reversed | wc -l)
+    if [ "$_svc_count" -eq 0 ]; then
+        warn "No enabled chain services with service_cmd found in $CHAIN_FILE"
+        info "Add services via: proxies chain"
+        info "(Entries may have been wiped by a schema migration — check git log)"
+        return 1
+    fi
 
-        if [ "$all_healthy" = true ]; then
-            ok "All services already running"
-            while IFS='|' read -r id name cmd port health type; do
-                [ "$port" -gt 0 ] && ok "$name :$port"
-            done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
-            echo ""
-            echo -e "  ${CYAN}View live output:${NC} tmux attach -t $TMUX_SESSION"
-            echo -e "  ${CYAN}Detach:${NC}          Ctrl+B, then D"
-            echo ""
-            if [ -t 1 ] && [ "$NO_ATTACH" != "1" ]; then
-                tmux attach -t "$TMUX_SESSION"
-            fi
-            return 0
+    # ── Per-service health check ──
+    # Build two lists: healthy (already up) and dead (need restart).
+    local -a dead_services=()
+    local -a healthy_services=()
+    while IFS='|' read -r id name cmd port health type; do
+        [ "$port" -gt 0 ] || continue
+        if curl -sf --max-time 1 "http://127.0.0.1:$port$health" > /dev/null 2>&1; then
+            healthy_services+=("$name :$port")
+        else
+            dead_services+=("$id")
         fi
+    done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
 
-        warn "Session exists but services are down — restarting..."
+    local need_full_restart=false
+
+    if [ ${#dead_services[@]} -eq 0 ]; then
+        # Everything already healthy
+        ok "All services already running"
+        while IFS='|' read -r id name cmd port health type; do
+            [ "$port" -gt 0 ] && ok "$name :$port"
+        done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
+        echo ""
+        echo -e "  ${CYAN}View live output:${NC} tmux attach -t $TMUX_SESSION"
+        echo -e "  ${CYAN}Detach:${NC}          Ctrl+B, then D"
+        echo ""
+        if [ -t 1 ] && [ "$NO_ATTACH" != "1" ]; then
+            tmux attach -t "$TMUX_SESSION" 2>/dev/null || true
+        fi
+        return 0
+    fi
+
+    # Print what's healthy vs what needs restart
+    for svc in "${healthy_services[@]}"; do
+        ok "$svc (already up)"
+    done
+    for id in "${dead_services[@]}"; do
+        warn "Down: $id — will restart"
+    done
+    echo ""
+
+    # If tmux session exists but some services are dead: kill and rebuild cleanly.
+    # Partial-restart inside an existing session is fragile (pane layout breaks).
+    if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+        warn "Killing stale tmux session and restarting all services..."
         tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
         sleep 0.5
     fi
 
-    # Kill any orphaned processes before starting fresh
+    # Kill any orphaned processes that survived outside tmux
     cmd_stop 2>/dev/null || true
-    sleep 0.5
+    sleep 0.3
 
     info "Launching chain in tmux..."
-    _launch_chain_tmux
+    _launch_chain_tmux || return 1
 
     info "Waiting for services to start..."
     sleep 2
 
     local all_ok=true
-
-    # Health-check each chain entry (skip CLI wrappers)
     while IFS='|' read -r id name cmd port health type; do
         if [ "$port" -gt 0 ]; then
             wait_for_port "$port" 30 "$health" && ok "$name :$port" || { fail "$name :$port"; all_ok=false; }

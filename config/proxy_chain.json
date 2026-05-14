@@ -1,6 +1,27 @@
 {
   "schema_version": "2.0.0",
-  "entries": [],
+  "entries": [
+    {
+      "id": "claude_code_proxy",
+      "name": "Claude Code Proxy",
+      "type": "http",
+      "port": 8082,
+      "health_path": "/health",
+      "enabled": true,
+      "order": 0,
+      "service_cmd": "exec env -u ANTHROPIC_API_KEY .venv/bin/python start_proxy.py --skip-validation"
+    },
+    {
+      "id": "headroom",
+      "name": "Headroom",
+      "type": "http",
+      "port": 8787,
+      "health_path": "/health",
+      "enabled": true,
+      "order": 1,
+      "service_cmd": "headroom proxy --port 8787 --mode token_headroom --anthropic-api-url https://openrouter.ai/api/v1 --log-file ~/.headroom/logs/proxy.jsonl"
+    }
+  ],
   "router": {
     "default": {
       "model": "",
