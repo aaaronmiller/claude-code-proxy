@@ -53,6 +53,16 @@ For more details, see docs/guides/configuration.md
                        help='Launch interactive model selector')
     model_group.add_argument('--model-cascade', dest='model_cascade', action='store_true',
                        help='Enable model cascade fallback on provider errors')
+    model_group.add_argument('--big-cascade', dest='big_cascade', metavar='MODELS',
+                       help='BIG tier fallback models (comma-separated)')
+    model_group.add_argument('--middle-cascade', dest='middle_cascade', metavar='MODELS',
+                       help='MIDDLE tier fallback models (comma-separated)')
+    model_group.add_argument('--small-cascade', dest='small_cascade', metavar='MODELS',
+                       help='SMALL tier fallback models (comma-separated)')
+    model_group.add_argument('--cascade-daily-limit', dest='model_cascade_daily_limit', type=int,
+                       metavar='N', help='Max cascade requests per model per day (0=unlimited)')
+    model_group.add_argument('--or-fallbacks', dest='openrouter_fallback_models', metavar='MODELS',
+                       help='Dynamic OpenRouter fallback pool (comma-separated)')
 
     # Reasoning arguments
     reasoning_group.add_argument('--reasoning-effort', dest='reasoning_effort',
@@ -63,6 +73,12 @@ For more details, see docs/guides/configuration.md
     reasoning_group.add_argument('--reasoning-exclude', dest='reasoning_exclude',
                        choices=['true', 'false'],
                        help='Whether to exclude reasoning tokens from response')
+    reasoning_group.add_argument('--reasoning-max-tokens', dest='reasoning_max_tokens', type=int,
+                       metavar='N', help='Max thinking tokens for extended reasoning')
+    reasoning_group.add_argument('--big-reasoning', dest='big_model_reasoning',
+                       metavar='EFFORT', help='Per-tier reasoning override for BIG model')
+    reasoning_group.add_argument('--middle-reasoning', dest='middle_model_reasoning',
+                       metavar='EFFORT', help='Per-tier reasoning override for MIDDLE model')
 
     # Server arguments
     server_group.add_argument('--host', dest='host', metavar='HOST',
@@ -72,6 +88,10 @@ For more details, see docs/guides/configuration.md
     server_group.add_argument('--log-level', dest='log_level',
                        choices=['debug', 'info', 'warning', 'error', 'critical'],
                        help='Logging level')
+    server_group.add_argument('--request-timeout', dest='request_timeout', type=int,
+                       metavar='SECONDS', help='Upstream request timeout (default: 120)')
+    server_group.add_argument('--max-retries', dest='max_retries', type=int,
+                       metavar='N', help='Max upstream retries before cascade (default: 2)')
 
     # Mode arguments
     mode_group.add_argument('--list-modes', action='store_true',

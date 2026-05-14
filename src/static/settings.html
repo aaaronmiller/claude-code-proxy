@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Proxy Control — Settings</title>
 
-<!-- Tailwind Play CDN -->
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
@@ -13,156 +12,309 @@
     theme: {
       extend: {
         fontFamily: {
-          mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
-          sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+          mono: ['"JetBrains Mono"', '"Fira Code"', '"Cascadia Code"', 'monospace'],
         },
         colors: {
-          terminal: {
-            bg: '#0a0a0b',
-            card: '#111113',
-            border: '#1e1e23',
-            hover: '#18181c',
-            accent: '#10b981',
-            'accent-dim': '#064e3b',
-            muted: '#3f3f46',
-            text: '#e4e4e7',
-            dim: '#71717a',
+          forge: {
+            bg:       '#080810',
+            deep:     '#0c0c16',
+            card:     '#0f0f1a',
+            border:   '#1a1a2e',
+            line:     '#141420',
+            hover:    '#131320',
+            cyan:     '#00d9ff',
+            'cyan-dim':'#003d48',
+            amber:    '#f59e0b',
+            'amber-dim':'#3d2800',
+            green:    '#22c55e',
+            'green-dim':'#052010',
+            red:      '#f87171',
+            'red-dim':'#280808',
+            muted:    '#4a4a6a',
+            text:     '#c8c8e8',
+            dim:      '#5a5a7a',
+            faint:    '#2a2a3a',
           }
-        },
-        animation: {
-          'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-          'fade-in': 'fadeIn 0.2s ease-out',
-          'slide-up': 'slideUp 0.2s ease-out',
-        },
-        keyframes: {
-          fadeIn: { from: { opacity: '0' }, to: { opacity: '1' } },
-          slideUp: { from: { opacity: '0', transform: 'translateY(8px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
         }
       }
     }
   }
 </script>
 
-<!-- Google Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- Alpine.js -->
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
 <style>
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; background: #0a0a0b; color: #e4e4e7; }
-  body { font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  .font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+  :root {
+    --bg:       #080810;
+    --deep:     #0c0c16;
+    --card:     #0f0f1a;
+    --border:   #1a1a2e;
+    --line:     #141420;
+    --hover:    #131320;
+    --cyan:     #00d9ff;
+    --cyan-dim: #003d48;
+    --amber:    #f59e0b;
+    --green:    #22c55e;
+    --red:      #f87171;
+    --text:     #c8c8e8;
+    --dim:      #5a5a7a;
+    --muted:    #4a4a6a;
+    --faint:    #2a2a3a;
+    --font: 'JetBrains Mono', 'Fira Code', monospace;
+  }
 
-  /* Scanline overlay */
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Noise grain overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    pointer-events: none;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 128px;
+  }
+
+  /* Scanlines */
   body::before {
     content: '';
-    position: fixed; inset: 0; z-index: 9999; pointer-events: none;
-    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    position: fixed;
+    inset: 0;
+    z-index: 9997;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(0, 0, 0, 0.06) 3px,
+      rgba(0, 0, 0, 0.06) 4px
+    );
   }
 
-  /* Scrollbar */
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: #111113; }
-  ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 2px; }
-  ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-track { background: var(--deep); }
+  ::-webkit-scrollbar-thumb { background: var(--faint); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
-  /* Toggle switch */
-  .toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
-  .toggle input { opacity: 0; width: 0; height: 0; }
-  .toggle-track {
-    width: 36px; height: 20px; border-radius: 10px;
-    background: #27272a; transition: background 0.2s; position: relative;
-    border: 1px solid #3f3f46;
+  /* ── Toggle switch ───────────────────────────────── */
+  .tgl { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+  .tgl input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .tgl-track {
+    width: 32px; height: 16px;
+    background: var(--faint);
+    border: 1px solid var(--muted);
+    border-radius: 8px;
+    position: relative;
+    transition: background 0.15s, border-color 0.15s;
+    flex-shrink: 0;
   }
-  .toggle input:checked + .toggle-track { background: #059669; border-color: #10b981; }
-  .toggle-track::after {
-    content: ''; position: absolute; top: 2px; left: 2px;
-    width: 14px; height: 14px; border-radius: 50%; background: #71717a;
-    transition: transform 0.2s, background 0.2s;
+  .tgl input:checked + .tgl-track {
+    background: var(--cyan-dim);
+    border-color: var(--cyan);
   }
-  .toggle input:checked + .toggle-track::after { transform: translateX(16px); background: #fff; }
-
-  /* Field card hover */
-  .field-row { transition: background 0.12s; }
-  .field-row:hover { background: rgba(255,255,255,0.02); }
-
-  /* Grade badge */
-  .grade-S { background: linear-gradient(135deg, #064e3b, #065f46); color: #6ee7b7; border: 1px solid #10b981; }
-  .grade-A { background: linear-gradient(135deg, #1e3a5f, #1e40af); color: #93c5fd; border: 1px solid #3b82f6; }
-  .grade-B { background: linear-gradient(135deg, #451a03, #78350f); color: #fcd34d; border: 1px solid #f59e0b; }
-  .grade-C { background: linear-gradient(135deg, #431407, #7c2d12); color: #fdba74; border: 1px solid #f97316; }
-  .grade-F { background: linear-gradient(135deg, #450a0a, #7f1d1d); color: #fca5a5; border: 1px solid #ef4444; }
-
-  /* Gauge bar */
-  .gauge-bar { background: #1c1c1f; border-radius: 2px; overflow: hidden; height: 4px; }
-  .gauge-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease-out; }
-
-  /* Input styles */
-  .field-input {
-    background: #18181c; border: 1px solid #27272a; color: #e4e4e7;
-    border-radius: 6px; padding: 5px 10px; font-family: 'JetBrains Mono', monospace;
-    font-size: 12px; transition: border-color 0.15s; width: 100%;
+  .tgl-track::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--dim);
+    transition: transform 0.15s, background 0.15s;
   }
-  .field-input:focus { outline: none; border-color: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.15); }
-  .field-input.modified { border-color: #f59e0b; }
-
-  /* Nav active */
-  .nav-item { transition: all 0.15s; }
-  .nav-item.active { background: rgba(16,185,129,0.1); color: #10b981; border-right: 2px solid #10b981; }
-  .nav-item:hover:not(.active) { background: rgba(255,255,255,0.04); }
-
-  /* Card */
-  .settings-card {
-    background: #111113; border: 1px solid #1e1e23;
-    border-radius: 10px; overflow: hidden;
+  .tgl input:checked + .tgl-track::after {
+    transform: translateX(16px);
+    background: var(--cyan);
   }
 
-  /* Toast */
+  /* ── Field inputs ────────────────────────────────── */
+  .fi {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--faint);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 11px;
+    padding: 3px 0 3px 4px;
+    width: 100%;
+    transition: border-color 0.12s;
+    outline: none;
+  }
+  .fi:focus { border-bottom-color: var(--cyan); }
+  .fi.mod { border-bottom-color: var(--amber); color: var(--amber); }
+  .fi::placeholder { color: var(--muted); font-size: 10px; }
+
+  .fs {
+    background: var(--deep);
+    border: 1px solid var(--faint);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 11px;
+    padding: 3px 6px;
+    width: 100%;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .fs:focus { border-color: var(--cyan); }
+  .fs.mod { border-color: var(--amber); color: var(--amber); }
+
+  /* ── Section header ──────────────────────────────── */
+  .sec-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 0 10px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+  .sec-head-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dim);
+    padding-left: 8px;
+    border-left: 2px solid var(--cyan);
+  }
+
+  /* ── Nav item ────────────────────────────────────── */
+  .nv-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--dim);
+    transition: background 0.1s, color 0.1s;
+    cursor: pointer;
+    background: none;
+    border: none;
+    border-left: 2px solid transparent;
+  }
+  .nv-item:hover { background: var(--hover); color: var(--text); }
+  .nv-item.active {
+    background: rgba(0, 217, 255, 0.06);
+    color: var(--cyan);
+    border-left-color: var(--cyan);
+  }
+
+  /* ── Field row ───────────────────────────────────── */
+  .fr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: start;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line);
+    transition: background 0.1s;
+  }
+  .fr:last-child { border-bottom: none; }
+  .fr:hover { background: var(--hover); }
+
+  /* ── Card container ──────────────────────────────── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Grade display (ASCII box) ───────────────────── */
+  .grade-box {
+    font-size: 10px;
+    font-family: var(--font);
+    color: var(--cyan);
+    white-space: pre;
+    line-height: 1.3;
+    letter-spacing: 0;
+  }
+  .grade-S { color: #22c55e; }
+  .grade-A { color: var(--cyan); }
+  .grade-B { color: var(--amber); }
+  .grade-C { color: #f97316; }
+  .grade-F { color: var(--red); }
+
+  /* ── Breaker badges ──────────────────────────────── */
+  .b-closed { color: var(--green); }
+  .b-open   { color: var(--red);   }
+  .b-half   { color: var(--amber); }
+
+  /* ── Toast ───────────────────────────────────────── */
   .toast {
-    position: fixed; bottom: 24px; right: 24px; z-index: 9999;
-    padding: 12px 20px; border-radius: 8px; font-size: 13px;
-    font-family: 'JetBrains Mono', monospace; font-weight: 500;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
-    animation: slideUp 0.2s ease-out;
-    display: flex; align-items: center; gap: 8px;
+    position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+    padding: 8px 16px;
+    font-family: var(--font); font-size: 11px;
+    border: 1px solid; display: flex; align-items: center; gap: 8px;
+    animation: toast-in 0.15s ease-out;
   }
-  .toast-success { background: #064e3b; border: 1px solid #10b981; color: #6ee7b7; }
-  .toast-error { background: #450a0a; border: 1px solid #ef4444; color: #fca5a5; }
-
-  /* Breaker badge */
-  .breaker-closed { background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid #064e3b; }
-  .breaker-open { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid #7f1d1d; }
-  .breaker-half_open { background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px solid #78350f; }
-
-  /* Reliability number animation */
-  @keyframes countUp { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
-  .score-display { animation: countUp 0.5s ease-out; }
-
-  /* Section transition */
-  .section-content { animation: fadeIn 0.2s ease-out; }
-
-  /* Select */
-  .field-select {
-    background: #18181c; border: 1px solid #27272a; color: #e4e4e7;
-    border-radius: 6px; padding: 5px 10px; font-family: 'JetBrains Mono', monospace;
-    font-size: 12px; cursor: pointer; width: 100%;
+  .toast-success { background: #030f08; border-color: var(--green); color: var(--green); }
+  .toast-error   { background: #0f0303; border-color: var(--red);   color: var(--red);   }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
-  .field-select:focus { outline: none; border-color: #10b981; }
-  .field-select.modified { border-color: #f59e0b; }
 
-  /* Blinking cursor */
-  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-  .cursor { animation: blink 1s step-end infinite; }
+  /* ── Gauge bar ───────────────────────────────────── */
+  .gauge { height: 2px; background: var(--faint); position: relative; overflow: hidden; }
+  .gauge-fill { height: 100%; transition: width 0.5s ease-out; }
 
-  /* Pulse dot */
-  .dot-live { animation: pulse-dot 2s ease infinite; }
-  @keyframes pulse-dot {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
-    50% { box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+  /* ── Blink ───────────────────────────────────────── */
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .blink { animation: blink 1.2s step-end infinite; }
+
+  /* ── Pulse dot ───────────────────────────────────── */
+  @keyframes pdot { 0%,100%{box-shadow:0 0 0 0 rgba(0,217,255,.4)} 50%{box-shadow:0 0 0 4px rgba(0,217,255,0)} }
+  .pdot { animation: pdot 2s ease infinite; }
+
+  /* ── Fade in ─────────────────────────────────────── */
+  @keyframes fi-in { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+  .fi-in { animation: fi-in 0.15s ease-out; }
+
+  /* ── 2-col grid for settings ──────────────────────── */
+  @media (min-width: 900px) {
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; }
+    .settings-grid .fr { border-right: 1px solid var(--line); }
+    .settings-grid .fr:nth-child(even) { border-right: none; }
+  }
+
+  /* ── Mod pill ────────────────────────────────────── */
+  .mod-pill {
+    font-size: 8px; font-weight: 600; letter-spacing: 0.08em;
+    padding: 1px 5px;
+    background: rgba(245,158,11,0.12);
+    color: var(--amber);
+    border: 1px solid rgba(245,158,11,0.3);
+    text-transform: uppercase;
+  }
+
+  /* ── Control width ───────────────────────────────── */
+  .ctrl { width: 160px; min-width: 160px; }
+
+  /* ── Header top bar ──────────────────────────────── */
+  .topbar {
+    height: 36px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 8px;
+    background: var(--deep);
+    flex-shrink: 0;
   }
 </style>
 </head>
@@ -173,251 +325,257 @@
   <div :class="['toast', toast.type === 'success' ? 'toast-success' : 'toast-error']" x-text="toast.message"></div>
 </template>
 
-<div class="flex h-full min-h-screen">
+<div class="flex h-screen overflow-hidden">
 
-  <!-- ── Sidebar ─────────────────────────────────────────────────── -->
-  <nav class="w-56 shrink-0 border-r border-[#1e1e23] flex flex-col bg-[#0d0d0f]">
-    <!-- Logo -->
-    <div class="px-4 py-5 border-b border-[#1e1e23]">
-      <div class="flex items-center gap-2">
-        <div class="w-6 h-6 rounded bg-emerald-900 flex items-center justify-center">
-          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-        </div>
-        <div>
-          <div class="text-xs font-semibold text-zinc-200 font-mono">PROXY CTL</div>
-          <div class="text-[10px] text-zinc-600 font-mono">config surface</div>
-        </div>
-      </div>
+  <!-- ══ SIDEBAR ═════════════════════════════════════════════════ -->
+  <aside style="width:200px;min-width:200px;background:var(--deep);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;">
+
+    <!-- Logo bar -->
+    <div class="topbar">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="color:var(--cyan)">
+        <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+      <span style="font-size:11px;font-weight:600;color:var(--text);letter-spacing:.06em;">PROXY CTL</span>
+      <span style="font-size:9px;color:var(--muted);margin-left:auto;">v2</span>
     </div>
 
-    <!-- Status indicator -->
-    <div class="px-4 py-3 border-b border-[#1e1e23]">
-      <div class="flex items-center gap-2 text-[11px] font-mono">
-        <div :class="proxyStatus === 'online' ? 'bg-emerald-500 dot-live' : 'bg-red-500'" class="w-1.5 h-1.5 rounded-full"></div>
-        <span :class="proxyStatus === 'online' ? 'text-emerald-400' : 'text-red-400'" x-text="proxyStatus === 'online' ? 'proxy online' : 'proxy offline'"></span>
-      </div>
-      <div class="mt-1 text-[10px] text-zinc-600 font-mono">:8082</div>
+    <!-- Status -->
+    <div style="padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;">
+      <div
+        :class="proxyStatus === 'online' ? 'pdot' : ''"
+        :style="'width:6px;height:6px;border-radius:50%;background:' + (proxyStatus === 'online' ? 'var(--cyan)' : 'var(--red)')"
+      ></div>
+      <span :style="'font-size:10px;color:' + (proxyStatus === 'online' ? 'var(--cyan)' : 'var(--red)')" x-text="proxyStatus === 'online' ? 'online :8082' : 'offline'"></span>
     </div>
 
-    <!-- Nav sections -->
-    <div class="flex-1 overflow-y-auto py-2">
+    <!-- Nav -->
+    <div style="flex:1;overflow-y:auto;padding:4px 0;">
       <template x-for="section in navSections" :key="section.id">
         <button
           @click="activeSection = section.id; scrollToSection(section.id)"
-          :class="['nav-item w-full text-left px-4 py-2.5 flex items-center gap-2.5', activeSection === section.id ? 'active' : 'text-zinc-500']"
+          :class="['nv-item', activeSection === section.id ? 'active' : '']"
         >
-          <span class="text-sm" x-text="section.icon"></span>
-          <span class="text-[12px] font-mono" x-text="section.label"></span>
-          <!-- Modified indicator -->
-          <span x-show="hasPendingChanges(section.id)" class="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+          <span style="font-size:11px;" x-text="section.icon"></span>
+          <span x-text="section.label"></span>
+          <span x-show="hasPendingChanges(section.id)" style="margin-left:auto;width:5px;height:5px;border-radius:50%;background:var(--amber);display:inline-block;"></span>
         </button>
       </template>
     </div>
 
-    <!-- Save All -->
-    <div class="p-3 border-t border-[#1e1e23]">
+    <!-- Save / discard -->
+    <div style="padding:10px;border-top:1px solid var(--border);">
       <button
         @click="saveAll()"
         :disabled="Object.keys(pendingChanges).length === 0 || saving"
-        :class="Object.keys(pendingChanges).length > 0 ? 'bg-emerald-700 hover:bg-emerald-600 text-emerald-100 cursor-pointer' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'"
-        class="w-full py-2 rounded-lg text-[11px] font-mono font-medium transition-colors flex items-center justify-center gap-2"
+        :style="Object.keys(pendingChanges).length > 0 ? 'background:rgba(0,217,255,.08);border:1px solid var(--cyan);color:var(--cyan);cursor:pointer;' : 'background:var(--faint);border:1px solid var(--border);color:var(--muted);cursor:not-allowed;'"
+        style="width:100%;padding:7px;font-family:var(--font);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px;"
       >
         <span x-show="!saving">
-          <span x-show="Object.keys(pendingChanges).length > 0">
-            SAVE <span class="text-amber-300" x-text="Object.keys(pendingChanges).length"></span> CHANGE<span x-show="Object.keys(pendingChanges).length > 1">S</span>
-          </span>
+          <span x-show="Object.keys(pendingChanges).length > 0">SAVE <span x-text="Object.keys(pendingChanges).length"></span></span>
           <span x-show="Object.keys(pendingChanges).length === 0">NO CHANGES</span>
         </span>
-        <span x-show="saving" class="flex items-center gap-1">
-          <svg class="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+        <span x-show="saving">
+          <svg style="width:10px;height:10px;animation:spin .8s linear infinite" viewBox="0 0 24 24" fill="none"><circle opacity=".25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path opacity=".75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
           SAVING...
         </span>
       </button>
-      <button @click="discardChanges()" x-show="Object.keys(pendingChanges).length > 0" class="w-full mt-1 py-1.5 text-[10px] font-mono text-zinc-600 hover:text-zinc-400 transition-colors">
-        discard changes
-      </button>
+      <button
+        @click="discardChanges()"
+        x-show="Object.keys(pendingChanges).length > 0"
+        style="width:100%;margin-top:4px;padding:4px;background:none;border:none;font-family:var(--font);font-size:9px;color:var(--muted);cursor:pointer;text-transform:uppercase;letter-spacing:.06em;transition:color .12s;"
+        @mouseover="$el.style.color='var(--text)'" @mouseout="$el.style.color='var(--muted)'"
+      >discard</button>
     </div>
-  </nav>
+  </aside>
 
-  <!-- ── Main Content ────────────────────────────────────────────── -->
-  <main class="flex-1 overflow-y-auto px-8 py-8 space-y-8" id="main-scroll">
+  <!-- ══ MAIN ════════════════════════════════════════════════════ -->
+  <main style="flex:1;overflow-y:auto;background:var(--bg);" id="main-scroll">
 
-    <!-- Header -->
-    <div class="flex items-start justify-between">
-      <div>
-        <h1 class="text-xl font-semibold font-mono text-zinc-100">Settings</h1>
-        <p class="text-sm text-zinc-600 mt-0.5 font-mono">
-          <span class="cursor text-emerald-500">█</span>
-          <span x-text="loading ? 'loading configuration...' : settings.groups.length + ' groups · ' + Object.keys(settings.values).length + ' parameters'"></span>
-        </p>
-      </div>
-      <button @click="loadAll()" class="text-[11px] font-mono text-zinc-600 hover:text-zinc-400 transition-colors flex items-center gap-1">
-        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+    <!-- Top bar -->
+    <div class="topbar" style="position:sticky;top:0;z-index:10;">
+      <span style="font-size:10px;color:var(--dim);">
+        <span class="blink" style="color:var(--cyan);">▋</span>&nbsp;
+        <span x-text="loading ? 'loading...' : settings.groups.length + ' groups · ' + Object.keys(settings.values).length + ' parameters'"></span>
+      </span>
+      <button
+        @click="loadAll()"
+        style="margin-left:auto;background:none;border:none;font-family:var(--font);font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px;transition:color .12s;"
+        @mouseover="$el.style.color='var(--cyan)'" @mouseout="$el.style.color='var(--muted)'"
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
         refresh
       </button>
     </div>
 
-    <!-- Loading state -->
-    <div x-show="loading" class="flex items-center justify-center py-24">
-      <div class="flex items-center gap-3 text-zinc-600 font-mono text-sm">
-        <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+    <!-- Loading -->
+    <div x-show="loading" style="display:flex;align-items:center;justify-content:center;height:200px;">
+      <span style="font-size:11px;color:var(--muted);">
+        <svg style="width:12px;height:12px;animation:spin .8s linear infinite;display:inline;margin-right:6px;" viewBox="0 0 24 24" fill="none"><circle opacity=".25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path opacity=".75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
         loading configuration...
-      </div>
+      </span>
     </div>
 
-    <div x-show="!loading" class="space-y-8">
+    <div x-show="!loading" style="padding:20px;display:flex;flex-direction:column;gap:24px;">
 
-      <!-- ── Reliability Section ──────────────────────────── -->
+      <!-- ── RELIABILITY ──────────────────────────────────────── -->
       <section id="section-reliability">
-        <div class="flex items-center gap-3 mb-4">
-          <span class="text-sm">📊</span>
-          <h2 class="text-sm font-semibold font-mono text-zinc-400 uppercase tracking-wider">Reliability Score</h2>
+        <div class="sec-head">
+          <span class="sec-head-label">Reliability Score</span>
+          <span style="font-size:9px;color:var(--muted);margin-left:auto;">24h window</span>
         </div>
-        <div class="settings-card p-5">
-          <div x-show="!reliability.loaded" class="text-zinc-600 font-mono text-xs">fetching reliability data...</div>
-          <div x-show="reliability.loaded" class="section-content">
-            <div class="flex items-start gap-8">
-              <!-- Grade badge -->
-              <div class="flex flex-col items-center gap-2">
-                <div :class="'grade-' + (reliability.grade || 'F')" class="w-20 h-20 rounded-xl flex items-center justify-center font-mono font-bold text-3xl score-display" x-text="reliability.grade || '?'"></div>
-                <div class="text-[10px] font-mono text-zinc-600">
-                  <span x-text="reliability.score ? (reliability.score * 100).toFixed(1) + '%' : '--'"></span>
-                </div>
-                <div class="text-[10px] font-mono text-zinc-600">
-                  <span x-text="reliability.total_requests || 0"></span> req
-                </div>
-              </div>
+        <div class="card fi-in">
+          <div x-show="!reliability.loaded" style="padding:20px;color:var(--muted);font-size:10px;">awaiting data...</div>
+          <div x-show="reliability.loaded" style="padding:16px;display:flex;gap:24px;flex-wrap:wrap;">
 
-              <!-- Components -->
-              <div class="flex-1 space-y-3">
-                <template x-for="(value, key) in (reliability.components || {})" :key="key">
-                  <div>
-                    <div class="flex items-center justify-between mb-1">
-                      <span class="text-[11px] font-mono text-zinc-500" x-text="key.replace(/_/g, ' ')"></span>
-                      <span class="text-[11px] font-mono text-zinc-300" x-text="(value * 100).toFixed(1) + '%'"></span>
-                    </div>
-                    <div class="gauge-bar">
-                      <div class="gauge-fill"
-                        :style="'width: ' + (value * 100) + '%; background: ' + getGaugeColor(value)"
-                      ></div>
-                    </div>
-                  </div>
-                </template>
+            <!-- ASCII grade block -->
+            <div style="flex-shrink:0;">
+              <div
+                :class="'grade-box grade-' + (reliability.grade || 'F')"
+                style="line-height:1.4;"
+              >
+                <span x-text="
+                  '┌──────┐\n│  ' + (reliability.grade || '?') + '   │\n└──────┘'
+                " style="white-space:pre;font-size:13px;font-weight:700;letter-spacing:0;"></span>
               </div>
-
-              <!-- Error breakdown -->
-              <div x-show="Object.keys(reliability.error_breakdown || {}).length > 0" class="min-w-36">
-                <div class="text-[10px] font-mono text-zinc-600 uppercase tracking-wider mb-2">Error Breakdown</div>
-                <template x-for="(count, type) in (reliability.error_breakdown || {})" :key="type">
-                  <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10px] font-mono text-red-400 truncate max-w-24" x-text="type"></span>
-                    <span class="text-[10px] font-mono text-zinc-500 ml-2" x-text="'×' + count"></span>
-                  </div>
-                </template>
-              </div>
+              <div style="font-size:10px;color:var(--dim);margin-top:6px;text-align:center;" x-text="reliability.score ? (reliability.score * 100).toFixed(1) + '%' : '--'"></div>
+              <div style="font-size:9px;color:var(--muted);text-align:center;" x-text="(reliability.total_requests || 0) + ' req'"></div>
             </div>
+
+            <!-- Component gauges -->
+            <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:10px;">
+              <template x-for="(value, key) in (reliability.components || {})" :key="key">
+                <div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <span style="font-size:10px;color:var(--dim);" x-text="key.replace(/_/g,' ')"></span>
+                    <span style="font-size:10px;font-weight:500;" :style="'color:' + getGaugeColor(value)" x-text="(value * 100).toFixed(1) + '%'"></span>
+                  </div>
+                  <div class="gauge">
+                    <div class="gauge-fill" :style="'width:' + (value*100) + '%;background:' + getGaugeColor(value)"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <!-- Error breakdown -->
+            <div x-show="Object.keys(reliability.error_breakdown || {}).length > 0" style="min-width:140px;">
+              <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px;border-left:2px solid var(--red);padding-left:6px;">Error Breakdown</div>
+              <template x-for="(count, type) in (reliability.error_breakdown || {})" :key="type">
+                <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+                  <span style="font-size:10px;color:var(--red);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="type"></span>
+                  <span style="font-size:10px;color:var(--muted);" x-text="'×'+count"></span>
+                </div>
+              </template>
+            </div>
+
           </div>
         </div>
       </section>
 
-      <!-- ── Circuit Breakers ────────────────────────────── -->
+      <!-- ── CIRCUIT BREAKERS ─────────────────────────────────── -->
       <section id="section-breakers">
-        <div class="flex items-center gap-3 mb-4">
-          <span class="text-sm">⚡</span>
-          <h2 class="text-sm font-semibold font-mono text-zinc-400 uppercase tracking-wider">Circuit Breakers</h2>
-          <span class="text-[10px] font-mono text-zinc-700 ml-auto">live state</span>
+        <div class="sec-head">
+          <span class="sec-head-label">Circuit Breakers</span>
+          <span style="font-size:9px;color:var(--muted);margin-left:auto;">live state</span>
         </div>
-        <div class="settings-card">
-          <div x-show="!breakers.length" class="px-5 py-4 text-zinc-600 font-mono text-xs">
-            no circuit breakers active — no failures recorded yet
-          </div>
+        <div class="card fi-in">
+          <div x-show="!breakers.length" style="padding:14px;font-size:10px;color:var(--muted);">── no breakers active ──</div>
           <div x-show="breakers.length > 0">
             <template x-for="(b, i) in breakers" :key="b.model">
-              <div :class="['px-5 py-3 flex items-center gap-4 field-row', i > 0 ? 'border-t border-[#1a1a1e]' : '']">
-                <div :class="['breaker-' + b.state, 'text-[10px] font-mono px-2 py-0.5 rounded font-medium min-w-16 text-center']" x-text="b.state"></div>
-                <div class="flex-1 font-mono text-xs text-zinc-300 truncate" x-text="b.model"></div>
-                <div class="text-[10px] font-mono text-zinc-600" x-text="'fails: ' + b.failure_count"></div>
-                <div x-show="b.cooldown_remaining_s > 0" class="text-[10px] font-mono text-amber-500" x-text="b.cooldown_remaining_s.toFixed(0) + 's remaining'"></div>
-                <button @click="resetBreaker(b.model)" x-show="b.state === 'open'" class="text-[10px] font-mono text-zinc-600 hover:text-emerald-400 transition-colors ml-2 px-2 py-0.5 border border-[#2a2a2e] rounded hover:border-emerald-900">
-                  reset
-                </button>
+              <div style="display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);" :style="i === breakers.length - 1 ? 'border-bottom:none' : ''">
+                <span
+                  :class="'b-' + (b.state === 'half_open' ? 'half' : b.state)"
+                  style="font-size:10px;font-weight:600;min-width:64px;text-align:center;"
+                  x-text="'[' + b.state.toUpperCase().replace('_',' ') + ']'"
+                ></span>
+                <span style="flex:1;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="b.model"></span>
+                <span style="font-size:10px;color:var(--muted);" x-text="b.failure_count + 'F'"></span>
+                <span x-show="b.cooldown_remaining_s > 0" style="font-size:10px;color:var(--amber);" x-text="b.cooldown_remaining_s.toFixed(0)+'s'"></span>
+                <button
+                  @click="resetBreaker(b.model)"
+                  x-show="b.state === 'open'"
+                  style="font-size:9px;font-family:var(--font);background:none;border:1px solid var(--border);color:var(--muted);padding:2px 8px;cursor:pointer;text-transform:uppercase;letter-spacing:.06em;transition:all .12s;"
+                  @mouseover="$el.style.borderColor='var(--cyan)';$el.style.color='var(--cyan)'"
+                  @mouseout="$el.style.borderColor='var(--border)';$el.style.color='var(--muted)'"
+                >reset</button>
               </div>
             </template>
           </div>
         </div>
       </section>
 
-      <!-- ── Dynamic Setting Groups ─────────────────────── -->
+      <!-- ── DYNAMIC SETTINGS GROUPS ──────────────────────────── -->
       <template x-for="groupId in displayGroups" :key="groupId">
-        <section :id="'section-' + groupId" class="section-content">
-          <div class="flex items-center gap-3 mb-4">
-            <span class="text-sm" x-text="getGroupIcon(groupId)"></span>
-            <h2 class="text-sm font-semibold font-mono text-zinc-400 uppercase tracking-wider" x-text="settings.group_labels[groupId] || groupId"></h2>
-            <div x-show="hasPendingChanges(groupId)" class="ml-2 text-[10px] font-mono px-2 py-0.5 rounded bg-amber-900/40 text-amber-400 border border-amber-900">
-              <span x-text="countGroupChanges(groupId)"></span> unsaved
+        <section :id="'section-' + groupId" class="fi-in">
+          <!-- Section header -->
+          <div class="sec-head">
+            <span class="sec-head-label" x-text="settings.group_labels[groupId] || groupId"></span>
+            <span style="font-size:9px;color:var(--dim);" x-text="getGroupIcon(groupId)"></span>
+            <div x-show="hasPendingChanges(groupId)" style="margin-left:auto;display:flex;align-items:center;gap:4px;">
+              <span style="width:5px;height:5px;background:var(--amber);border-radius:50%;display:inline-block;"></span>
+              <span style="font-size:9px;color:var(--amber);" x-text="countGroupChanges(groupId) + ' unsaved'"></span>
             </div>
           </div>
-          <div class="settings-card">
+
+          <!-- Settings grid -->
+          <div class="card settings-grid">
             <template x-for="(setting, idx) in getGroupSettings(groupId)" :key="setting.env_var">
-              <div :class="['field-row px-5 py-3', idx > 0 ? 'border-t border-[#1a1a1e]' : '']">
-                <div class="flex items-start gap-4">
-                  <!-- Label & description -->
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-2 mb-1">
-                      <span class="text-[11px] font-mono font-medium text-zinc-300" x-text="formatLabel(setting.env_var)"></span>
-                      <span x-show="setting.units" class="text-[9px] font-mono text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded" x-text="setting.units"></span>
-                      <span x-show="setting.secret" class="text-[9px] font-mono text-zinc-600">🔒</span>
-                      <!-- Modified indicator -->
-                      <span x-show="isModified(setting.env_var)" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400">modified</span>
-                    </div>
-                    <div class="text-[10px] text-zinc-600 font-sans leading-relaxed" x-text="setting.description"></div>
-                    <div x-show="setting.min_val !== null || setting.max_val !== null" class="text-[9px] font-mono text-zinc-700 mt-0.5">
-                      range: <span x-text="(setting.min_val || '') + (setting.min_val !== null && setting.max_val !== null ? ' – ' : '') + (setting.max_val || '')"></span>
-                    </div>
+              <div class="fr">
+                <!-- Left: label + description -->
+                <div style="min-width:0;">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
+                    <span style="font-size:11px;font-weight:500;color:var(--text);" x-text="formatLabel(setting.env_var)"></span>
+                    <span x-show="setting.units" style="font-size:8px;color:var(--muted);padding:1px 4px;border:1px solid var(--faint);text-transform:uppercase;letter-spacing:.06em;" x-text="setting.units"></span>
+                    <span x-show="setting.secret" style="font-size:9px;color:var(--muted);">🔒</span>
+                    <span x-show="isModified(setting.env_var)" class="mod-pill">mod</span>
+                  </div>
+                  <div style="font-size:10px;color:var(--muted);line-height:1.4;" x-text="setting.description"></div>
+                  <div x-show="setting.min_val !== null || setting.max_val !== null" style="font-size:9px;color:var(--faint);margin-top:2px;">
+                    <span x-text="(setting.min_val !== null ? setting.min_val : '') + (setting.min_val !== null && setting.max_val !== null ? ' – ' : '') + (setting.max_val !== null ? setting.max_val : '')"></span>
+                  </div>
+                </div>
+
+                <!-- Right: control -->
+                <div class="ctrl" style="display:flex;align-items:flex-start;justify-content:flex-end;">
+
+                  <!-- Bool toggle -->
+                  <div x-show="setting.type === 'bool'" style="display:flex;align-items:center;gap:6px;padding-top:2px;">
+                    <label class="tgl">
+                      <input type="checkbox"
+                        :checked="getBoolValue(setting.env_var)"
+                        @change="setBoolValue(setting.env_var, $event.target.checked)"
+                      >
+                      <div class="tgl-track"></div>
+                    </label>
+                    <span style="font-size:10px;" :style="getBoolValue(setting.env_var) ? 'color:var(--cyan)' : 'color:var(--muted)'" x-text="getBoolValue(setting.env_var) ? 'ON' : 'OFF'"></span>
                   </div>
 
-                  <!-- Input control -->
-                  <div class="min-w-48">
-                    <!-- Boolean toggle -->
-                    <div x-show="setting.type === 'bool'" class="flex items-center justify-end h-8">
-                      <label class="toggle">
-                        <input
-                          type="checkbox"
-                          :checked="getBoolValue(setting.env_var)"
-                          @change="setBoolValue(setting.env_var, $event.target.checked)"
-                        >
-                        <div class="toggle-track"></div>
-                      </label>
-                      <span class="ml-2 text-[10px] font-mono" :class="getBoolValue(setting.env_var) ? 'text-emerald-400' : 'text-zinc-600'" x-text="getBoolValue(setting.env_var) ? 'on' : 'off'"></span>
-                    </div>
-
-                    <!-- Select dropdown -->
-                    <div x-show="setting.choices && setting.choices.length > 0 && setting.type !== 'bool'">
-                      <select
-                        :class="['field-select', isModified(setting.env_var) ? 'modified' : '']"
-                        :value="getCurrentValue(setting.env_var)"
-                        @change="setValue(setting.env_var, $event.target.value)"
-                      >
-                        <template x-for="choice in setting.choices" :key="choice">
-                          <option :value="choice" :selected="getCurrentValue(setting.env_var) === choice" x-text="choice"></option>
-                        </template>
-                      </select>
-                    </div>
-
-                    <!-- Text/number input -->
-                    <div x-show="!setting.choices && setting.type !== 'bool'">
-                      <input
-                        :type="setting.type === 'int' || setting.type === 'float' ? 'number' : (setting.secret ? 'password' : 'text')"
-                        :class="['field-input', isModified(setting.env_var) ? 'modified' : '']"
-                        :value="getCurrentValue(setting.env_var)"
-                        :placeholder="setting.default !== null ? String(setting.default) : ''"
-                        :step="setting.type === 'float' ? '0.01' : '1'"
-                        :min="setting.min_val"
-                        :max="setting.max_val"
-                        @input="setValue(setting.env_var, $event.target.value)"
-                      >
-                    </div>
+                  <!-- Select -->
+                  <div x-show="setting.choices && setting.choices.length > 0 && setting.type !== 'bool'" style="width:100%;">
+                    <select
+                      :class="['fs', isModified(setting.env_var) ? 'mod' : '']"
+                      :value="getCurrentValue(setting.env_var)"
+                      @change="setValue(setting.env_var, $event.target.value)"
+                    >
+                      <template x-for="choice in setting.choices" :key="choice">
+                        <option :value="choice" :selected="getCurrentValue(setting.env_var) === choice" x-text="choice"></option>
+                      </template>
+                    </select>
                   </div>
+
+                  <!-- Text / number -->
+                  <div x-show="!setting.choices && setting.type !== 'bool'" style="width:100%;">
+                    <input
+                      :type="setting.type === 'int' || setting.type === 'float' ? 'number' : (setting.secret ? 'password' : 'text')"
+                      :class="['fi', isModified(setting.env_var) ? 'mod' : '']"
+                      :value="getCurrentValue(setting.env_var)"
+                      :placeholder="setting.default !== null ? String(setting.default) : ''"
+                      :step="setting.type === 'float' ? '0.01' : '1'"
+                      :min="setting.min_val"
+                      :max="setting.max_val"
+                      @input="setValue(setting.env_var, $event.target.value)"
+                    >
+                  </div>
+
                 </div>
               </div>
             </template>
@@ -428,6 +586,10 @@
     </div><!-- /!loading -->
   </main>
 </div>
+
+<style>
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
 
 <script>
 function proxySettings() {
@@ -443,20 +605,24 @@ function proxySettings() {
     toast: { show: false, message: '', type: 'success' },
 
     // Sections shown in settings groups (excluding reliability/breakers, shown separately)
-    displayGroups: ['models', 'budget', 'router_slots', 'compression', 'local_gpu', 'circuit_breaker', 'server', 'auth', 'logging', 'toolcalls', 'usage_tracking', 'watchdog'],
+    displayGroups: ['models', 'reasoning', 'budget', 'router_slots', 'compression', 'local_gpu', 'circuit_breaker', 'toolcalls', 'server', 'auth', 'logging', 'usage_tracking', 'watchdog'],
 
     navSections: [
       { id: 'reliability', label: 'Reliability', icon: '📊' },
       { id: 'breakers', label: 'Breakers', icon: '⚡' },
       { id: 'models', label: 'Models', icon: '🤖' },
+      { id: 'reasoning', label: 'Reasoning', icon: '🧠' },
       { id: 'budget', label: 'Budgets', icon: '💰' },
       { id: 'router_slots', label: 'Router Slots', icon: '🗺️' },
       { id: 'compression', label: 'Compression', icon: '🗜️' },
       { id: 'local_gpu', label: 'Local GPU', icon: '🖥️' },
       { id: 'circuit_breaker', label: 'Circuit Breaker', icon: '🔄' },
+      { id: 'toolcalls', label: 'Tool Calls', icon: '🔧' },
       { id: 'server', label: 'Server', icon: '🌐' },
       { id: 'auth', label: 'Auth & Keys', icon: '🔑' },
       { id: 'logging', label: 'Logging', icon: '📋' },
+      { id: 'usage_tracking', label: 'Usage Tracking', icon: '📈' },
+      { id: 'watchdog', label: 'Watchdog', icon: '🐕' },
     ],
 
     async init() {
@@ -568,16 +734,16 @@ function proxySettings() {
             this.settings.values[key] = value;
           }
           this.pendingChanges = {};
-          this.showToast(`✓ Saved ${data.count} setting${data.count !== 1 ? 's' : ''}`, 'success');
+          this.showToast('✓ saved ' + data.count + ' setting' + (data.count !== 1 ? 's' : ''), 'success');
           if (data.skipped && Object.keys(data.skipped).length > 0) {
             console.warn('Skipped settings:', data.skipped);
           }
         } else {
           const err = await res.json().catch(() => ({}));
-          this.showToast('Save failed: ' + (err.detail || res.statusText), 'error');
+          this.showToast('save failed: ' + (err.detail || res.statusText), 'error');
         }
       } catch (e) {
-        this.showToast('Save error: ' + e.message, 'error');
+        this.showToast('save error: ' + e.message, 'error');
       } finally {
         this.saving = false;
       }
@@ -591,13 +757,13 @@ function proxySettings() {
       try {
         const res = await fetch(`/api/breakers/${encodeURIComponent(model)}/reset`, { method: 'POST' });
         if (res.ok) {
-          this.showToast('✓ Reset: ' + model, 'success');
+          this.showToast('✓ reset: ' + model, 'success');
           // Refresh breakers
           const br = await fetch('/api/breakers').then(r => r.json());
           this.breakers = br.breakers || [];
         }
       } catch (e) {
-        this.showToast('Reset failed: ' + e.message, 'error');
+        this.showToast('reset failed: ' + e.message, 'error');
       }
     },
 
@@ -627,10 +793,10 @@ function proxySettings() {
     },
 
     getGaugeColor(value) {
-      if (value >= 0.85) return '#10b981';
-      if (value >= 0.65) return '#3b82f6';
+      if (value >= 0.85) return '#22c55e';
+      if (value >= 0.65) return '#00d9ff';
       if (value >= 0.50) return '#f59e0b';
-      return '#ef4444';
+      return '#f87171';
     },
   };
 }

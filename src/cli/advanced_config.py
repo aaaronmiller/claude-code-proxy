@@ -240,18 +240,24 @@ def configure_api_keys():
             if os.getenv("EXA_API_KEY")
             else "not set"
         )
+        aa = (
+            os.getenv("AA_API_KEY", "not set")[:8] + "..."
+            if os.getenv("AA_API_KEY")
+            else "not set"
+        )
 
         console.print("\n[bold yellow]Current Settings:[/]")
-        console.print(f"  1. Provider URL:    [cyan]{provider_url}[/]")
-        console.print(f"  2. Proxy Auth Key:  [cyan]{proxy_key}[/]")
-        console.print(f"  3. OpenRouter Key:  [cyan]{openrouter}[/]")
-        console.print(f"  4. Exa API Key:     [cyan]{exa}[/]")
+        console.print(f"  1. Provider URL:        [cyan]{provider_url}[/]")
+        console.print(f"  2. Proxy Auth Key:      [cyan]{proxy_key}[/]")
+        console.print(f"  3. OpenRouter Key:      [cyan]{openrouter}[/]")
+        console.print(f"  4. Exa API Key:         [cyan]{exa}[/]")
+        console.print(f"  5. Artificial Analysis: [cyan]{aa}[/] [dim](benchmark scores)[/]")
 
         console.print("\n[bold cyan]Options:[/]")
         console.print("  Enter number to edit, or [0] to Back")
 
         choice = Prompt.ask(
-            "\nSelect option", choices=["1", "2", "3", "4", "0"], default="0"
+            "\nSelect option", choices=["1", "2", "3", "4", "5", "0"], default="0"
         )
         updates = {}
 
@@ -269,6 +275,8 @@ def configure_api_keys():
             updates["OPENROUTER_API_KEY"] = Prompt.ask("Enter OpenRouter API Key")
         elif choice == "4":
             updates["EXA_API_KEY"] = Prompt.ask("Enter Exa API Key (for model ranking)")
+        elif choice == "5":
+            updates["AA_API_KEY"] = Prompt.ask("Enter Artificial Analysis API Key")
 
         if updates:
             update_env_file(updates)
@@ -628,58 +636,70 @@ def main():
         )
 
         console.print("\n[bold cyan]Categories:[/]")
-        console.print("  [1] 🔑 API Keys & Provider   [dim](Endpoints, Auth, OPENROUTER_API_KEY)[/]")
+        console.print("  [1] 🤖 Models & Cascade      [dim](BIG/MIDDLE/SMALL, fallbacks)[/]")
         console.print("  [2] 🧠 Reasoning / Thinking  [dim](Extended CoT, effort level)[/]")
-        console.print("  [3] 🌐 Network & Server      [dim](Host, Port, Logging)[/]")
-        console.print("  [4] 📊 Token Limits          [dim](Max tokens, Timeouts)[/]")
-        console.print("  [5] 🔀 Hybrid Mode           [dim](Per-tier model routing)[/]")
-        console.print("  [6] 📝 Custom Prompts        [dim](System prompt overrides)[/]")
-        console.print("  [7] 💬 Crosstalk             [dim](Model-to-model chat)[/]")
-        console.print("  [8] 🚩 Feature Flags         [dim](Toggles & Options)[/]")
-        console.print("  [9] 📈 Analytics Settings    [dim](Usage tracking config)[/]")
-        console.print("  [A] 💰 Budget & Cost Controls[dim](Token/USD limits, mid-stream)[/]")
-        console.print("  [B] 🔄 Cascade & Circuit Bkr [dim](Fallback lists, CB thresholds)[/]")
-        console.print("  [C] 🖥️  Local GPU Inference   [dim](ollama/llamafile, 4th tier)[/]")
-        console.print("  [D] 🗜️  Compression & Cache   [dim](Headroom bypass, semantic cache)[/]")
-        console.print("  [E] 🗺️  Router Slots          [dim](Use-case model assignments)[/]")
+        console.print("  [3] 💰 Budget & Cost Controls[dim](Token/USD limits, mid-stream)[/]")
+        console.print("  [4] 🗺️  Router Slots          [dim](Use-case model assignments)[/]")
+        console.print("  [5] 🗜️  Compression & Cache   [dim](Headroom bypass, semantic cache)[/]")
+        console.print("  [6] 🖥️  Local GPU Inference   [dim](ollama/llamafile, 4th tier)[/]")
+        console.print("  [7] 🔄 Cascade & Circuit Bkr [dim](Fallback lists, CB thresholds)[/]")
+        console.print("  [8] 🔧 Tool Calls            [dim](Tool-capable models, truncation)[/]")
+        console.print("  [9] 🔑 API Keys & Provider   [dim](Endpoints, Auth, API keys)[/]")
+        console.print("  [A] 🌐 Network & Server      [dim](Host, Port, Timeouts)[/]")
+        console.print("  [B] 📋 Logging               [dim](Log file, rotation, debug)[/]")
+        console.print("  [C] 📈 Analytics & Tracking  [dim](Usage tracking config)[/]")
+        console.print("  [D] 🐕 Watchdog              [dim](Auto-recovery, health checks)[/]")
+        console.print("  [E] 📝 Custom Prompts        [dim](System prompt overrides)[/]")
+        console.print("  [F] 🔀 Hybrid Mode           [dim](Per-tier endpoint routing)[/]")
+        console.print("  [G] 📊 Token Limits          [dim](Max tokens, context limits)[/]")
+        console.print("  [H] 🚩 Feature Flags         [dim](Toggles & Options)[/]")
+        console.print("  [I] 💬 Crosstalk             [dim](Model-to-model chat)[/]")
         console.print("  [0] 🔙 Back to Main Menu")
 
         choice = Prompt.ask(
             "\nSelect category",
-            choices=["1","2","3","4","5","6","7","8","9","A","B","C","D","E","0"],
+            choices=["1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","0"],
             default="0",
         ).upper()
 
         if choice == "0":
             return
         elif choice == "1":
-            configure_api_keys()
+            configure_models()
         elif choice == "2":
             configure_reasoning()
         elif choice == "3":
-            configure_network()
-        elif choice == "4":
-            configure_token_limits()
-        elif choice == "5":
-            configure_hybrid_mode()
-        elif choice == "6":
-            configure_custom_prompts()
-        elif choice == "7":
-            configure_crosstalk()
-        elif choice == "8":
-            configure_features()
-        elif choice == "9":
-            configure_analytics()
-        elif choice == "A":
             configure_budgets()
-        elif choice == "B":
-            configure_cascade_cb()
-        elif choice == "C":
-            configure_local_gpu()
-        elif choice == "D":
-            configure_compression()
-        elif choice == "E":
+        elif choice == "4":
             configure_router_slots()
+        elif choice == "5":
+            configure_compression()
+        elif choice == "6":
+            configure_local_gpu()
+        elif choice == "7":
+            configure_cascade_cb()
+        elif choice == "8":
+            configure_toolcalls()
+        elif choice == "9":
+            configure_api_keys()
+        elif choice == "A":
+            configure_network()
+        elif choice == "B":
+            configure_logging_advanced()
+        elif choice == "C":
+            configure_analytics()
+        elif choice == "D":
+            configure_watchdog()
+        elif choice == "E":
+            configure_custom_prompts()
+        elif choice == "F":
+            configure_hybrid_mode()
+        elif choice == "G":
+            configure_token_limits()
+        elif choice == "H":
+            configure_features()
+        elif choice == "I":
+            configure_crosstalk()
 
 
 def _prompt_val(label: str, env_key: str, default: str = "", secret: bool = False) -> Optional[str]:
@@ -918,6 +938,175 @@ def configure_router_slots():
         new_val = Prompt.ask(f"{label}", default=current)
         if new_val != current:
             update_env_file({key: new_val})
+
+
+def configure_models():
+    """Configure model selection for BIG/MIDDLE/SMALL tiers and cascade."""
+    while True:
+        console.clear()
+        console.print(Panel(
+            "[bold]Model Selection[/]\n[dim]Set the model for each tier and configure cascade fallback.[/]",
+            border_style="blue", title="🤖 Models"
+        ))
+
+        big = os.environ.get("BIG_MODEL", "")
+        mid = os.environ.get("MIDDLE_MODEL", "")
+        sml = os.environ.get("SMALL_MODEL", "")
+        cascade = os.environ.get("MODEL_CASCADE", "true")
+        big_c = os.environ.get("BIG_CASCADE", "")
+        mid_c = os.environ.get("MIDDLE_CASCADE", "")
+        sml_c = os.environ.get("SMALL_CASCADE", "")
+        daily_lim = os.environ.get("MODEL_CASCADE_DAILY_LIMIT", "0")
+        or_fb = os.environ.get("OPENROUTER_FALLBACK_MODELS", "")
+
+        console.print(f"\n  [1] BIG model              [cyan]{big or '(not set)'}[/]")
+        console.print(f"  [2] MIDDLE model           [cyan]{mid or '(not set)'}[/]")
+        console.print(f"  [3] SMALL model            [cyan]{sml or '(not set)'}[/]")
+        console.print(f"  [4] Model cascade enabled  [cyan]{cascade}[/]")
+        console.print(f"  [5] BIG cascade fallbacks  [cyan]{big_c or '(none)'}[/]")
+        console.print(f"  [6] MIDDLE cascade fallbacks [cyan]{mid_c or '(none)'}[/]")
+        console.print(f"  [7] SMALL cascade fallbacks  [cyan]{sml_c or '(none)'}[/]")
+        console.print(f"  [8] Cascade daily limit    [cyan]{daily_lim}[/] [dim](0=unlimited)[/]")
+        console.print(f"  [9] OpenRouter fallback pool [cyan]{or_fb or '(auto)'}[/]")
+        console.print("  [0] Back")
+
+        choice = Prompt.ask("\nSelect", choices=[str(i) for i in range(10)], default="0")
+        updates = {}
+        if choice == "0":
+            return
+        elif choice == "1":
+            updates["BIG_MODEL"] = Prompt.ask("BIG model (e.g. anthropic/claude-opus-4-20250514)", default=big)
+        elif choice == "2":
+            updates["MIDDLE_MODEL"] = Prompt.ask("MIDDLE model (e.g. openai/claude-sonnet-4-5)", default=mid)
+        elif choice == "3":
+            updates["SMALL_MODEL"] = Prompt.ask("SMALL model (e.g. openai/claude-haiku-4-5)", default=sml)
+        elif choice == "4":
+            v = Confirm.ask("Enable model cascade?", default=cascade.lower() == "true")
+            updates["MODEL_CASCADE"] = "true" if v else "false"
+        elif choice == "5":
+            updates["BIG_CASCADE"] = Prompt.ask("BIG cascade (comma-separated models)", default=big_c)
+        elif choice == "6":
+            updates["MIDDLE_CASCADE"] = Prompt.ask("MIDDLE cascade (comma-separated models)", default=mid_c)
+        elif choice == "7":
+            updates["SMALL_CASCADE"] = Prompt.ask("SMALL cascade (comma-separated models)", default=sml_c)
+        elif choice == "8":
+            updates["MODEL_CASCADE_DAILY_LIMIT"] = Prompt.ask("Daily limit per model (0=unlimited)", default=daily_lim)
+        elif choice == "9":
+            updates["OPENROUTER_FALLBACK_MODELS"] = Prompt.ask("OpenRouter fallback pool (comma-separated)", default=or_fb)
+        if updates:
+            update_env_file(updates)
+
+
+def configure_toolcalls():
+    """Configure tool-call routing and truncation."""
+    while True:
+        console.clear()
+        console.print(Panel(
+            "[bold]Tool Call Settings[/]\n[dim]Control how the proxy handles tool-call requests.[/]",
+            border_style="cyan", title="🔧 Tool Calls"
+        ))
+
+        tc_models = os.environ.get("TOOLCALL_MODELS", "")
+        tc_auto = os.environ.get("TOOLCALL_AUTO_ROUTE", "true")
+        tc_retries = os.environ.get("TOOLCALL_MAX_RETRIES", "2")
+        tc_max = os.environ.get("TOOL_OUTPUT_MAX_CHARS", "50000")
+        tc_trunc = os.environ.get("TOOL_OUTPUT_TRUNCATION", "false")
+
+        console.print(f"\n  [1] Tool-call capable models  [cyan]{tc_models or '(none — use tier)'}[/]")
+        console.print(f"  [2] Auto-route tool requests  [cyan]{tc_auto}[/]")
+        console.print(f"  [3] Max retries per model     [cyan]{tc_retries}[/]")
+        console.print(f"  [4] Max tool output chars     [cyan]{tc_max}[/]")
+        console.print(f"  [5] Enable output truncation  [cyan]{tc_trunc}[/]")
+        console.print("  [0] Back")
+
+        choice = Prompt.ask("\nSelect", choices=["0","1","2","3","4","5"], default="0")
+        updates = {}
+        if choice == "0":
+            return
+        elif choice == "1":
+            updates["TOOLCALL_MODELS"] = Prompt.ask("Comma-separated tool-capable models", default=tc_models)
+        elif choice == "2":
+            v = Confirm.ask("Auto-route tool requests?", default=tc_auto.lower() == "true")
+            updates["TOOLCALL_AUTO_ROUTE"] = "true" if v else "false"
+        elif choice == "3":
+            updates["TOOLCALL_MAX_RETRIES"] = Prompt.ask("Max retries (1-10)", default=tc_retries)
+        elif choice == "4":
+            updates["TOOL_OUTPUT_MAX_CHARS"] = Prompt.ask("Max output chars (e.g. 50000)", default=tc_max)
+        elif choice == "5":
+            v = Confirm.ask("Enable tool output truncation?", default=tc_trunc.lower() == "true")
+            updates["TOOL_OUTPUT_TRUNCATION"] = "true" if v else "false"
+        if updates:
+            update_env_file(updates)
+
+
+def configure_logging_advanced():
+    """Configure log file rotation and debug traffic logging."""
+    while True:
+        console.clear()
+        console.print(Panel(
+            "[bold]Logging Settings[/]\n[dim]Log file path, rotation, and debug verbosity.[/]",
+            border_style="dim", title="📋 Logging"
+        ))
+
+        log_file = os.environ.get("LOG_FILE", "logs/proxy.log")
+        log_max = os.environ.get("LOG_MAX_SIZE_MB", "50")
+        log_ret = os.environ.get("LOG_RETENTION_DAYS", "7")
+        debug_traf = os.environ.get("DEBUG_TRAFFIC_LOG", "false")
+
+        console.print(f"\n  [1] Log file path       [cyan]{log_file}[/]")
+        console.print(f"  [2] Max size (MB)       [cyan]{log_max}[/]")
+        console.print(f"  [3] Retention (days)    [cyan]{log_ret}[/]")
+        console.print(f"  [4] Debug traffic log   [cyan]{debug_traf}[/] [dim](dumps full HTTP headers)[/]")
+        console.print("  [0] Back")
+
+        choice = Prompt.ask("\nSelect", choices=["0","1","2","3","4"], default="0")
+        updates = {}
+        if choice == "0":
+            return
+        elif choice == "1":
+            updates["LOG_FILE"] = Prompt.ask("Log file path", default=log_file)
+        elif choice == "2":
+            updates["LOG_MAX_SIZE_MB"] = Prompt.ask("Max log size MB", default=log_max)
+        elif choice == "3":
+            updates["LOG_RETENTION_DAYS"] = Prompt.ask("Retention days", default=log_ret)
+        elif choice == "4":
+            v = Confirm.ask("Enable debug traffic log?", default=debug_traf.lower() == "true")
+            updates["DEBUG_TRAFFIC_LOG"] = "true" if v else "false"
+        if updates:
+            update_env_file(updates)
+
+
+def configure_watchdog():
+    """Configure the auto-recovery watchdog."""
+    while True:
+        console.clear()
+        console.print(Panel(
+            "[bold]Watchdog[/]\n[dim]Auto-recovery watchdog monitors service health and restarts dead processes.[/]",
+            border_style="green", title="🐕 Watchdog"
+        ))
+
+        enabled = os.environ.get("PROXY_WATCHDOG", "false")
+        interval = os.environ.get("WATCHDOG_INTERVAL", "30")
+        grace = os.environ.get("WATCHDOG_GRACE", "5")
+
+        console.print(f"\n  [1] Watchdog enabled    [cyan]{enabled}[/]")
+        console.print(f"  [2] Check interval      [cyan]{interval}s[/]")
+        console.print(f"  [3] Grace period        [cyan]{grace}s[/] [dim](wait before restart)[/]")
+        console.print("  [0] Back")
+
+        choice = Prompt.ask("\nSelect", choices=["0","1","2","3"], default="0")
+        updates = {}
+        if choice == "0":
+            return
+        elif choice == "1":
+            v = Confirm.ask("Enable watchdog?", default=enabled.lower() == "true")
+            updates["PROXY_WATCHDOG"] = "true" if v else "false"
+        elif choice == "2":
+            updates["WATCHDOG_INTERVAL"] = Prompt.ask("Check interval (seconds, 5-300)", default=interval)
+        elif choice == "3":
+            updates["WATCHDOG_GRACE"] = Prompt.ask("Grace period (seconds, 1-60)", default=grace)
+        if updates:
+            update_env_file(updates)
 
 
 if __name__ == "__main__":

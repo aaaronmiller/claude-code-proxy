@@ -182,6 +182,11 @@ configs/profiles/
 # Runtime Data
 data/
 usage_tracking.db
+usage_tracking.db.old
+*.db.old
+
+# Scratch / audit working files
+gimp/
 
 # Model scraper data (can be regenerated)
 model-scraper/data/
