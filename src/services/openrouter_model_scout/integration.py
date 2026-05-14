@@ -132,7 +132,7 @@ class ModelScoutIntegration:
             from src.core.config import Config
 
             config = Config()
-            api_key = config.provider_api_key or os.environ.get("OPENROUTER_API_KEY")
+            api_key = config.openai_api_key or os.environ.get("OPENROUTER_API_KEY")
 
         if not api_key:
             return {"status": "error", "error": "No OPENROUTER_API_KEY available"}

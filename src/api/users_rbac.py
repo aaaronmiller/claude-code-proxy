@@ -17,14 +17,16 @@ from src.services.user_management import (
     user_service,
     UserRole,
     Permission,
-    create_default_admin
+    create_default_admin,
 )
 
 router = APIRouter()
 
 
 # Dependency to get user from Authorization header
-async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+) -> Dict[str, Any]:
     """Extract and validate user from Authorization header"""
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")
@@ -42,7 +44,7 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
             "user_id": api_key_info["user_id"],
             "role": api_key_info["role"],
             "permissions": api_key_info["permissions"],
-            "type": "api_key"
+            "type": "api_key",
         }
 
     # Try as session token
@@ -54,10 +56,20 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
                 "user_id": user_id,
                 "role": user.role.value,
                 "permissions": user_service.get_user_permissions(user_id),
-                "type": "session"
+                "type": "session",
             }
 
     raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+# Dependency to require admin role
+async def require_admin(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Ensure the current user holds the admin role."""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+    return current_user
 
 
 # Helper to check permissions
@@ -99,9 +111,9 @@ async def login(credentials: Dict[str, Any]):
                 "username": user.username,
                 "email": user.email,
                 "role": user.role.value,
-                "permissions": user_service.get_user_permissions(user_id)
+                "permissions": user_service.get_user_permissions(user_id),
             },
-            "expires_in_hours": 24
+            "expires_in_hours": 24,
         }
 
     except HTTPException:
@@ -133,15 +145,14 @@ async def verify_auth(user: Dict[str, Any] = Depends(get_current_user)):
             "id": user["user_id"],
             "role": user["role"],
             "permissions": user["permissions"],
-            "type": user["type"]
-        }
+            "type": user["type"],
+        },
     }
 
 
 @router.post("/api/users")
 async def create_user(
-    user_data: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    user_data: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Create a new user (requires admin or users:manage permission)"""
     try:
@@ -155,7 +166,9 @@ async def create_user(
         role_str = user_data.get("role", "viewer")
 
         if not username or not password:
-            raise HTTPException(status_code=400, detail="Username and password required")
+            raise HTTPException(
+                status_code=400, detail="Username and password required"
+            )
 
         try:
             role = UserRole(role_str)
@@ -171,7 +184,7 @@ async def create_user(
             "success": True,
             "user_id": user_id,
             "username": username,
-            "role": role.value
+            "role": role.value,
         }
 
     except HTTPException:
@@ -199,10 +212,11 @@ async def list_users(current_user: Dict[str, Any] = Depends(get_current_user)):
                     "role": u.role.value,
                     "is_active": u.is_active,
                     "created_at": u.created_at,
-                    "last_login": u.last_login
-                } for u in users
+                    "last_login": u.last_login,
+                }
+                for u in users
             ],
-            "count": len(users)
+            "count": len(users),
         }
 
     except HTTPException:
@@ -216,7 +230,7 @@ async def list_users(current_user: Dict[str, Any] = Depends(get_current_user)):
 async def update_user_role(
     user_id: str,
     role_data: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """Update user role (requires users:manage permission)"""
     try:
@@ -237,11 +251,7 @@ async def update_user_role(
         if not success:
             raise HTTPException(status_code=404, detail="User not found")
 
-        return {
-            "success": True,
-            "user_id": user_id,
-            "new_role": role.value
-        }
+        return {"success": True, "user_id": user_id, "new_role": role.value}
 
     except HTTPException:
         raise
@@ -252,8 +262,7 @@ async def update_user_role(
 
 @router.delete("/api/users/{user_id}")
 async def deactivate_user(
-    user_id: str,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    user_id: str, current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Deactivate a user (requires users:manage permission)"""
     try:
@@ -265,11 +274,7 @@ async def deactivate_user(
         if not success:
             raise HTTPException(status_code=404, detail="User not found")
 
-        return {
-            "success": True,
-            "user_id": user_id,
-            "status": "deactivated"
-        }
+        return {"success": True, "user_id": user_id, "status": "deactivated"}
 
     except HTTPException:
         raise
@@ -280,8 +285,7 @@ async def deactivate_user(
 
 @router.post("/api/api-keys")
 async def create_api_key(
-    key_data: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    key_data: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Create a new API key"""
     try:
@@ -293,7 +297,9 @@ async def create_api_key(
         # Check if user can create keys for others
         if target_user_id != current_user["user_id"]:
             if not check_permission(current_user, Permission.API_KEYS_MANAGE):
-                raise HTTPException(status_code=403, detail="Cannot create keys for other users")
+                raise HTTPException(
+                    status_code=403, detail="Cannot create keys for other users"
+                )
 
         name = key_data.get("name", "Unnamed Key")
         permissions = key_data.get("permissions", [])
@@ -303,7 +309,7 @@ async def create_api_key(
             user_id=target_user_id,
             name=name,
             permissions=permissions,
-            expires_days=expires_days
+            expires_days=expires_days,
         )
 
         if not key:
@@ -313,7 +319,7 @@ async def create_api_key(
             "success": True,
             "key": key,
             "message": "Store this key securely - it won't be shown again",
-            "permissions": permissions
+            "permissions": permissions,
         }
 
     except HTTPException:
@@ -324,7 +330,10 @@ async def create_api_key(
 
 
 @router.get("/api/api-keys")
-async def list_api_keys(user_id: Optional[str] = None, current_user: Dict[str, Any] = Depends(get_current_user)):
+async def list_api_keys(
+    user_id: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
     """List API keys (can view own, or all with permission)"""
     try:
         target_user_id = user_id or current_user["user_id"]
@@ -332,7 +341,9 @@ async def list_api_keys(user_id: Optional[str] = None, current_user: Dict[str, A
         # Check if viewing others' keys
         if target_user_id != current_user["user_id"]:
             if not check_permission(current_user, Permission.API_KEYS_MANAGE):
-                raise HTTPException(status_code=403, detail="Cannot view other users' keys")
+                raise HTTPException(
+                    status_code=403, detail="Cannot view other users' keys"
+                )
 
         keys = user_service.get_user_api_keys(target_user_id)
 
@@ -345,10 +356,11 @@ async def list_api_keys(user_id: Optional[str] = None, current_user: Dict[str, A
                     "created_at": k.created_at,
                     "expires_at": k.expires_at,
                     "is_active": k.is_active,
-                    "usage_count": k.usage_count
-                } for k in keys
+                    "usage_count": k.usage_count,
+                }
+                for k in keys
             ],
-            "count": len(keys)
+            "count": len(keys),
         }
 
     except HTTPException:
@@ -360,14 +372,14 @@ async def list_api_keys(user_id: Optional[str] = None, current_user: Dict[str, A
 
 @router.delete("/api/api-keys/{key}")
 async def revoke_api_key(
-    key: str,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    key: str, current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Revoke an API key"""
     try:
         # Get the key info first
         conn = user_service.db_path
         import sqlite3
+
         db_conn = sqlite3.connect(conn)
         cursor = db_conn.execute("SELECT user_id FROM api_keys WHERE key = ?", (key,))
         row = cursor.fetchone()
@@ -381,18 +393,16 @@ async def revoke_api_key(
         # Check permission
         if key_user_id != current_user["user_id"]:
             if not check_permission(current_user, Permission.API_KEYS_MANAGE):
-                raise HTTPException(status_code=403, detail="Cannot revoke other users' keys")
+                raise HTTPException(
+                    status_code=403, detail="Cannot revoke other users' keys"
+                )
 
         success = user_service.revoke_api_key(key)
 
         if not success:
             raise HTTPException(status_code=404, detail="API key not found")
 
-        return {
-            "success": True,
-            "key_preview": f"{key[:8]}...",
-            "status": "revoked"
-        }
+        return {"success": True, "key_preview": f"{key[:8]}...", "status": "revoked"}
 
     except HTTPException:
         raise
@@ -410,7 +420,7 @@ async def get_permissions(current_user: Dict[str, Any] = Depends(get_current_use
     return {
         "all_permissions": all_permissions,
         "user_permissions": role_permissions,
-        "user_role": current_user["role"]
+        "user_role": current_user["role"],
     }
 
 
@@ -419,10 +429,8 @@ async def list_roles(current_user: Dict[str, Any] = Depends(get_current_user)):
     """List all available roles"""
     return {
         "roles": [
-            {
-                "name": role.value,
-                "permissions": ROLE_PERMISSIONS[role]
-            } for role in UserRole
+            {"name": role.value, "permissions": ROLE_PERMISSIONS[role]}
+            for role in UserRole
         ]
     }
 
@@ -430,7 +438,7 @@ async def list_roles(current_user: Dict[str, Any] = Depends(get_current_user)):
 @router.post("/api/users/verify-password")
 async def verify_password(
     password_data: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """Verify current user's password"""
     try:
@@ -444,16 +452,13 @@ async def verify_password(
             raise HTTPException(status_code=404, detail="User not found")
 
         # Check password
-        is_valid = user_service.hash_password(password) == user_service.hash_password(password)  # This needs actual password check
+        authenticated_user_id = user_service.authenticate(user.username, password)
+        is_valid = authenticated_user_id == current_user["user_id"]
 
-        # Since we don't store plain passwords, we need to re-authenticate
-        # For now, we'll just return success if the user provides the right username/password combo
-        # This endpoint needs to be called with username + password in body
+        if not is_valid:
+            raise HTTPException(status_code=401, detail="Invalid password")
 
-        return {
-            "valid": True,  # Placeholder - in production implement properly
-            "user_id": current_user["user_id"]
-        }
+        return {"valid": True, "user_id": current_user["user_id"]}
 
     except Exception as e:
         logger.error(f"Password verification failed: {e}")

@@ -915,7 +915,7 @@ def run_model_selector():
                                 if key_env_var:
                                     val = os.environ.get(key_env_var, "")
                                     if not val and key_env_var == "OPENROUTER_API_KEY":
-                                        val = os.environ.get("PROVIDER_API_KEY", "")
+                                        val = os.environ.get("BIG_API_KEY", "")
                                     if val:
                                         updates[f"PROVIDERS_{p}_API_KEY"] = val
                     print("\n⏳ Saving configuration...")

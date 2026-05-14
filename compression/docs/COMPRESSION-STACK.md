@@ -178,7 +178,7 @@ systemctl --user start headroom-proxy.service
 | `COMPRESSION_ENABLED` | `0` | Enable/disable compression (1/0) |
 | `HEADROOM_PORT` | `8787` | Headroom proxy port |
 | `OPENAI_BASE_URL` | Auto | Provider base URL |
-| `PROVIDER_BASE_URL` | Auto | Provider base URL |
+| `BIG_ENDPOINT` | Auto | Provider base URL |
 
 ## File Locations
 

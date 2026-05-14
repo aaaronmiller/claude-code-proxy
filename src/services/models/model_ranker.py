@@ -98,7 +98,7 @@ def get_ranker_api_key() -> Optional[str]:
         os.environ.get("SCRAPER_API_KEY") or
         os.environ.get("OPENROUTER_API_KEY") or
         os.environ.get("OPENAI_API_KEY") or
-        os.environ.get("PROVIDER_API_KEY")
+        os.environ.get("BIG_API_KEY")
     )
 
 
@@ -107,12 +107,43 @@ def get_exa_api_key() -> Optional[str]:
     return os.environ.get("EXA_API_KEY")
 
 
+def get_aa_api_key() -> Optional[str]:
+    """Get Artificial Analysis API key for intelligence benchmark scores."""
+    return os.environ.get("AA_API_KEY")
+
+
 def should_use_web_search() -> bool:
     """Check if web search should be used for ranking."""
     if os.environ.get("RANKER_USE_SEARCH", "true").lower() != "true":
         return False
     # Only enable if we have Exa key
     return get_exa_api_key() is not None
+
+
+def get_aa_score(model_id: str) -> Optional[float]:
+    """
+    Fetch Artificial Analysis intelligence score for a model (0-100).
+    Uses AA_API_KEY env var. Returns None if unavailable.
+    Scores represent composite benchmark performance (MMLU, HumanEval, etc.).
+    """
+    api_key = get_aa_api_key()
+    if not api_key:
+        return None
+    try:
+        import urllib.request, json as _json
+        # AA API endpoint for model intelligence scores
+        model_slug = model_id.replace("/", "--").replace(":", "-")
+        url = f"https://artificialanalysis.ai/api/v1/models/{model_slug}/scores"
+        req = urllib.request.Request(
+            url,
+            headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = _json.loads(resp.read())
+            # AA returns intelligence_index as primary composite score
+            return float(data.get("intelligence_index") or data.get("score") or 0) or None
+    except Exception:
+        return None
 
 
 async def exa_search(query: str, num_results: int = 3) -> List[Dict]:

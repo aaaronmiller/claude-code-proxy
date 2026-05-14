@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 try:
     from rich.console import Console
     from rich.text import Text
+
     RICH_AVAILABLE = True
     console = Console()
 except ImportError:
@@ -33,21 +34,21 @@ class CompactLogger:
     # Sophisticated color palette (subtle → bright)
     # Using cyan/magenta/blue shades for sessions (not rainbow)
     SESSION_COLORS = [
-        ("cyan", "dim"),           # Subtle cyan
-        ("bright_cyan", ""),        # Bright cyan
-        ("magenta", "dim"),         # Subtle magenta
-        ("bright_magenta", ""),     # Bright magenta
-        ("blue", "dim"),            # Subtle blue
-        ("bright_blue", ""),        # Bright blue
+        ("cyan", "dim"),  # Subtle cyan
+        ("bright_cyan", ""),  # Bright cyan
+        ("magenta", "dim"),  # Subtle magenta
+        ("bright_magenta", ""),  # Bright magenta
+        ("blue", "dim"),  # Subtle blue
+        ("bright_blue", ""),  # Bright blue
     ]
 
     # Request type colors
     TYPE_COLORS = {
-        "text": "white",           # Plain text requests
-        "tools": "yellow",         # Tool-using requests
-        "images": "magenta",       # Image requests
-        "reasoning": "cyan",       # Reasoning requests
-        "streaming": "blue",       # Streaming requests
+        "text": "white",  # Plain text requests
+        "tools": "yellow",  # Tool-using requests
+        "images": "magenta",  # Image requests
+        "reasoning": "cyan",  # Reasoning requests
+        "streaming": "blue",  # Streaming requests
     }
 
     # Status colors
@@ -73,7 +74,7 @@ class CompactLogger:
         has_tools: bool = False,
         has_images: bool = False,
         reasoning_config: Any = None,
-        stream: bool = False
+        stream: bool = False,
     ) -> str:
         """Determine request type for color coding."""
         if reasoning_config:
@@ -90,9 +91,9 @@ class CompactLogger:
     def _fmt_tokens(count: int) -> str:
         """Format token count compactly."""
         if count >= 1_000_000:
-            return f"{count/1_000_000:.1f}M"
+            return f"{count / 1_000_000:.1f}M"
         elif count >= 1000:
-            return f"{count/1000:.1f}k"
+            return f"{count / 1000:.1f}k"
         else:
             return str(count)
 
@@ -100,9 +101,9 @@ class CompactLogger:
     def _fmt_duration(ms: float) -> str:
         """Format duration compactly."""
         if ms >= 60000:
-            return f"{ms/60000:.1f}m"
+            return f"{ms / 60000:.1f}m"
         elif ms >= 1000:
-            return f"{ms/1000:.1f}s"
+            return f"{ms / 1000:.1f}s"
         else:
             return f"{ms:.0f}ms"
 
@@ -161,7 +162,7 @@ class CompactLogger:
         has_images: bool = False,
         client_info: Optional[str] = None,
         workspace_name: Optional[str] = None,
-        **kwargs  # Accept any additional kwargs to avoid errors
+        **kwargs,  # Accept any additional kwargs to avoid errors
     ) -> None:
         """
         Log request start - SINGLE LINE.
@@ -169,7 +170,9 @@ class CompactLogger:
         Format:
         🔵abc12│ant/c3.5-s→ope/gpt5│6.2k/200k(3%)→16k│⚡8k│📨3│🔧│127.0.0.1
         """
-        req_type = CompactLogger._get_request_type(has_tools, has_images, reasoning_config, stream)
+        req_type = CompactLogger._get_request_type(
+            has_tools, has_images, reasoning_config, stream
+        )
         session_color, session_style = CompactLogger._get_session_color(request_id)
 
         # Icon based on type
@@ -178,7 +181,7 @@ class CompactLogger:
             "tools": "🔧",
             "images": "🖼️",
             "streaming": "🌊",
-            "text": "📝"
+            "text": "📝",
         }
         type_icon = icon_map.get(req_type, "📝")
 
@@ -204,10 +207,21 @@ class CompactLogger:
 
         # Reasoning budget
         if reasoning_config:
-            from src.models.reasoning import OpenAIReasoningConfig, AnthropicThinkingConfig, GeminiThinkingConfig
+            from src.models.reasoning import (
+                OpenAIReasoningConfig,
+                AnthropicThinkingConfig,
+                GeminiThinkingConfig,
+            )
+
             if isinstance(reasoning_config, OpenAIReasoningConfig):
-                think_str = CompactLogger._fmt_tokens(reasoning_config.max_tokens) if reasoning_config.max_tokens else reasoning_config.effort
-            elif isinstance(reasoning_config, (AnthropicThinkingConfig, GeminiThinkingConfig)):
+                think_str = (
+                    CompactLogger._fmt_tokens(reasoning_config.max_tokens)
+                    if reasoning_config.max_tokens
+                    else reasoning_config.effort
+                )
+            elif isinstance(
+                reasoning_config, (AnthropicThinkingConfig, GeminiThinkingConfig)
+            ):
                 think_str = CompactLogger._fmt_tokens(reasoning_config.budget)
             else:
                 think_str = "?"
@@ -218,7 +232,9 @@ class CompactLogger:
             text = Text()
 
             # Status + ID (colored by session)
-            style = f"{session_style} {session_color}" if session_style else session_color
+            style = (
+                f"{session_style} {session_color}" if session_style else session_color
+            )
             text.append("🔵", style=f"bold {session_color}")
             text.append(f"{rid}", style=style)
             text.append("│", style="dim")
@@ -270,7 +286,7 @@ class CompactLogger:
         status: str = "OK",
         model_name: Optional[str] = None,
         stream: bool = False,
-        has_reasoning: bool = False
+        has_reasoning: bool = False,
     ) -> None:
         """
         Log request completion - SINGLE LINE.
@@ -281,8 +297,14 @@ class CompactLogger:
         session_color, session_style = CompactLogger._get_session_color(request_id)
 
         # Extract tokens
-        input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0)) if usage else 0
-        output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0)) if usage else 0
+        input_tokens = (
+            usage.get("input_tokens", usage.get("prompt_tokens", 0)) if usage else 0
+        )
+        output_tokens = (
+            usage.get("output_tokens", usage.get("completion_tokens", 0))
+            if usage
+            else 0
+        )
         thinking_tokens = 0
 
         if usage:
@@ -308,7 +330,9 @@ class CompactLogger:
             }
             for key, (in_cost, out_cost) in cost_map.items():
                 if key in model_name.lower():
-                    cost = (input_tokens / 1_000_000 * in_cost) + (output_tokens / 1_000_000 * out_cost)
+                    cost = (input_tokens / 1_000_000 * in_cost) + (
+                        output_tokens / 1_000_000 * out_cost
+                    )
                     break
 
         # Build output
@@ -318,7 +342,9 @@ class CompactLogger:
             # Status
             icon = "🟢" if status == "OK" else "🔴"
             color = "green" if status == "OK" else "red"
-            style = f"{session_style} {session_color}" if session_style else session_color
+            style = (
+                f"{session_style} {session_color}" if session_style else session_color
+            )
 
             text.append(icon, style=f"bold {color}")
             text.append(f"{request_id[:5]}", style=style)
@@ -350,7 +376,9 @@ class CompactLogger:
 
             # Cost
             if cost > 0:
-                cost_color = "green" if cost < 0.01 else "yellow" if cost < 0.10 else "red"
+                cost_color = (
+                    "green" if cost < 0.01 else "yellow" if cost < 0.10 else "red"
+                )
                 text.append(f"${cost:.4f}", style=cost_color)
 
             console.print(text)
@@ -382,22 +410,36 @@ class CompactLogger:
     def log_request_error(
         request_id: str,
         error: str,
-        duration_ms: Optional[float] = None
+        duration_ms: Optional[float] = None,
+        model_name: Optional[str] = None,
+        original_model: Optional[str] = None,
+        provider: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        tier: Optional[str] = None,
+        **kwargs,
     ) -> None:
         """
         Log error - SINGLE LINE.
 
-        Format:
-        🔴abc12│0.5s│Rate limit exceeded
+        Format (summary tier):
+        🔴abc12│0.5s│minimax-m2.5 | Rate limit exceeded
+
+        Format (default tier):
+        🔴abc12│0.5s│claude-sonnet→minimax-m2.5 @opencode_go | Rate limit exceeded
+
+        Format (debug tier):
+        🔴abc12│0.5s│claude-sonnet→minimax-m2.5 @opencode_go (https://opencode.ai/zen/go/v1) | Rate limit exceeded
         """
         session_color, session_style = CompactLogger._get_session_color(request_id)
 
         # Truncate error
-        error_msg = error[:60] + "..." if len(error) > 60 else error
+        error_msg = error[:80] + "..." if len(error) > 80 else error
 
         if RICH_AVAILABLE and console:
             text = Text()
-            style = f"{session_style} {session_color}" if session_style else session_color
+            style = (
+                f"{session_style} {session_color}" if session_style else session_color
+            )
 
             text.append("🔴", style="bold red")
             text.append(f"{request_id[:5]}", style=style)
@@ -407,6 +449,24 @@ class CompactLogger:
                 text.append(CompactLogger._fmt_duration(duration_ms), style="yellow")
                 text.append("│", style="dim")
 
+            # Model routing info
+            if original_model and model_name and original_model != model_name:
+                text.append(f"{original_model}→{model_name}", style="cyan")
+            elif model_name:
+                text.append(model_name, style="cyan")
+
+            if provider:
+                text.append(f" @{provider}", style="yellow")
+
+            if endpoint and tier == "debug":
+                ep_short = (
+                    endpoint.replace("https://", "")
+                    .replace("http://", "")
+                    .split("/")[0]
+                )
+                text.append(f" ({endpoint})", style="dim")
+
+            text.append(" │ ", style="dim")
             text.append(error_msg, style="red")
 
             console.print(text)
@@ -414,6 +474,18 @@ class CompactLogger:
             parts = [f"🔴{request_id[:5]}"]
             if duration_ms:
                 parts.append(CompactLogger._fmt_duration(duration_ms))
+
+            if original_model and model_name and original_model != model_name:
+                parts.append(f"{original_model}→{model_name}")
+            elif model_name:
+                parts.append(model_name)
+
+            if provider:
+                parts[-1] += f" @{provider}"
+
+            if endpoint and tier == "debug":
+                parts[-1] += f" ({endpoint})"
+
             parts.append(error_msg)
             logger.error("│".join(parts))
 

@@ -29,9 +29,9 @@ Output:
 🔍 Validating configuration...
 
 ERRORS:
-1. PROVIDER_API_KEY is not set
+1. BIG_API_KEY is not set
   → Run: python start_proxy.py --setup
-  → Or add to .env: PROVIDER_API_KEY="your-key-here"
+  → Or add to .env: BIG_API_KEY="your-key-here"
 
 💡 Run 'python start_proxy.py --setup' to fix configuration issues
 ```
@@ -62,13 +62,13 @@ python start_proxy.py --skip-validation
 
 #### ✅ Required Variables
 
-- `PROVIDER_API_KEY` or `OPENAI_API_KEY`
-- `PROVIDER_BASE_URL` or `OPENAI_BASE_URL`
+- `BIG_API_KEY` or `OPENAI_API_KEY`
+- `BIG_ENDPOINT` or `OPENAI_BASE_URL`
 - At least one model configured (`BIG_MODEL`, `MIDDLE_MODEL`, or `SMALL_MODEL`)
 
 #### ⚠️ Warnings
 
-- Deprecated variable names (`OPENAI_API_KEY` → `PROVIDER_API_KEY`)
+- Deprecated variable names (`OPENAI_API_KEY` → `BIG_API_KEY`)
 - Missing model configurations
 - Incorrect OpenRouter format (missing `provider/` prefix)
 - Short API keys (< 20 characters)
@@ -89,8 +89,8 @@ python start_proxy.py --skip-validation
 
 ```bash
 # .env
-PROVIDER_API_KEY="sk-or-v1-1234567890abcdef"
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-1234567890abcdef"
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 BIG_MODEL="anthropic/claude-sonnet-4"
 MIDDLE_MODEL="google/gemini-pro-1.5"
 SMALL_MODEL="google/gemini-flash-1.5:free"
@@ -111,8 +111,8 @@ CONFIGURATION:
 
 ```bash
 # .env
-PROVIDER_API_KEY="short"  # Too short!
-PROVIDER_BASE_URL="api.openai.com"  # Missing https://
+BIG_API_KEY="short"  # Too short!
+BIG_ENDPOINT="api.openai.com"  # Missing https://
 BIG_MODEL="claude-sonnet"  # Wrong for OpenRouter
 ```
 
@@ -121,7 +121,7 @@ Validation output:
 🔍 Validating configuration...
 
 WARNINGS:
-1. PROVIDER_API_KEY is very short (5 chars)
+1. BIG_API_KEY is very short (5 chars)
   → Most API keys are 30+ characters
   → Make sure you copied the full key
 
@@ -131,7 +131,7 @@ WARNINGS:
   → Run: python -m src.cli.model_selector
 
 ERRORS:
-1. PROVIDER_BASE_URL must start with http:// or https://
+1. BIG_ENDPOINT must start with http:// or https://
   → Current value: api.openai.com
 
 ❌ Configuration validation failed
@@ -243,8 +243,8 @@ python -m src.cli.profile_manager create my-setup "My custom configuration"
 # Description: My custom configuration
 # Created: 2025-11-22 10:35:12
 #
-PROVIDER_API_KEY="sk-or-v1-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-..."
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 BIG_MODEL="anthropic/claude-sonnet-4"
 ...
 ```
@@ -273,7 +273,7 @@ python -m src.cli.profile_manager compare development production
 ┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
 ┃ Variable            ┃ development       ┃ production            ┃ Status     ┃
 ┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
-│ PROVIDER_BASE_URL   │ localhost:11434/v1│ openrouter.ai/api/v1  │ ✗ Different│
+│ BIG_ENDPOINT   │ localhost:11434/v1│ openrouter.ai/api/v1  │ ✗ Different│
 │ BIG_MODEL           │ qwen2.5:72b       │ anthropic/claude-so..│ ✗ Different│
 │ MIDDLE_MODEL        │ qwen2.5:14b       │ google/gemini-pro-1.5│ ✗ Different│
 │ ENABLE_DASHBOARD    │ true              │ false                 │ ✗ Different│

@@ -189,7 +189,7 @@ source .venv/bin/activate
 
 # Point directly to OpenRouter (skip Headroom)
 export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
-export PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+export BIG_ENDPOINT="https://openrouter.ai/api/v1"
 
 python start_proxy.py --skip-validation &
 

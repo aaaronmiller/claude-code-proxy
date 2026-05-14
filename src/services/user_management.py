@@ -16,6 +16,7 @@ import sqlite3
 import hashlib
 import secrets
 import uuid
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
@@ -650,16 +651,23 @@ def create_default_admin():
         conn.close()
 
         if count == 0:
+            # Check environment for explicitly assigned default password 
+            # or generate a strong cryptographically secure random token fallback
+            default_password = os.environ.get("PROXY_DEFAULT_ADMIN_PASSWORD")
+            if not default_password:
+                default_password = secrets.token_urlsafe(16)
+                
             user_id = user_service.create_user(
                 username="admin",
-                password="admin123",  # CHANGE THIS IN PRODUCTION!
+                password=default_password,
                 email="admin@localhost",
                 role=UserRole.ADMIN
             )
 
             if user_id:
-                print(f"✅ Default admin created: username='admin', password='admin123'")
-                print("⚠️  WARNING: Change the default password immediately!")
+                print(f"✅ Default admin created: username='admin'")
+                print(f"   🔑 Password: {default_password}")
+                print("⚠️  WARNING: Save this password or change it immediately!")
 
     except Exception as e:
         print(f"⚠️  Failed to create default admin: {e}")

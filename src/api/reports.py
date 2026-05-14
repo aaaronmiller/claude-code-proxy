@@ -7,16 +7,14 @@ Author: AI Architect
 Date: 2026-01-05
 """
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from fastapi import APIRouter, HTTPException, Query
+from typing import Dict, Any, Optional
 from pydantic import BaseModel
 import sqlite3
-import json
 
 from src.core.logging import logger
 from src.services.usage.usage_tracker import usage_tracker
-from src.services.report_generator import report_generator, ReportTemplate
+from src.services.report_generator import report_generator
 
 router = APIRouter()
 
@@ -171,15 +169,15 @@ async def generate_report(report_config: ReportConfigRequest):
         # Generate report
         if format_type == "pdf":
             data = report_generator.generate_pdf(template, start_date, end_date, brand_logo, brand_color)
-            media_type = "application/pdf"
+            _media_type = "application/pdf"
             filename = f"{template.name.replace(' ', '_')}_{start_date}_{end_date}.pdf"
         elif format_type == "excel":
             data = report_generator.generate_excel(template, start_date, end_date)
-            media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            _media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             filename = f"{template.name.replace(' ', '_')}_{start_date}_{end_date}.xlsx"
         elif format_type == "csv":
             data = report_generator.generate_csv(template, start_date, end_date).encode('utf-8')
-            media_type = "text/csv"
+            _media_type = "text/csv"
             filename = f"{template.name.replace(' ', '_')}_{start_date}_{end_date}.csv"
         else:
             raise HTTPException(status_code=400, detail="Invalid format type")

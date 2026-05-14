@@ -23,6 +23,7 @@ import sqlite3
 try:
     import strawberry
     from strawberry.types import Info
+
     HAS_STRAWBERRY = True
 except ImportError:
     # Fallback to simple implementation
@@ -95,10 +96,7 @@ if HAS_STRAWBERRY:
 
         @strawberry.field
         def metrics(
-            self,
-            start_date: str,
-            end_date: str,
-            group_by: Optional[str] = "day"
+            self, start_date: str, end_date: str, group_by: Optional[str] = "day"
         ) -> List[MetricsData]:
             """Get metrics for date range"""
             if not usage_tracker.enabled:
@@ -111,7 +109,7 @@ if HAS_STRAWBERRY:
                 time_cond = {
                     "hour": "strftime('%Y-%m-%d %H:00', timestamp)",
                     "day": "strftime('%Y-%m-%d', timestamp)",
-                    "week": "strftime('%Y-W%W', timestamp)"
+                    "week": "strftime('%Y-W%W', timestamp)",
                 }.get(group_by, "strftime('%Y-%m-%d', timestamp)")
 
                 query = f"""
@@ -137,8 +135,9 @@ if HAS_STRAWBERRY:
                         tokens=row["tokens"] or 0,
                         cost=row["cost"] or 0,
                         requests=row["requests"] or 0,
-                        latency=row["latency"] or 0
-                    ) for row in rows
+                        latency=row["latency"] or 0,
+                    )
+                    for row in rows
                 ]
 
             except Exception as e:
@@ -178,8 +177,9 @@ if HAS_STRAWBERRY:
                         total_tokens=row["tokens"] or 0,
                         total_cost=row["cost"] or 0,
                         request_count=row["requests"] or 0,
-                        avg_latency=row["latency"] or 0
-                    ) for row in rows
+                        avg_latency=row["latency"] or 0,
+                    )
+                    for row in rows
                 ]
 
             except Exception as e:
@@ -215,8 +215,9 @@ if HAS_STRAWBERRY:
                         description=row.get("description", ""),
                         priority=row.get("priority", 0),
                         is_active=bool(row.get("is_active", 1)),
-                        last_triggered=row.get("last_triggered")
-                    ) for row in rows
+                        last_triggered=row.get("last_triggered"),
+                    )
+                    for row in rows
                 ]
 
             except Exception as e:
@@ -234,7 +235,9 @@ if HAS_STRAWBERRY:
                 conn.row_factory = sqlite3.Row
 
                 try:
-                    cursor = conn.execute("SELECT id, name, created_at, widgets FROM custom_dashboards")
+                    cursor = conn.execute(
+                        "SELECT id, name, created_at, widgets FROM custom_dashboards"
+                    )
                 except sqlite3.OperationalError:
                     return []
 
@@ -246,8 +249,11 @@ if HAS_STRAWBERRY:
                         id=row["id"],
                         name=row["name"],
                         created_at=row["created_at"],
-                        widget_count=len(json.loads(row["widgets"])) if row["widgets"] else 0
-                    ) for row in rows
+                        widget_count=len(json.loads(row["widgets"]))
+                        if row["widgets"]
+                        else 0,
+                    )
+                    for row in rows
                 ]
 
             except Exception as e:
@@ -259,6 +265,7 @@ if HAS_STRAWBERRY:
             """Get predicted cost for next N days"""
             try:
                 from src.services.predictive_alerting import predictive_alerting
+
                 forecast = predictive_alerting.predict_metrics(days)
                 return forecast.cost_prediction
             except Exception as e:
@@ -273,11 +280,7 @@ if HAS_STRAWBERRY:
 
         @strawberry.mutation
         def create_alert_rule(
-            self,
-            name: str,
-            description: str,
-            condition_json: str,
-            priority: int = 2
+            self, name: str, description: str, condition_json: str, priority: int = 2
         ) -> QueryResult:
             """Create a new alert rule"""
             if not usage_tracker.enabled:
@@ -287,24 +290,28 @@ if HAS_STRAWBERRY:
                 conn = sqlite3.connect(usage_tracker.db_path)
 
                 import uuid
+
                 rule_id = str(uuid.uuid4())
 
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO alert_rules (
                         id, name, description, condition_json, actions_json,
                         priority, is_active, created_at, created_by
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    rule_id,
-                    name,
-                    description,
-                    condition_json,
-                    json.dumps({"channels": ["in_app"]}),
-                    priority,
-                    1,
-                    datetime.now().isoformat(),
-                    "graphql_api"
-                ))
+                """,
+                    (
+                        rule_id,
+                        name,
+                        description,
+                        condition_json,
+                        json.dumps({"channels": ["in_app"]}),
+                        priority,
+                        1,
+                        datetime.now().isoformat(),
+                        "graphql_api",
+                    ),
+                )
 
                 conn.commit()
                 conn.close()
@@ -312,7 +319,7 @@ if HAS_STRAWBERRY:
                 return QueryResult(
                     success=True,
                     data=rule_id,
-                    message="Alert rule created successfully"
+                    message="Alert rule created successfully",
                 )
 
             except Exception as e:
@@ -320,11 +327,7 @@ if HAS_STRAWBERRY:
                 return QueryResult(success=False, message=str(e))
 
         @strawberry.mutation
-        def update_dashboard(
-            self,
-            dashboard_id: str,
-            widgets_json: str
-        ) -> QueryResult:
+        def update_dashboard(self, dashboard_id: str, widgets_json: str) -> QueryResult:
             """Update dashboard widgets"""
             if not usage_tracker.enabled:
                 return QueryResult(success=False, message="Usage tracking disabled")
@@ -333,8 +336,7 @@ if HAS_STRAWBERRY:
                 conn = sqlite3.connect(usage_tracker.db_path)
 
                 cursor = conn.execute(
-                    "SELECT id FROM custom_dashboards WHERE id = ?",
-                    (dashboard_id,)
+                    "SELECT id FROM custom_dashboards WHERE id = ?", (dashboard_id,)
                 )
 
                 if not cursor.fetchone():
@@ -343,7 +345,7 @@ if HAS_STRAWBERRY:
 
                 conn.execute(
                     "UPDATE custom_dashboards SET widgets = ?, updated_at = ? WHERE id = ?",
-                    (widgets_json, datetime.now().isoformat(), dashboard_id)
+                    (widgets_json, datetime.now().isoformat(), dashboard_id),
                 )
 
                 conn.commit()
@@ -368,7 +370,7 @@ if HAS_STRAWBERRY:
                     "alert": "alert_rules",
                     "dashboard": "custom_dashboards",
                     "template": "report_templates",
-                    "apikey": "api_keys"
+                    "apikey": "api_keys",
                 }
 
                 table = table_map.get(entity_type)
@@ -400,11 +402,14 @@ else:
 # ==================== Simple GraphQL Alternative ====================
 # If Strawberry is not available, provide a simple GraphQL-like JSON API
 
+
 class SimpleGraphQL:
     """Simple GraphQL-like interface without external dependencies"""
 
     @staticmethod
-    def execute(query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def execute(
+        query: str, variables: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Execute a simple query"""
         try:
             # This is a simplified implementation
@@ -419,6 +424,7 @@ class SimpleGraphQL:
 
                 # Parse basic parameters from query
                 import re
+
                 start_match = re.search(r'startDate:\s*"([^"]+)"', query)
                 end_match = re.search(r'endDate:\s*"([^"]+)"', query)
 
@@ -453,8 +459,9 @@ class SimpleGraphQL:
                         "timestamp": row["date"],
                         "tokens": row["tokens"] or 0,
                         "cost": row["cost"] or 0,
-                        "requests": row["requests"] or 0
-                    } for row in rows
+                        "requests": row["requests"] or 0,
+                    }
+                    for row in rows
                 ]
 
                 return {"data": {"metrics": metrics}}
@@ -467,21 +474,23 @@ class SimpleGraphQL:
 
 # ==================== FastAPI Integration ====================
 
+
 def get_graphql_router():
     """Get the GraphQL router for FastAPI"""
     if HAS_STRAWBERRY:
         from strawberry.fastapi import GraphQLRouter
-        return GraphQLRouter(schema, graphiql=True)
+
+        return GraphQLRouter(schema, graphql_ide="graphiql")
     else:
         # Return a simple endpoint
         from fastapi import APIRouter
+
         router = APIRouter()
 
         @router.post("/graphql")
         async def simple_graphql(query: Dict[str, Any]):
             return SimpleGraphQL.execute(
-                query.get("query", ""),
-                query.get("variables", {})
+                query.get("query", ""), query.get("variables", {})
             )
 
         @router.get("/graphql")
@@ -489,7 +498,7 @@ def get_graphql_router():
             return {
                 "message": "GraphQL Playground requires strawberry-graphql",
                 "install": "pip install strawberry-graphql",
-                "alternative": "Use POST /graphql with JSON: {\"query\": \"...\"}"
+                "alternative": 'Use POST /graphql with JSON: {"query": "..."}',
             }
 
         return router

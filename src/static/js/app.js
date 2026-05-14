@@ -131,8 +131,8 @@ function applyProviderPreset() {
     if (!preset || !providerPresets[preset]) return;
     
     const p = providerPresets[preset];
-    document.getElementById('provider-api-key').value = p.apiKey;
-    document.getElementById('provider-base-url').value = p.baseUrl;
+    document.getElementById('big-api-key').value = p.apiKey;
+    document.getElementById('big-endpoint').value = p.baseUrl;
     document.getElementById('big-model').value = p.bigModel || '';
     document.getElementById('middle-model').value = p.middleModel || '';
     document.getElementById('small-model').value = p.smallModel || '';
@@ -151,8 +151,8 @@ async function loadConfig() {
         const config = await response.json();
         
         // Core settings
-        document.getElementById('provider-api-key').value = config.provider_api_key || config.openai_api_key || '';
-        document.getElementById('provider-base-url').value = config.provider_base_url || config.openai_base_url || '';
+        document.getElementById('big-api-key').value = config.big_api_key || config.openai_api_key || '';
+        document.getElementById('big-endpoint').value = config.big_endpoint || config.openai_base_url || '';
         document.getElementById('proxy-auth-key').value = config.proxy_auth_key || config.anthropic_api_key || '';
         
         // Server settings
@@ -213,7 +213,7 @@ async function loadConfig() {
         loadHybridConfig(config);
         
         // Update provider display
-        const providerUrl = config.provider_base_url || config.openai_base_url || '';
+        const providerUrl = config.big_endpoint || config.openai_base_url || '';
         let providerName = 'Unknown';
         if (providerUrl.includes('127.0.0.1:8317')) providerName = 'VibeProxy';
         else if (providerUrl.includes('openrouter')) providerName = 'OpenRouter';
@@ -279,8 +279,8 @@ function updateRoutingVisualizer(config) {
 
 async function saveConfig() {
     const config = {
-        provider_api_key: document.getElementById('provider-api-key').value,
-        provider_base_url: document.getElementById('provider-base-url').value,
+        big_api_key: document.getElementById('big-api-key').value,
+        big_endpoint: document.getElementById('big-endpoint').value,
         proxy_auth_key: document.getElementById('proxy-auth-key').value,
         host: document.getElementById('server-host')?.value || '0.0.0.0',
         port: document.getElementById('server-port')?.value || '8082',
@@ -562,8 +562,8 @@ async function saveProfile() {
     }
     
     const config = {
-        provider_api_key: document.getElementById('provider-api-key').value,
-        provider_base_url: document.getElementById('provider-base-url').value,
+        big_api_key: document.getElementById('big-api-key').value,
+        big_endpoint: document.getElementById('big-endpoint').value,
         big_model: document.getElementById('big-model').value,
         middle_model: document.getElementById('middle-model').value,
         small_model: document.getElementById('small-model').value
@@ -593,8 +593,8 @@ async function loadProfile(name) {
         const response = await fetch(`/api/profiles/${encodeURIComponent(name)}`);
         const profile = await response.json();
         
-        document.getElementById('provider-api-key').value = profile.config.provider_api_key || '';
-        document.getElementById('provider-base-url').value = profile.config.provider_base_url || '';
+        document.getElementById('big-api-key').value = profile.config.big_api_key || '';
+        document.getElementById('big-endpoint').value = profile.config.big_endpoint || '';
         document.getElementById('big-model').value = profile.config.big_model || '';
         document.getElementById('middle-model').value = profile.config.middle_model || '';
         document.getElementById('small-model').value = profile.config.small_model || '';
@@ -623,8 +623,8 @@ async function deleteProfile(name) {
 
 function exportConfig() {
     const fields = [
-        ['PROVIDER_API_KEY', 'provider-api-key'],
-        ['PROVIDER_BASE_URL', 'provider-base-url'],
+        ['BIG_API_KEY', 'big-api-key'],
+        ['BIG_ENDPOINT', 'big-endpoint'],
         ['BIG_MODEL', 'big-model'],
         ['MIDDLE_MODEL', 'middle-model'],
         ['SMALL_MODEL', 'small-model']
@@ -666,8 +666,8 @@ function importConfig() {
             if (match) {
                 const [, key, value] = match;
                 const fieldMap = {
-                    'PROVIDER_API_KEY': 'provider-api-key',
-                    'PROVIDER_BASE_URL': 'provider-base-url',
+                    'BIG_API_KEY': 'big-api-key',
+                    'BIG_ENDPOINT': 'big-endpoint',
                     'BIG_MODEL': 'big-model',
                     'MIDDLE_MODEL': 'middle-model',
                     'SMALL_MODEL': 'small-model'

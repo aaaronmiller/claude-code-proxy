@@ -50,7 +50,7 @@ def is_vibeproxy_available() -> bool:
 
 def is_openrouter_configured() -> bool:
     """Check if OpenRouter API key is configured."""
-    return bool(os.getenv('OPENROUTER_API_KEY') or os.getenv('PROVIDER_API_KEY'))
+    return bool(os.getenv('OPENROUTER_API_KEY') or os.getenv('BIG_API_KEY'))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -107,12 +107,13 @@ def proxy_process(
     env['HOST'] = PROXY_HOST
     env['PORT'] = str(PROXY_PORT)
     env['LOG_LEVEL'] = 'DEBUG'
+    env['PROXY_AUTH_KEY'] = 'test'  # fixed token so tests can call write endpoints
     
     # Set base URL based on config
     if 'vibeproxy' in model_config.big_model.lower():
-        env['PROVIDER_BASE_URL'] = 'http://127.0.0.1:8317/v1'
+        env['BIG_ENDPOINT'] = 'http://127.0.0.1:8317/v1'
     elif 'openrouter' in model_config.big_model.lower():
-        env['PROVIDER_BASE_URL'] = 'https://openrouter.ai/api/v1'
+        env['BIG_ENDPOINT'] = 'https://openrouter.ai/api/v1'
     
     # Start proxy
     cmd = [sys.executable, "start_proxy.py"]

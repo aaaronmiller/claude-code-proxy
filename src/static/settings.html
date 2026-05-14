@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proxy Control — Settings</title>
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+          sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        },
+        colors: {
+          terminal: {
+            bg: '#0a0a0b',
+            card: '#111113',
+            border: '#1e1e23',
+            hover: '#18181c',
+            accent: '#10b981',
+            'accent-dim': '#064e3b',
+            muted: '#3f3f46',
+            text: '#e4e4e7',
+            dim: '#71717a',
+          }
+        },
+        animation: {
+          'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          'fade-in': 'fadeIn 0.2s ease-out',
+          'slide-up': 'slideUp 0.2s ease-out',
+        },
+        keyframes: {
+          fadeIn: { from: { opacity: '0' }, to: { opacity: '1' } },
+          slideUp: { from: { opacity: '0', transform: 'translateY(8px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+        }
+      }
+    }
+  }
+</script>
+
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<!-- Alpine.js -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: #0a0a0b; color: #e4e4e7; }
+  body { font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+
+  .font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #111113; }
+  ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+  /* Toggle switch */
+  .toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    width: 36px; height: 20px; border-radius: 10px;
+    background: #27272a; transition: background 0.2s; position: relative;
+    border: 1px solid #3f3f46;
+  }
+  .toggle input:checked + .toggle-track { background: #059669; border-color: #10b981; }
+  .toggle-track::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 14px; height: 14px; border-radius: 50%; background: #71717a;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .toggle input:checked + .toggle-track::after { transform: translateX(16px); background: #fff; }
+
+  /* Field card hover */
+  .field-row { transition: background 0.12s; }
+  .field-row:hover { background: rgba(255,255,255,0.02); }
+
+  /* Grade badge */
+  .grade-S { background: linear-gradient(135deg, #064e3b, #065f46); color: #6ee7b7; border: 1px solid #10b981; }
+  .grade-A { background: linear-gradient(135deg, #1e3a5f, #1e40af); color: #93c5fd; border: 1px solid #3b82f6; }
+  .grade-B { background: linear-gradient(135deg, #451a03, #78350f); color: #fcd34d; border: 1px solid #f59e0b; }
+  .grade-C { background: linear-gradient(135deg, #431407, #7c2d12); color: #fdba74; border: 1px solid #f97316; }
+  .grade-F { background: linear-gradient(135deg, #450a0a, #7f1d1d); color: #fca5a5; border: 1px solid #ef4444; }
+
+  /* Gauge bar */
+  .gauge-bar { background: #1c1c1f; border-radius: 2px; overflow: hidden; height: 4px; }
+  .gauge-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease-out; }
+
+  /* Input styles */
+  .field-input {
+    background: #18181c; border: 1px solid #27272a; color: #e4e4e7;
+    border-radius: 6px; padding: 5px 10px; font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; transition: border-color 0.15s; width: 100%;
+  }
+  .field-input:focus { outline: none; border-color: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.15); }
+  .field-input.modified { border-color: #f59e0b; }
+
+  /* Nav active */
+  .nav-item { transition: all 0.15s; }
+  .nav-item.active { background: rgba(16,185,129,0.1); color: #10b981; border-right: 2px solid #10b981; }
+  .nav-item:hover:not(.active) { background: rgba(255,255,255,0.04); }
+
+  /* Card */
+  .settings-card {
+    background: #111113; border: 1px solid #1e1e23;
+    border-radius: 10px; overflow: hidden;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+    padding: 12px 20px; border-radius: 8px; font-size: 13px;
+    font-family: 'JetBrains Mono', monospace; font-weight: 500;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+    animation: slideUp 0.2s ease-out;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .toast-success { background: #064e3b; border: 1px solid #10b981; color: #6ee7b7; }
+  .toast-error { background: #450a0a; border: 1px solid #ef4444; color: #fca5a5; }
+
+  /* Breaker badge */
+  .breaker-closed { background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid #064e3b; }
+  .breaker-open { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid #7f1d1d; }
+  .breaker-half_open { background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px solid #78350f; }
+
+  /* Reliability number animation */
+  @keyframes countUp { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+  .score-display { animation: countUp 0.5s ease-out; }
+
+  /* Section transition */
+  .section-content { animation: fadeIn 0.2s ease-out; }
+
+  /* Select */
+  .field-select {
+    background: #18181c; border: 1px solid #27272a; color: #e4e4e7;
+    border-radius: 6px; padding: 5px 10px; font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; cursor: pointer; width: 100%;
+  }
+  .field-select:focus { outline: none; border-color: #10b981; }
+  .field-select.modified { border-color: #f59e0b; }
+
+  /* Blinking cursor */
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  .cursor { animation: blink 1s step-end infinite; }
+
+  /* Pulse dot */
+  .dot-live { animation: pulse-dot 2s ease infinite; }
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+    50% { box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+  }
+</style>
+</head>
+<body class="h-full" x-data="proxySettings()" x-init="init()">
+
+<!-- Toast -->
+<template x-if="toast.show">
+  <div :class="['toast', toast.type === 'success' ? 'toast-success' : 'toast-error']" x-text="toast.message"></div>
+</template>
+
+<div class="flex h-full min-h-screen">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────── -->
+  <nav class="w-56 shrink-0 border-r border-[#1e1e23] flex flex-col bg-[#0d0d0f]">
+    <!-- Logo -->
+    <div class="px-4 py-5 border-b border-[#1e1e23]">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded bg-emerald-900 flex items-center justify-center">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <div>
+          <div class="text-xs font-semibold text-zinc-200 font-mono">PROXY CTL</div>
+          <div class="text-[10px] text-zinc-600 font-mono">config surface</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status indicator -->
+    <div class="px-4 py-3 border-b border-[#1e1e23]">
+      <div class="flex items-center gap-2 text-[11px] font-mono">
+        <div :class="proxyStatus === 'online' ? 'bg-emerald-500 dot-live' : 'bg-red-500'" class="w-1.5 h-1.5 rounded-full"></div>
+        <span :class="proxyStatus === 'online' ? 'text-emerald-400' : 'text-red-400'" x-text="proxyStatus === 'online' ? 'proxy online' : 'proxy offline'"></span>
+      </div>
+      <div class="mt-1 text-[10px] text-zinc-600 font-mono">:8082</div>
+    </div>
+
+    <!-- Nav sections -->
+    <div class="flex-1 overflow-y-auto py-2">
+      <template x-for="section in navSections" :key="section.id">
+        <button
+          @click="activeSection = section.id; scrollToSection(section.id)"
+          :class="['nav-item w-full text-left px-4 py-2.5 flex items-center gap-2.5', activeSection === section.id ? 'active' : 'text-zinc-500']"
+        >
+          <span class="text-sm" x-text="section.icon"></span>
+          <span class="text-[12px] font-mono" x-text="section.label"></span>
+          <!-- Modified indicator -->
+          <span x-show="hasPendingChanges(section.id)" class="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+        </button>
+      </template>
+    </div>
+
+    <!-- Save All -->
+    <div class="p-3 border-t border-[#1e1e23]">
+      <button
+        @click="saveAll()"
+        :disabled="Object.keys(pendingChanges).length === 0 || saving"
+        :class="Object.keys(pendingChanges).length > 0 ? 'bg-emerald-700 hover:bg-emerald-600 text-emerald-100 cursor-pointer' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'"
+        class="w-full py-2 rounded-lg text-[11px] font-mono font-medium transition-colors flex items-center justify-center gap-2"
+      >
+        <span x-show="!saving">
+          <span x-show="Object.keys(pendingChanges).length > 0">
+            SAVE <span class="text-amber-300" x-text="Object.keys(pendingChanges).length"></span> CHANGE<span x-show="Object.keys(pendingChanges).length > 1">S</span>
+          </span>
+          <span x-show="Object.keys(pendingChanges).length === 0">NO CHANGES</span>
+        </span>
+        <span x-show="saving" class="flex items-center gap-1">
+          <svg class="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+          SAVING...
+        </span>
+      </button>
+      <button @click="discardChanges()" x-show="Object.keys(pendingChanges).length > 0" class="w-full mt-1 py-1.5 text-[10px] font-mono text-zinc-600 hover:text-zinc-400 transition-colors">
+        discard changes
+      </button>
+    </div>
+  </nav>
+
+  <!-- ── Main Content ────────────────────────────────────────────── -->
+  <main class="flex-1 overflow-y-auto px-8 py-8 space-y-8" id="main-scroll">
+
+    <!-- Header -->
+    <div class="flex items-start justify-between">
+      <div>
+        <h1 class="text-xl font-semibold font-mono text-zinc-100">Settings</h1>
+        <p class="text-sm text-zinc-600 mt-0.5 font-mono">
+          <span class="cursor text-emerald-500">█</span>
+          <span x-text="loading ? 'loading configuration...' : settings.groups.length + ' groups · ' + Object.keys(settings.values).length + ' parameters'"></span>
+        </p>
+      </div>
+      <button @click="loadAll()" class="text-[11px] font-mono text-zinc-600 hover:text-zinc-400 transition-colors flex items-center gap-1">
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        refresh
+      </button>
+    </div>
+
+    <!-- Loading state -->
+    <div x-show="loading" class="flex items-center justify-center py-24">
+      <div class="flex items-center gap-3 text-zinc-600 font-mono text-sm">
+        <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+        loading configuration...
+      </div>
+    </div>
+
+    <div x-show="!loading" class="space-y-8">
+
+      <!-- ── Reliability Section ──────────────────────────── -->
+      <section id="section-reliability">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="text-sm">📊</span>
+          <h2 class="text-sm font-semibold font-mono text-zinc-400 uppercase tracking-wider">Reliability Score</h2>
+        </div>
+        <div class="settings-card p-5">
+          <div x-show="!reliability.loaded" class="text-zinc-600 font-mono text-xs">fetching reliability data...</div>
+          <div x-show="reliability.loaded" class="section-content">
+            <div class="flex items-start gap-8">
+              <!-- Grade badge -->
+              <div class="flex flex-col items-center gap-2">
+                <div :class="'grade-' + (reliability.grade || 'F')" class="w-20 h-20 rounded-xl flex items-center justify-center font-mono font-bold text-3xl score-display" x-text="reliability.grade || '?'"></div>
+                <div class="text-[10px] font-mono text-zinc-600">
+                  <span x-text="reliability.score ? (reliability.score * 100).toFixed(1) + '%' : '--'"></span>
+                </div>
+                <div class="text-[10px] font-mono text-zinc-600">
+                  <span x-text="reliability.total_requests || 0"></span> req
+                </div>
+              </div>
+
+              <!-- Components -->
+              <div class="flex-1 space-y-3">
+                <template x-for="(value, key) in (reliability.components || {})" :key="key">
+                  <div>
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-[11px] font-mono text-zinc-500" x-text="key.replace(/_/g, ' ')"></span>
+                      <span class="text-[11px] font-mono text-zinc-300" x-text="(value * 100).toFixed(1) + '%'"></span>
+                    </div>
+                    <div class="gauge-bar">
+                      <div class="gauge-fill"
+                        :style="'width: ' + (value * 100) + '%; background: ' + getGaugeColor(value)"
+                      ></div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Error breakdown -->
+              <div x-show="Object.keys(reliability.error_breakdown || {}).length > 0" class="min-w-36">
+                <div class="text-[10px] font-mono text-zinc-600 uppercase tracking-wider mb-2">Error Breakdown</div>
+                <template x-for="(count, type) in (reliability.error_breakdown || {})" :key="type">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-mono text-red-400 truncate max-w-24" x-text="type"></span>
+                    <span class="text-[10px] font-mono text-zinc-500 ml-2" x-text="'×' + count"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Circuit Breakers ────────────────────────────── -->
+      <section id="section-breakers">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="text-sm">⚡</span>
+          <h2 class="text-sm font-semibold font-mono text-zinc-400 uppercase tracking-wider">Circuit Breakers</h2>
+          <span class="text-[10px] font-mono text-zinc-700 ml-auto">live state</span>
+        </div>
+        <div class="settings-card">
+          <div x-show="!breakers.length" class="px-5 py-4 text-zinc-600 font-mono text-xs">
+            no circuit breakers active — no failures recorded yet
+          </div>
+          <div x-show="breakers.length > 0">
+            <template x-for="(b, i) in breakers" :key="b.model">
+              <div :class="['px-5 py-3 flex items-center gap-4 field-row', i > 0 ? 'border-t border-[#1a1a1e]' : '']">
+                <div :class="['breaker-' + b.state, 'text-[10px] font-mono px-2 py-0.5 rounded font-medium min-w-16 text-center']" x-text="b.state"></div>
+                <div class="flex-1 font-mono text-xs text-zinc-300 truncate" x-text="b.model"></div>
+                <div class="text-[10px] font-mono text-zinc-600" x-text="'fails: ' + b.failure_count"></div>
+                <div x-show="b.cooldown_remaining_s > 0" class="text-[10px] font-mono text-amber-500" x-text="b.cooldown_remaining_s.toFixed(0) + 's remaining'"></div>
+                <button @click="resetBreaker(b.model)" x-show="b.state === 'open'" class="text-[10px] font-mono text-zinc-600 hover:text-emerald-400 transition-colors ml-2 px-2 py-0.5 border border-[#2a2a2e] rounded hover:border-emerald-900">
+                  reset
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Dynamic Setting Groups ─────────────────────── -->
+      <template x-for="groupId in displayGroups" :key="groupId">
+        <section :id="'section-' + groupId" class="section-content">
+          <div class="flex items-center gap-3 mb-4">
+            <span class="text-sm" x-text="getGroupIcon(groupId)"></span>
+            <h2 class="text-sm font-semibold font-mono text-zinc-400 uppercase tracking-wider" x-text="settings.group_labels[groupId] || groupId"></h2>
+            <div x-show="hasPendingChanges(groupId)" class="ml-2 text-[10px] font-mono px-2 py-0.5 rounded bg-amber-900/40 text-amber-400 border border-amber-900">
+              <span x-text="countGroupChanges(groupId)"></span> unsaved
+            </div>
+          </div>
+          <div class="settings-card">
+            <template x-for="(setting, idx) in getGroupSettings(groupId)" :key="setting.env_var">
+              <div :class="['field-row px-5 py-3', idx > 0 ? 'border-t border-[#1a1a1e]' : '']">
+                <div class="flex items-start gap-4">
+                  <!-- Label & description -->
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="text-[11px] font-mono font-medium text-zinc-300" x-text="formatLabel(setting.env_var)"></span>
+                      <span x-show="setting.units" class="text-[9px] font-mono text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded" x-text="setting.units"></span>
+                      <span x-show="setting.secret" class="text-[9px] font-mono text-zinc-600">🔒</span>
+                      <!-- Modified indicator -->
+                      <span x-show="isModified(setting.env_var)" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400">modified</span>
+                    </div>
+                    <div class="text-[10px] text-zinc-600 font-sans leading-relaxed" x-text="setting.description"></div>
+                    <div x-show="setting.min_val !== null || setting.max_val !== null" class="text-[9px] font-mono text-zinc-700 mt-0.5">
+                      range: <span x-text="(setting.min_val || '') + (setting.min_val !== null && setting.max_val !== null ? ' – ' : '') + (setting.max_val || '')"></span>
+                    </div>
+                  </div>
+
+                  <!-- Input control -->
+                  <div class="min-w-48">
+                    <!-- Boolean toggle -->
+                    <div x-show="setting.type === 'bool'" class="flex items-center justify-end h-8">
+                      <label class="toggle">
+                        <input
+                          type="checkbox"
+                          :checked="getBoolValue(setting.env_var)"
+                          @change="setBoolValue(setting.env_var, $event.target.checked)"
+                        >
+                        <div class="toggle-track"></div>
+                      </label>
+                      <span class="ml-2 text-[10px] font-mono" :class="getBoolValue(setting.env_var) ? 'text-emerald-400' : 'text-zinc-600'" x-text="getBoolValue(setting.env_var) ? 'on' : 'off'"></span>
+                    </div>
+
+                    <!-- Select dropdown -->
+                    <div x-show="setting.choices && setting.choices.length > 0 && setting.type !== 'bool'">
+                      <select
+                        :class="['field-select', isModified(setting.env_var) ? 'modified' : '']"
+                        :value="getCurrentValue(setting.env_var)"
+                        @change="setValue(setting.env_var, $event.target.value)"
+                      >
+                        <template x-for="choice in setting.choices" :key="choice">
+                          <option :value="choice" :selected="getCurrentValue(setting.env_var) === choice" x-text="choice"></option>
+                        </template>
+                      </select>
+                    </div>
+
+                    <!-- Text/number input -->
+                    <div x-show="!setting.choices && setting.type !== 'bool'">
+                      <input
+                        :type="setting.type === 'int' || setting.type === 'float' ? 'number' : (setting.secret ? 'password' : 'text')"
+                        :class="['field-input', isModified(setting.env_var) ? 'modified' : '']"
+                        :value="getCurrentValue(setting.env_var)"
+                        :placeholder="setting.default !== null ? String(setting.default) : ''"
+                        :step="setting.type === 'float' ? '0.01' : '1'"
+                        :min="setting.min_val"
+                        :max="setting.max_val"
+                        @input="setValue(setting.env_var, $event.target.value)"
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </section>
+      </template>
+
+    </div><!-- /!loading -->
+  </main>
+</div>
+
+<script>
+function proxySettings() {
+  return {
+    loading: true,
+    saving: false,
+    proxyStatus: 'checking',
+    settings: { values: {}, meta: {}, groups: [], group_labels: {} },
+    pendingChanges: {},
+    reliability: { loaded: false },
+    breakers: [],
+    activeSection: 'reliability',
+    toast: { show: false, message: '', type: 'success' },
+
+    // Sections shown in settings groups (excluding reliability/breakers, shown separately)
+    displayGroups: ['models', 'budget', 'router_slots', 'compression', 'local_gpu', 'circuit_breaker', 'server', 'auth', 'logging', 'toolcalls', 'usage_tracking', 'watchdog'],
+
+    navSections: [
+      { id: 'reliability', label: 'Reliability', icon: '📊' },
+      { id: 'breakers', label: 'Breakers', icon: '⚡' },
+      { id: 'models', label: 'Models', icon: '🤖' },
+      { id: 'budget', label: 'Budgets', icon: '💰' },
+      { id: 'router_slots', label: 'Router Slots', icon: '🗺️' },
+      { id: 'compression', label: 'Compression', icon: '🗜️' },
+      { id: 'local_gpu', label: 'Local GPU', icon: '🖥️' },
+      { id: 'circuit_breaker', label: 'Circuit Breaker', icon: '🔄' },
+      { id: 'server', label: 'Server', icon: '🌐' },
+      { id: 'auth', label: 'Auth & Keys', icon: '🔑' },
+      { id: 'logging', label: 'Logging', icon: '📋' },
+    ],
+
+    async init() {
+      await this.loadAll();
+      // Check proxy status
+      fetch('/health').then(r => { this.proxyStatus = r.ok ? 'online' : 'offline'; }).catch(() => { this.proxyStatus = 'offline'; });
+    },
+
+    async loadAll() {
+      this.loading = true;
+      try {
+        const [settingsRes, relRes, breakersRes] = await Promise.allSettled([
+          fetch('/api/settings'),
+          fetch('/api/reliability?hours=24'),
+          fetch('/api/breakers'),
+        ]);
+
+        if (settingsRes.status === 'fulfilled' && settingsRes.value.ok) {
+          this.settings = await settingsRes.value.json();
+          // Filter displayGroups to only those that exist in the manifest
+          this.displayGroups = this.displayGroups.filter(g => this.settings.groups.includes(g));
+        }
+
+        if (relRes.status === 'fulfilled' && relRes.value.ok) {
+          const rel = await relRes.value.json();
+          this.reliability = { ...rel, loaded: true };
+        }
+
+        if (breakersRes.status === 'fulfilled' && breakersRes.value.ok) {
+          const br = await breakersRes.value.json();
+          this.breakers = br.breakers || [];
+        }
+      } catch (e) {
+        this.showToast('Failed to load settings: ' + e.message, 'error');
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    getGroupSettings(groupId) {
+      if (!this.settings.meta) return [];
+      return Object.values(this.settings.meta).filter(s => s.group === groupId);
+    },
+
+    getCurrentValue(envVar) {
+      const key = envVar.toLowerCase();
+      if (key in this.pendingChanges) return this.pendingChanges[key];
+      const val = this.settings.values[key];
+      return val !== null && val !== undefined ? String(val) : '';
+    },
+
+    getBoolValue(envVar) {
+      const v = this.getCurrentValue(envVar);
+      return v === 'True' || v === 'true' || v === '1' || v === true;
+    },
+
+    setValue(envVar, value) {
+      const key = envVar.toLowerCase();
+      const original = this.settings.values[key];
+      if (String(value) === String(original)) {
+        delete this.pendingChanges[key];
+      } else {
+        this.pendingChanges[key] = value;
+      }
+    },
+
+    setBoolValue(envVar, checked) {
+      this.setValue(envVar, checked ? 'true' : 'false');
+    },
+
+    isModified(envVar) {
+      return envVar.toLowerCase() in this.pendingChanges;
+    },
+
+    hasPendingChanges(groupId) {
+      if (groupId === 'reliability' || groupId === 'breakers') return false;
+      const groupSettings = this.getGroupSettings(groupId);
+      return groupSettings.some(s => s.env_var.toLowerCase() in this.pendingChanges);
+    },
+
+    countGroupChanges(groupId) {
+      const groupSettings = this.getGroupSettings(groupId);
+      return groupSettings.filter(s => s.env_var.toLowerCase() in this.pendingChanges).length;
+    },
+
+    async saveAll() {
+      if (Object.keys(this.pendingChanges).length === 0 || this.saving) return;
+      this.saving = true;
+      try {
+        // Convert lowercase keys back to uppercase ENV_VAR format
+        const settingsPayload = {};
+        for (const [key, value] of Object.entries(this.pendingChanges)) {
+          // Find the original ENV_VAR name
+          const meta = this.settings.meta[key];
+          const envVar = meta ? meta.env_var : key.toUpperCase();
+          settingsPayload[envVar] = value;
+        }
+
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings: settingsPayload, persist: true }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          // Update local values
+          for (const [key, value] of Object.entries(this.pendingChanges)) {
+            this.settings.values[key] = value;
+          }
+          this.pendingChanges = {};
+          this.showToast(`✓ Saved ${data.count} setting${data.count !== 1 ? 's' : ''}`, 'success');
+          if (data.skipped && Object.keys(data.skipped).length > 0) {
+            console.warn('Skipped settings:', data.skipped);
+          }
+        } else {
+          const err = await res.json().catch(() => ({}));
+          this.showToast('Save failed: ' + (err.detail || res.statusText), 'error');
+        }
+      } catch (e) {
+        this.showToast('Save error: ' + e.message, 'error');
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    discardChanges() {
+      this.pendingChanges = {};
+    },
+
+    async resetBreaker(model) {
+      try {
+        const res = await fetch(`/api/breakers/${encodeURIComponent(model)}/reset`, { method: 'POST' });
+        if (res.ok) {
+          this.showToast('✓ Reset: ' + model, 'success');
+          // Refresh breakers
+          const br = await fetch('/api/breakers').then(r => r.json());
+          this.breakers = br.breakers || [];
+        }
+      } catch (e) {
+        this.showToast('Reset failed: ' + e.message, 'error');
+      }
+    },
+
+    scrollToSection(sectionId) {
+      const el = document.getElementById('section-' + sectionId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
+    showToast(message, type = 'success') {
+      this.toast = { show: true, message, type };
+      setTimeout(() => { this.toast.show = false; }, 3500);
+    },
+
+    formatLabel(envVar) {
+      // ENV_VAR → Nice Label
+      return envVar.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    },
+
+    getGroupIcon(groupId) {
+      const icons = {
+        models: '🤖', budget: '💰', router_slots: '🗺️', compression: '🗜️',
+        local_gpu: '🖥️', circuit_breaker: '🔄', server: '🌐', auth: '🔑',
+        logging: '📋', toolcalls: '🔧', usage_tracking: '📈', watchdog: '🐕',
+        reasoning: '🧠',
+      };
+      return icons[groupId] || '⚙️';
+    },
+
+    getGaugeColor(value) {
+      if (value >= 0.85) return '#10b981';
+      if (value >= 0.65) return '#3b82f6';
+      if (value >= 0.50) return '#f59e0b';
+      return '#ef4444';
+    },
+  };
+}
+</script>
+</body>
+</html>

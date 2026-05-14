@@ -119,8 +119,8 @@ def _update_profile(path: Path, provider: Dict, api_key: str):
     updates = {
         provider["var"]: api_key,
         provider["url_var"]: provider["url"],
-        "PROVIDER_API_KEY": f"${provider['var']}",
-        "PROVIDER_BASE_URL": f"${provider['url_var']}"
+        "BIG_API_KEY": f"${provider['var']}",
+        "BIG_ENDPOINT": f"${provider['url_var']}"
     }
     
     # Track which ones we found

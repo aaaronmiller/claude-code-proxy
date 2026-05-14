@@ -1,0 +1,213 @@
+#!/usr/bin/env bash
+# ---
+# date: 2026-04-18 12:00:00 PDT
+# ver: 1.0.0
+# author: Sliither (for Ice-ninja)
+# tags: [hermes, preflight, health-check, silent-cascade-prevention]
+# ---
+# hermes-verify — preflight health probe wrapper
+#
+# Purpose: Before launching Hermes, probe every model slot in ~/.hermes/config.yaml
+# against its configured provider with 2 sequential HTTP requests. If any slot is
+# dead (non-200 response or timeout), refuse to launch Hermes and report which
+# slot would have silently cascade-failed.
+#
+# Install: cp hermes-verify ~/.hermes/bin/hermes-verify && chmod +x ~/.hermes/bin/hermes-verify
+# Usage: hermes-verify              # probe only, exit 0 if clean
+#        hermes-verify launch       # probe, then exec `hermes` if clean
+#        hermes-verify launch-gateway  # probe, then exec `hermes gateway run --replace` if clean
+#        hermes-verify --skip-aux   # probe primary + fallbacks only (faster)
+
+set -uo pipefail
+
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+CONFIG="${HERMES_HOME}/config.yaml"
+ENV_FILE="${HERMES_HOME}/.env"
+TIMEOUT=10
+LOG="${HERMES_HOME}/logs/verify.log"
+mkdir -p "$(dirname "$LOG")"
+
+RED=$'\033[0;31m'
+GRN=$'\033[0;32m'
+YLW=$'\033[0;33m'
+CYN=$'\033[0;36m'
+RST=$'\033[0m'
+
+die()  { printf "%s[FAIL]%s %s\n" "$RED" "$RST" "$*" >&2; exit 1; }
+ok()   { printf "%s[ OK ]%s %s\n" "$GRN" "$RST" "$*"; }
+warn() { printf "%s[WARN]%s %s\n" "$YLW" "$RST" "$*"; }
+info() { printf "%s[INFO]%s %s\n" "$CYN" "$RST" "$*"; }
+
+[ -f "$CONFIG" ] || die "config.yaml not found at $CONFIG"
+[ -f "$ENV_FILE" ] || warn ".env not found at $ENV_FILE (some providers may fail)"
+
+# load .env if present, stripping comments and export lines
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source <(grep -E '^[A-Z_]+=.+' "$ENV_FILE" | sed 's/^/export /')
+  set +a
+fi
+
+# extract every model slot as (role, provider, model) triples via python
+SLOTS_JSON=$(python3 - <<'PY'
+import yaml, json, os, pathlib
+cfg_path = pathlib.Path(os.environ.get("HERMES_HOME", str(pathlib.Path.home() / ".hermes"))) / "config.yaml"
+cfg = yaml.safe_load(cfg_path.read_text()) or {}
+
+slots = []
+
+m = cfg.get("model") or {}
+if m.get("default"):
+    slots.append(("primary", m.get("provider", "openrouter"), m["default"], m.get("base_url")))
+
+for i, fb in enumerate(cfg.get("fallback_providers") or []):
+    slots.append((f"fallback[{i}]", fb.get("provider", "openrouter"), fb.get("model"), fb.get("base_url")))
+
+dg = cfg.get("delegation") or {}
+if dg.get("model"):
+    slots.append(("delegation", dg.get("provider", "openrouter"), dg["model"], dg.get("base_url")))
+
+for key, val in (cfg.get("auxiliary") or {}).items():
+    if isinstance(val, dict) and val.get("model"):
+        slots.append((f"auxiliary.{key}", val.get("provider", "openrouter"), val["model"], val.get("base_url")))
+
+# dedup by (provider, model, base_url) but track all roles sharing a slot
+seen = {}
+for role, prov, mod, burl in slots:
+    key = (prov, mod, burl or "")
+    seen.setdefault(key, []).append(role)
+
+out = [{"roles": roles, "provider": k[0], "model": k[1], "base_url": k[2] or None}
+       for k, roles in seen.items()]
+print(json.dumps(out))
+PY
+)
+
+[ -z "$SLOTS_JSON" ] && die "could not parse config.yaml — check YAML syntax"
+
+# provider -> base_url + api_key env var
+resolve_endpoint() {
+  local provider="$1" explicit_base="$2"
+  [ -n "$explicit_base" ] && { echo "$explicit_base|OPENAI_API_KEY"; return; }
+  case "$provider" in
+    openrouter) echo "https://openrouter.ai/api/v1|OPENROUTER_API_KEY" ;;
+    nvidia-nim|nvidia) echo "https://integrate.api.nvidia.com/v1|NVIDIA_API_KEY" ;;
+    anthropic)  echo "https://api.anthropic.com/v1|ANTHROPIC_API_KEY" ;;
+    zai)        echo "https://api.z.ai/api/coding/paas/v4|ZAI_API_KEY" ;;
+    minimax)    echo "https://api.minimax.io/v1|MINIMAX_API_KEY" ;;
+    custom)     echo "|OPENAI_API_KEY" ;;
+    *)          echo "|OPENAI_API_KEY" ;;
+  esac
+}
+
+probe_slot() {
+  local roles="$1" provider="$2" model="$3" base_override="$4"
+  local endpoint_info url key_var api_key
+  endpoint_info=$(resolve_endpoint "$provider" "$base_override")
+  url="${endpoint_info%%|*}"
+  key_var="${endpoint_info##*|}"
+  api_key="${!key_var:-}"
+
+  [ -z "$url" ] && { warn "$roles → no base_url resolved, skipping"; return 0; }
+  [ -z "$api_key" ] && { warn "$roles → $key_var not set in env, skipping"; return 0; }
+
+  local body="{\"model\":\"$model\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":3}"
+
+  local attempt pass=0 total_time=0
+  for attempt in 1 2; do
+    local t0 t1 status
+    t0=$(date +%s.%N)
+    status=$(curl -sS -o /tmp/hermes-verify-resp -w "%{http_code}" \
+      --max-time "$TIMEOUT" \
+      -X POST "$url/chat/completions" \
+      -H "Authorization: Bearer $api_key" \
+      -H "Content-Type: application/json" \
+      -d "$body" 2>/dev/null || echo "000")
+    t1=$(date +%s.%N)
+    local elapsed
+    elapsed=$(awk "BEGIN{printf \"%.2f\", $t1 - $t0}")
+    total_time=$(awk "BEGIN{printf \"%.2f\", $total_time + $elapsed}")
+    if [ "$status" = "200" ]; then
+      pass=$((pass + 1))
+    else
+      local err_snippet
+      err_snippet=$(head -c 200 /tmp/hermes-verify-resp 2>/dev/null | tr -d '\n')
+      printf "  attempt %d: status=%s elapsed=%ss err=%s\n" "$attempt" "$status" "$elapsed" "$err_snippet" >> "$LOG"
+    fi
+  done
+
+  if [ "$pass" -eq 2 ]; then
+    ok "$(printf '%-45s' "$roles") → ${model} [${total_time}s]"
+    return 0
+  elif [ "$pass" -eq 1 ]; then
+    warn "$(printf '%-45s' "$roles") → ${model} FLAKY 1/2"
+    return 1
+  else
+    printf "%s[DEAD]%s %-45s → %s\n" "$RED" "$RST" "$roles" "$model" >&2
+    return 2
+  fi
+}
+
+MODE="${1:-probe}"
+SKIP_AUX=false
+for arg in "$@"; do
+  [ "$arg" = "--skip-aux" ] && SKIP_AUX=true
+done
+
+printf "\n%s=== hermes-verify preflight ===%s\n" "$CYN" "$RST"
+info "config: $CONFIG"
+info "log:    $LOG"
+echo ""
+
+echo "$SLOTS_JSON" > "$LOG.slots.json"
+FAIL_COUNT=0
+FLAKY_COUNT=0
+
+while read -r slot; do
+  roles=$(echo "$slot"     | python3 -c 'import sys,json; print("+".join(json.loads(sys.stdin.read())["roles"]))')
+  provider=$(echo "$slot"  | python3 -c 'import sys,json; print(json.loads(sys.stdin.read())["provider"])')
+  model=$(echo "$slot"     | python3 -c 'import sys,json; print(json.loads(sys.stdin.read())["model"])')
+  base_url=$(echo "$slot"  | python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); print(d.get("base_url") or "")')
+
+  if $SKIP_AUX && [[ "$roles" == auxiliary.* ]]; then
+    info "skipping (--skip-aux): $roles"
+    continue
+  fi
+
+  probe_slot "$roles" "$provider" "$model" "$base_url"
+  rc=$?
+  case $rc in
+    1) FLAKY_COUNT=$((FLAKY_COUNT + 1)) ;;
+    2) FAIL_COUNT=$((FAIL_COUNT + 1)) ;;
+  esac
+done < <(echo "$SLOTS_JSON" | python3 -c 'import sys,json; [print(json.dumps(s)) for s in json.load(sys.stdin)]')
+
+echo ""
+if [ "$FAIL_COUNT" -gt 0 ]; then
+  die "$FAIL_COUNT slot(s) DEAD. See $LOG for details. Refusing to launch."
+elif [ "$FLAKY_COUNT" -gt 0 ]; then
+  warn "$FLAKY_COUNT slot(s) FLAKY but not dead. Proceeding with caution."
+else
+  ok "all slots live."
+fi
+
+case "$MODE" in
+  launch)
+    info "launching hermes..."
+    exec hermes
+    ;;
+  launch-gateway)
+    info "launching hermes gateway..."
+    exec hermes gateway run --replace
+    ;;
+  probe|"")
+    ok "probe complete."
+    ;;
+  --skip-aux)
+    ok "probe complete (aux skipped)."
+    ;;
+  *)
+    die "unknown mode: $MODE (expected: probe | launch | launch-gateway)"
+    ;;
+esac

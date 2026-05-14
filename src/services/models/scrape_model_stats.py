@@ -53,7 +53,7 @@ def get_scraper_api_key() -> Optional[str]:
         os.environ.get("SCRAPER_API_KEY") or
         os.environ.get("OPENROUTER_API_KEY") or
         os.environ.get("OPENAI_API_KEY") or
-        os.environ.get("PROVIDER_API_KEY")
+        os.environ.get("BIG_API_KEY")
     )
 
 

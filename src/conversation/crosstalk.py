@@ -63,14 +63,20 @@ class CrosstalkOrchestrator:
     def __init__(self, config_obj):
         self.config = config_obj
         self.active_sessions: Dict[str, CrosstalkSession] = {}
-        self.openai_client = OpenAIClient(
-            config_obj.openai_api_key,
-            config_obj.openai_base_url,
-            config_obj.request_timeout,
-            api_version=config_obj.azure_api_version,
-        )
-        # Configure per-model clients for hybrid deployments
-        self.openai_client.configure_per_model_clients(config_obj)
+        self.openai_client = None
+
+    def _get_or_create_client(self):
+        """Lazily initialize OpenAIClient when actually needed."""
+        if self.openai_client is None:
+            self.openai_client = OpenAIClient(
+                self.config.openai_api_key,
+                self.config.openai_base_url,
+                self.config.request_timeout,
+                api_version=self.config.azure_api_version,
+            )
+            # Configure per-model clients for hybrid deployments
+            self.openai_client.configure_per_model_clients(self.config)
+        return self.openai_client
 
     async def setup_crosstalk(
         self,
@@ -428,7 +434,8 @@ class CrosstalkOrchestrator:
         }
 
         try:
-            response = await self.openai_client.create_chat_completion(request, config=self.config)
+            client = self._get_or_create_client()
+            response = await client.create_chat_completion(request, config=self.config)
 
             # Extract response content with error handling
             if not response.get("choices"):

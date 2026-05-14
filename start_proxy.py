@@ -10,6 +10,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 def main():
     """Parse CLI arguments and start the proxy."""
+    # Unset ANTHROPIC_API_KEY unless PROXY_AUTH_KEY is explicitly set
+    # This prevents the proxy from requiring a specific Anthropic key
+    if not os.getenv("PROXY_AUTH_KEY"):
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+    
     parser = argparse.ArgumentParser(
         description='Claude Code Proxy - Use Claude API with OpenAI-compatible providers',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -151,7 +156,174 @@ For more details, see docs/guides/configuration.md
     validation_group.add_argument('--client', action='store_true',
                        help='Run as client wrapper (internal use)')
 
+    # ── Settings from manifest (auto-generated from config_manifest.py) ────────
+    # These expose ALL 62 configurable settings via CLI. Values set here override
+    # the .env file for the current run only (do not persist unless --save-config used).
+    try:
+        from src.core.config_manifest import SETTINGS, GROUP_LABELS
+        _manifest_group_objects = {}
+        # Collect flags already registered to avoid conflicts
+        _existing_flags = {
+            opt for action in parser._actions for opt in action.option_strings
+        }
+        # Groups to skip (already fully handled above)
+        _skip_groups = {"server", "models", "reasoning"}
+        for _s in SETTINGS:
+            if _s.cli_flag is None:
+                continue
+            if _s.group in _skip_groups:
+                continue
+            if _s.cli_flag in _existing_flags:
+                continue  # already registered by the explicit sections above
+            _grp = _s.group
+            if _grp not in _manifest_group_objects:
+                _label = GROUP_LABELS.get(_grp, _grp.replace("_", " ").title())
+                _manifest_group_objects[_grp] = parser.add_argument_group(f'  ⚙ {_label}')
+            _kwargs = {"help": _s.description, "metavar": _s.type.__name__.upper()}
+            if _s.type is bool:
+                _kwargs = {"help": _s.description, "action": "store_true"}
+            elif _s.choices:
+                _kwargs["choices"] = _s.choices
+                _kwargs.pop("metavar", None)
+            try:
+                _manifest_group_objects[_grp].add_argument(
+                    _s.cli_flag,
+                    dest=_s.env_var.lower(),
+                    **_kwargs,
+                )
+                _existing_flags.add(_s.cli_flag)
+            except Exception:
+                pass  # skip duplicate or conflicting flags
+    except ImportError:
+        pass  # manifest not yet available during bootstrap
+
+    # JSON config file: load settings from a JSON file (overrides .env, overridden by explicit flags)
+    parser.add_argument(
+        '--config-file', dest='config_file', metavar='PATH',
+        help='Load settings from a JSON file (format: {"ENV_VAR": "value", ...}). '
+             'Applied before explicit CLI flags. Example: --config-file ~/my-proxy-config.json'
+    )
+    parser.add_argument(
+        '--save-config', dest='save_config', metavar='PATH', nargs='?', const='.env',
+        help='Save current settings (env + CLI flags) to .env or specified path. '
+             'Example: --save-config ~/configs/my-setup.json'
+    )
+
+    # ── Unified Configuration System (spec 001) ─────────────────────────────
+    config_group = parser.add_argument_group('⚙️  Unified Configuration (spec 001)')
+    # Assignments (tier/slot CRUD)
+    config_group.add_argument('--assign', action='append', nargs='+',
+                       metavar=('ID', 'K=V'),
+                       help='Upsert an assignment: --assign big model=X provider=Y api_key=${KEY}. Repeatable.')
+    config_group.add_argument('--delete-assignment', dest='delete_assignment', action='append',
+                       metavar='ID',
+                       help='Delete a slot assignment by id (tiers cannot be deleted). Repeatable.')
+    config_group.add_argument('--list-assignments', action='store_true',
+                       help='List all assignments and exit.')
+    # Identifier mappings
+    config_group.add_argument('--map-identifier', action='append', nargs='+',
+                       metavar='K=V',
+                       help='Upsert an identifier mapping: --map-identifier incoming=claude-opus-4-7 assignment=big. Repeatable.')
+    config_group.add_argument('--delete-mapping', dest='delete_mapping', action='append',
+                       metavar='INCOMING',
+                       help='Delete an identifier mapping by incoming_identifier. Repeatable.')
+    config_group.add_argument('--list-mappings', action='store_true',
+                       help='List all identifier mappings and exit.')
+    # Chain CRUD
+    config_group.add_argument('--chain-order', dest='chain_order', metavar='a,b,c',
+                       help='Reorder chain entries by id (comma-separated). Missing ids append in existing order.')
+    config_group.add_argument('--chain-enable', dest='chain_enable', action='append',
+                       metavar='ID',
+                       help='Enable a chain entry by id. Repeatable.')
+    config_group.add_argument('--chain-disable', dest='chain_disable', action='append',
+                       metavar='ID',
+                       help='Disable a chain entry by id. Repeatable.')
+    config_group.add_argument('--chain-add', dest='chain_add', action='append', nargs='+',
+                       metavar=('ID', 'K=V'),
+                       help='Add a chain entry: --chain-add my_proxy name="My Proxy" url=http://127.0.0.1:9000/v1 port=9000. Repeatable.')
+    config_group.add_argument('--chain-remove', dest='chain_remove', action='append',
+                       metavar='ID',
+                       help='Remove a chain entry by id. Repeatable.')
+    config_group.add_argument('--list-chain', action='store_true',
+                       help='List all chain entries in order and exit.')
+    # Config introspection
+    config_group.add_argument('--show-config-field', dest='show_config_field', metavar='FIELD_PATH', nargs='?', const='*',
+                       help='Show resolved config value(s) with provenance and exit. '
+                            'No argument = full tree; FIELD_PATH = single field. '
+                            '(Renamed from --show-config to avoid collision with existing --config flag.)')
+    config_group.add_argument('--where', dest='where_field', metavar='FIELD_PATH',
+                       help='Alias of --show-config-field FIELD_PATH. Reports which layer supplied the value.')
+
     args, unknown = parser.parse_known_args() # Use parse_known_args to allow passing args to client
+
+    # ── Apply --config-file (JSON settings file) ─────────────────────────────
+    # Load before applying individual CLI flags so flags can override file values.
+    if getattr(args, "config_file", None):
+        import json as _json
+        try:
+            with open(args.config_file) as _cf:
+                _file_settings = _json.load(_cf)
+            for _k, _v in _file_settings.items():
+                # Only set if not already overridden by an explicit CLI flag
+                os.environ.setdefault(str(_k).upper(), str(_v))
+            print(f"✓ Loaded {len(_file_settings)} settings from {args.config_file}")
+        except Exception as _e:
+            print(f"✗ Could not load --config-file {args.config_file}: {_e}")
+
+    # ── Apply individual manifest CLI flags to os.environ ────────────────────
+    try:
+        from src.core.config_manifest import SETTINGS as _MANIFEST_SETTINGS
+        for _s in _MANIFEST_SETTINGS:
+            if _s.cli_flag is None:
+                continue
+            _dest = _s.env_var.lower()
+            _val = getattr(args, _dest, None)
+            if _val is not None and _val is not False:
+                os.environ[_s.env_var] = str(_val) if not isinstance(_val, bool) else "true"
+    except ImportError:
+        pass
+
+    # ── --save-config: write current env to file ─────────────────────────────
+    if getattr(args, "save_config", None):
+        import json as _json
+        from src.core.config_manifest import SETTINGS as _MS
+        _out_path = args.save_config
+        _is_env = _out_path.endswith(".env") or _out_path == ".env"
+        _settings_dict = {s.env_var: os.environ.get(s.env_var, "") for s in _MS}
+        try:
+            if _is_env:
+                with open(_out_path, "w") as _f:
+                    for k, v in _settings_dict.items():
+                        _f.write(f"{k}={v}\n")
+            else:
+                with open(_out_path, "w") as _f:
+                    _json.dump(_settings_dict, _f, indent=2)
+            print(f"✓ Saved config to {_out_path}")
+        except Exception as _e:
+            print(f"✗ Could not save config: {_e}")
+        return
+
+    # Apply CLI overlay (assignment/mapping/chain edits from --assign etc.)
+    # Runs before mode handlers so CLI edits persist before anything else.
+    _config_mutation_flags = (
+        "assign", "delete_assignment",
+        "map_identifier", "delete_mapping",
+        "chain_order", "chain_enable", "chain_disable",
+        "chain_add", "chain_remove",
+    )
+    if any(getattr(args, attr, None) for attr in _config_mutation_flags):
+        from src.cli.overlay import apply_cli_overlay
+        apply_cli_overlay(args)
+
+    # Read-only / introspection commands exit immediately (no server start)
+    if getattr(args, "list_assignments", False) or \
+       getattr(args, "list_mappings", False) or \
+       getattr(args, "list_chain", False) or \
+       getattr(args, "show_config_field", None) is not None or \
+       getattr(args, "where_field", None) is not None:
+        from src.cli.overlay import apply_cli_readonly
+        apply_cli_readonly(args)
+        return
 
     # Handle unified settings TUI
     if args.settings:

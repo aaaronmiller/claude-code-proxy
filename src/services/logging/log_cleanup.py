@@ -240,7 +240,7 @@ def cleanup_logs(
         print(f"ℹ️  Logs directory does not exist: {logs_dir}")
         return 0, 0.0
     
-    print(f"🧹 Starting log cleanup")
+    print("🧹 Starting log cleanup")
     print(f"   Directory: {logs_dir.absolute()}")
     print(f"   Retention: {retention_days} days")
     print(f"   Max size: {max_size_mb} MB")
@@ -248,7 +248,7 @@ def cleanup_logs(
     
     # Step 1: Aggregate analytics before cleanup
     if aggregate_before_cleanup:
-        print(f"📊 Step 1: Aggregating analytics data...")
+        print("📊 Step 1: Aggregating analytics data...")
         analytics_files = ['tool_analytics.jsonl', 'cache_analytics.jsonl']
         has_analytics = any((logs_dir / f).exists() for f in analytics_files)
         
@@ -258,9 +258,9 @@ def cleanup_logs(
             if summary['period_start']:  # Has data
                 save_aggregated_summary(logs_dir, summary, dry_run)
             else:
-                print(f"   ℹ️  No analytics data to aggregate")
+                print("   ℹ️  No analytics data to aggregate")
         else:
-            print(f"   ℹ️  No analytics files found")
+            print("   ℹ️  No analytics files found")
         
         print()
     
@@ -276,7 +276,7 @@ def cleanup_logs(
     # Calculate current total size
     total_size_mb = sum(get_file_size_mb(f) for f in log_files)
     
-    print(f"📊 Current state:")
+    print("📊 Current state:")
     print(f"   Files: {len(log_files)}")
     print(f"   Total size: {total_size_mb:.1f} MB")
     print()
@@ -301,7 +301,7 @@ def cleanup_logs(
             freed_mb += size_mb
     
     if removed_count == 0:
-        print(f"   ✅ No files exceeded retention period")
+        print("   ✅ No files exceeded retention period")
     else:
         action = "Would remove" if dry_run else "Removed"
         print(f"   ✅ {action} {removed_count} files ({freed_mb:.1f} MB)")
@@ -353,7 +353,7 @@ def cleanup_logs(
         log_files = [f for f in log_files if f.name != 'metrics_history.jsonl']
         total_size_mb = sum(get_file_size_mb(f) for f in log_files)
     
-    print(f"📊 Final state:")
+    print("📊 Final state:")
     print(f"   Files: {len(log_files)}")
     print(f"   Total size: {total_size_mb:.1f} MB")
     
@@ -368,11 +368,11 @@ def cleanup_logs(
     
     # Summary
     if dry_run:
-        print(f"🔍 DRY RUN - No files actually removed")
+        print("🔍 DRY RUN - No files actually removed")
         print(f"   Would remove {removed_count} files")
         print(f"   Would free {freed_mb:.1f} MB")
     else:
-        print(f"✅ Cleanup complete")
+        print("✅ Cleanup complete")
         print(f"   Removed {removed_count} files")
         print(f"   Freed {freed_mb:.1f} MB")
     
@@ -406,7 +406,7 @@ def cleanup_old_forensic_logs(logs_dir: str = None, max_age_days: int = 3):
             removed += 1
     
     if removed == 0:
-        print(f"   ✅ No old forensic logs found")
+        print("   ✅ No old forensic logs found")
     else:
         print(f"   ✅ Removed {removed} forensic log(s)")
     

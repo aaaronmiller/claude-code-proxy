@@ -90,7 +90,7 @@
   Can You Assign Different Endpoints Per Task Model?
 
   Short answer: no, not natively. The ROUTER_* vars take model strings in OpenRouter format (provider/model:variant),
-  and all requests route through the same upstream endpoint configured in PROVIDER_BASE_URL.
+  and all requests route through the same upstream endpoint configured in BIG_ENDPOINT.
 
   However — BIG_MODEL, MIDDLE_MODEL, SMALL_MODEL each run through the full cascade chain, and the cascade hits whichever
    upstream your proxy chain is configured for. The cascade fallback lists (BIG_CASCADE, etc.) use OpenRouter model IDs

@@ -4,26 +4,48 @@
 #
 # Usage: echo 'source /path/to/compression-aliases.zsh' >> ~/.zshrc
 #
-# Design: 3 aliases only. Not 20. Not 10. Three.
-#   proxies → manage the proxy chain lifecycle
-#   cc      → launch Claude via Headroom (:8787)
-#   qw      → launch Qwen via Headroom (:8787)
+# Prefer running: bash scripts/install-aliases.sh
+# That installs the full alias set and keeps things in sync.
 #
-# Ad-hoc overrides use inline env vars, not baked-in aliases.
+# This file is the minimal subset for machines without the full repo.
 # ═══════════════════════════════════════════════════════════════════
 
 # Proxy chain manager (the script, not a shell alias)
-# If not in PATH, use the full path
 if command -v proxies > /dev/null 2>&1 && [[ "$(command -v proxies)" == *"claude-code-proxy"* ]]; then
     alias proxies="$(command -v proxies)"
 else
     alias proxies='/home/cheta/code/claude-code-proxy/proxies'
 fi
 
-# Tool launch — all point at Headroom (:8787)
-# The chain topology (comp/full) is decided by `proxies up` at start time.
-alias cc='ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude'
-alias qw='OPENAI_BASE_URL=http://127.0.0.1:8787/v1 qwen'
+# ── Auto-start helper ─────────────────────────────────────────────
+_proxy_stack_auto_start() {
+  if curl -sf --max-time 1 http://127.0.0.1:8082/health >/dev/null 2>&1 \
+    && curl -sf --max-time 1 http://127.0.0.1:8787/health >/dev/null 2>&1; then
+    return 0
+  fi
+  NO_ATTACH=1 proxies up >/dev/null 2>&1
+}
+
+# ── FULL STACK: proxy :8082 → headroom :8787 → provider ──────────
+# RTK terminal compression + yolo (--dangerously-skip-permissions)
+alias cc='_proxy_stack_auto_start && ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass rtk claude --dangerously-skip-permissions'
+alias ccc='_proxy_stack_auto_start && ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass rtk claude --continue --dangerously-skip-permissions'
+
+# ── HEADROOM DIRECT: bypass proxy, headroom :8787 only ────────────
+alias cldx='_proxy_stack_auto_start && ANTHROPIC_BASE_URL=http://127.0.0.1:8787 rtk claude --dangerously-skip-permissions'
+alias cldx-c='_proxy_stack_auto_start && ANTHROPIC_BASE_URL=http://127.0.0.1:8787 rtk claude --continue --dangerously-skip-permissions'
+
+# ── DIRECT: no proxy, no headroom (straight to Anthropic) ─────────
+alias cld='rtk claude --dangerously-skip-permissions'
+alias cld-c='rtk claude --continue --dangerously-skip-permissions'
+
+# ── Other CLIs via headroom ────────────────────────────────────────
+alias qw='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass qwen --auth-type openai'
+alias qw-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass qwen --auth-type openai --continue'
+
+# Legacy muscle-memory aliases
+alias car='cc'
+alias carc='ccc'
 
 # ═══════════════════════════════════════════════════════════════════
 # END COMPRESSION STACK ALIASES

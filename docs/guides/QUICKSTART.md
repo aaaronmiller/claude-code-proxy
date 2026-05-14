@@ -30,8 +30,8 @@ Or configure manually:
 ```bash
 cp .env.example .env
 # Edit .env:
-# PROVIDER_API_KEY="dummy"
-# PROVIDER_BASE_URL="http://127.0.0.1:8317/v1"
+# BIG_API_KEY="dummy"
+# BIG_ENDPOINT="http://127.0.0.1:8317/v1"
 # BIG_MODEL="gemini-claude-opus-4-5-thinking"
 # MIDDLE_MODEL="gemini-3-pro-preview"
 # SMALL_MODEL="gemini-3-flash"

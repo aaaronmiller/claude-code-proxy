@@ -8,6 +8,7 @@ from datetime import datetime
 
 PROJECT_DIR = Path.home() / ".claude" / "projects" / "-home-cheta-code-claude-code-proxy"
 OUTPUT_FILE = Path("/home/cheta/code/claude-code-proxy/USERPROMPTS.md")
+OUTPUT_FILE_V2 = Path("/home/cheta/code/claude-code-proxy/USERPROMPTS-v2.md")
 
 def extract_text_from_content(content):
     """Extract readable text from message content (string or list)."""
@@ -89,6 +90,64 @@ def extract_prompts_from_jsonl(jsonl_path: Path) -> list[dict]:
     return prompts
 
 
+def normalize_for_dedup(text: str) -> str:
+    """Normalize text for deduplication: collapse whitespace, lowercase, strip."""
+    import re
+    return re.sub(r'\s+', ' ', text.strip().lower())
+
+
+def deduplicate_prompts(prompts: list[dict]) -> tuple[list[dict], int]:
+    """Remove duplicate prompts, keeping the first occurrence.
+
+    Returns (deduped_list, num_removed).
+    """
+    seen = set()
+    result = []
+    for p in prompts:
+        key = normalize_for_dedup(p["text"])
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(p)
+    return result, len(prompts) - len(result)
+
+
+def write_prompts_md(prompts: list[dict], output_path: Path, num_sessions: int,
+                     dupes_removed: int = 0, truncate: bool = False):
+    """Write prompts to a markdown file."""
+    with open(output_path, "w", encoding="utf-8") as out:
+        out.write("# User Prompts — Claude Code Sessions\n\n")
+        out.write(f"> Extracted **{len(prompts)}** unique prompts from {num_sessions} sessions\n")
+        if dupes_removed > 0:
+            out.write(f"> Deduplicated: {dupes_removed} duplicate prompts removed\n")
+        out.write(f"> Project: `~/code/claude-code-proxy`\n")
+        out.write(f"> Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        if not truncate:
+            out.write(f"> Full-length prompts (no truncation)\n")
+        out.write("\n---\n\n")
+
+        current_session = None
+        prompt_num = 0
+        for p in prompts:
+            if p["session"] != current_session:
+                current_session = p["session"]
+                prompt_num = 0
+                out.write(f"\n## Session: `{current_session}`\n\n")
+
+            prompt_num += 1
+            ts = p["timestamp"]
+            ts_str = str(ts) if ts else "(no timestamp)"
+
+            marker = "🟢 INITIAL" if p["is_first"] else ""
+            out.write(f"### Prompt {prompt_num} {marker} — {ts_str}\n\n")
+
+            text = p["text"]
+            if truncate and len(text) > 3000:
+                text = text[:3000] + f"\n\n... (truncated, {len(p['text'])} chars total)"
+
+            out.write(f"```\n{text}\n```\n\n")
+
+
 def main():
     if not PROJECT_DIR.exists():
         print(f"Project dir not found: {PROJECT_DIR}", file=sys.stderr)
@@ -106,36 +165,19 @@ def main():
         all_prompts.extend(prompts)
         print(f"    → {len(prompts)} user prompts extracted")
 
-    # Write output
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as out:
-        out.write("# User Prompts — Claude Code Sessions\n\n")
-        out.write(f"> Extracted **{len(all_prompts)}** prompts from {len(jsonl_files)} sessions\n")
-        out.write(f"> Project: `~/code/claude-code-proxy`\n")
-        out.write(f"> Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        out.write("---\n\n")
+    # Deduplicate
+    deduped, dupes_removed = deduplicate_prompts(all_prompts)
+    print(f"\nDeduplication: {len(all_prompts)} → {len(deduped)} ({dupes_removed} duplicates removed)")
 
-        current_session = None
-        prompt_num = 0
-        for p in all_prompts:
-            if p["session"] != current_session:
-                current_session = p["session"]
-                prompt_num = 0
-                out.write(f"\n## Session: `{current_session}`\n\n")
+    # Write v2: full-length, deduplicated
+    write_prompts_md(deduped, OUTPUT_FILE_V2, len(jsonl_files),
+                     dupes_removed=dupes_removed, truncate=False)
+    print(f"✅ Written {len(deduped)} prompts to {OUTPUT_FILE_V2} (full-length, deduped)")
 
-            prompt_num += 1
-            ts = p["timestamp"]
-            ts_str = str(ts) if ts else "(no timestamp)"
-
-            marker = "🟢 INITIAL" if p["is_first"] else ""
-            out.write(f"### Prompt {prompt_num} {marker} — {ts_str}\n\n")
-
-            text = p["text"]
-            if len(text) > 3000:
-                text = text[:3000] + f"\n\n... (truncated, {len(p['text'])} chars total)"
-
-            out.write(f"```\n{text}\n```\n\n")
-
-    print(f"\n✅ Written {len(all_prompts)} prompts to {OUTPUT_FILE}")
+    # Also update the original (truncated) for backwards compat
+    write_prompts_md(deduped, OUTPUT_FILE, len(jsonl_files),
+                     dupes_removed=dupes_removed, truncate=True)
+    print(f"✅ Updated {OUTPUT_FILE} (truncated, deduped)")
 
 
 if __name__ == "__main__":

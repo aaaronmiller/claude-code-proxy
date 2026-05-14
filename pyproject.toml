@@ -45,6 +45,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=6.0.0",
     "httpx>=0.28.0",
+    "hypothesis>=6.100.0",  # Property-based tests for ConfigResolver precedence (spec 001 research.md R4)
 ]
 
 [project.urls]

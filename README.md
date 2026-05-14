@@ -8,9 +8,9 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![2025 Ready](https://img.shields.io/badge/2025-Ready-06ffd4.svg)](#)
+[![2026 Ready](https://img.shields.io/badge/2026-Ready-06ffd4.svg)](#)
 
-[Quick Start](#-quick-start) • [Features](#-features) • [Web Dashboard](#-web-dashboard) • [Crosstalk](docs/crosstalk.md) • [Compression Stack](#-compression-stack) • [Roadmap](ROADMAP.md) • [Changelog](changelog.md)
+[Quick Start](#-quick-start) • [Features](#-features) • [Web Dashboard](#-web-dashboard) • [Crosstalk](docs/crosstalk.md) • [Compression Stack](#-compression-stack) • [Roadmap](ROADMAP.md) • [Changelog](CHANGELOG.md)
 
 <br>
 
@@ -27,13 +27,14 @@
 The Ultimate Proxy sits between Claude Code CLI and your chosen API provider. It translates Anthropic's API format to OpenAI-compatible format, letting you use **any model** with Claude Code:
 
 ```
-Claude Code CLI  →  The Ultimate Proxy  →  Any Provider
-                                           ├─ OpenRouter
-                                           ├─ Gemini / VibeProxy
-                                           ├─ OpenAI
-                                           ├─ Azure
-                                           ├─ Ollama (local)
-                                           └─ LM Studio (local)
+Claude Code CLI  →  RTK (terminal compression)
+                       →  The Ultimate Proxy (:8082)
+                            ├─ Model Router (per-use-case routing)
+                            ├─ Cascade fallback (circuit breaker + retry)
+                            ├─ OpenRouter native fallback (inject models array)
+                            └─ Response conversion (OpenAI SSE → Claude SSE)
+                               →  Headroom (:8787, context compression)
+                                    →  OpenRouter API (free models)
 ```
 
 ---
@@ -55,7 +56,7 @@ The installer will:
 - ✅ Install Headroom (compression layer)
 - ✅ Install RTK (command compression)
 - ✅ Install GPU compute stack (Level Zero for Intel, CUDA for NVIDIA, ROCm for AMD)
-- ✅ Configure environment variables (`ONEAPI_DEVICE_SELECTOR`, `CUDA_VISIBLE_DEVICES`, etc.)
+- ✅ Configure environment variables
 - ✅ Add compression aliases (`cc`, `qw`, `qw-resume`)
 - ✅ Start all services
 - ✅ Show health status
@@ -117,13 +118,18 @@ The easiest way to use Claude Code with premium models for **free**:
 | Feature | Description |
 |---------|-------------|
 | **Multi-Provider** | OpenRouter, Gemini, OpenAI, Azure, Ollama, LM Studio |
-| **Model Routing** | BIG/MIDDLE/SMALL tiers with intelligent routing |
-| **Web Dashboard** | Real-time monitoring with 2025 glassmorphism UI |
+| **Model Routing** | BIG/MIDDLE/SMALL tiers + per-use-case routing (background, think, long_context, image, web_search) |
+| **Model Cascade** | Automatic fallback with circuit breakers, exponential backoff, and dynamic model list |
+| **OpenRouter Native Fallback** | Inject `models` array for OR endpoint selection — zero extra latency |
+| **Session Tracking** | Conversation-level request grouping via stable fingerprint |
+| **Streaming Usage Tracking** | Full token/cost/duration tracking for both streaming and non-streaming requests |
+| **Web Dashboard** | Real-time monitoring with glassmorphism UI |
+| **Proxy Chain** | Configurable ordered list of upstream services (proxy → headroom → provider) |
 | **Crosstalk** | Model-to-model conversations (up to 8 models) |
-| **Usage Tracking** | Cost analytics and token metrics |
+| **Usage Tracking** | Cost analytics, token metrics, per-model breakdowns in SQLite |
 | **Extended Thinking** | Up to 128k thinking tokens for reasoning models |
 | **Prompt Injection** | Add custom prompts showing routing info |
-| **Model Cascade** | Automatic fallback on provider errors |
+| **Compression Stack** | Headroom (context compression) + RTK (CLI output compression) for 95-99% savings |
 
 ---
 
@@ -131,12 +137,64 @@ The easiest way to use Claude Code with premium models for **free**:
 
 Access at `http://localhost:8082` when running.
 
-- **2025 Glassmorphism UI** with aurora gradients
+- **Glassmorphism UI** with aurora gradients
 - Real-time request monitoring
 - Provider configuration
+- Proxy chain management (`/chain`)
 - Model selection with hybrid routing
 - WebSocket live log streaming
 - Profile management
+
+---
+
+## 🛠️ CLI Commands
+
+### `proxies` CLI (recommended)
+
+```bash
+# Lifecycle
+proxies up                  # Start proxy chain in tmux
+proxies down                # Stop all services
+proxies restart             # Restart proxy
+proxies status              # Show health for all chain entries
+
+# Configuration
+proxies chain               # Open Textual TUI for chain management
+proxies config show         # Show proxy chain config
+proxies config toggle <id>  # Enable/disable a chain entry
+proxies router show         # Show model routing config
+proxies router set <slot> <model>  # Set per-use-case model
+
+# Monitoring
+proxies stats               # Usage summary (requests, tokens, cost)
+proxies metrics summary     # Detailed token/cost/latency metrics
+proxies metrics models      # Per-model token breakdown
+proxies metrics tools       # 24h tool call analytics
+proxies metrics daily       # 7-day usage history
+proxies watch               # Rich-based live watch dashboard
+
+# Status line
+proxies statusline          # TUI for building CC status line segments
+```
+
+### `start_proxy.py` CLI
+
+```bash
+# Configuration
+python start_proxy.py --setup           # First-time wizard
+python start_proxy.py --settings        # Unified settings TUI
+python start_proxy.py --doctor          # Health check + auto-fix
+
+# Model management
+python start_proxy.py --select-models   # Interactive model selector
+python start_proxy.py --set-big MODEL   # Quick set BIG model
+python start_proxy.py --show-models     # List available models
+
+# Diagnostics
+python start_proxy.py --config          # Show configuration
+python start_proxy.py --dry-run         # Validate without starting
+python start_proxy.py --analytics       # View usage stats
+```
 
 ---
 
@@ -163,44 +221,30 @@ python start_proxy.py --crosstalk "claude-opus,gemini-pro" --topic "Explore cons
 
 ---
 
-## 🛠️ CLI Commands
-
-```bash
-# Configuration
-python start_proxy.py --setup           # First-time wizard
-python start_proxy.py --settings        # Unified settings TUI
-python start_proxy.py --doctor          # Health check + auto-fix
-
-# Model management
-python start_proxy.py --select-models   # Interactive model selector
-python start_proxy.py --set-big MODEL   # Quick set BIG model
-python start_proxy.py --show-models     # List available models
-
-# Diagnostics
-python start_proxy.py --config          # Show configuration
-python start_proxy.py --dry-run         # Validate without starting
-python start_proxy.py --analytics       # View usage stats
-```
-
----
-
 ## 📁 Project Structure
 
 ```
-the-ultimate-proxy/
-├── start_proxy.py          # Main entry point
-├── .env                    # Configuration
-├── CROSSTALK.md           # Multi-model chat docs
+claude-code-proxy/
+├── start_proxy.py              # Main entry point
+├── proxies                     # Bash CLI for lifecycle/config/metrics
+├── .envrc                      # Environment config (sourced by direnv)
+├── CHANGELOG.md                # Project changelog
+├── CROSSTALK.md                # Multi-model chat docs
 │
 ├── src/
-│   ├── core/              # Proxy core logic
-│   ├── api/               # FastAPI routes + WebSocket
-│   ├── services/          # Providers, models, prompts
-│   └── cli/               # CLI tools and TUIs
+│   ├── core/                   # Config, client, circuit breaker, proxy chain, model router
+│   ├── api/                    # FastAPI routes + WebSocket endpoints
+│   ├── services/               # Conversion, logging, usage tracking, models, prompts
+│   ├── cli/                    # CLI tools and TUIs (chain_tui, statusline_tui)
+│   └── dashboard/              # Terminal dashboard
 │
-├── configs/crosstalk/     # Crosstalk presets & templates
-├── web-ui/                # Svelte + bits-ui dashboard
-└── docs/                  # Extended documentation
+├── config/                     # Runtime config (proxy_chain.json, custom_router.example.py)
+├── data/                       # Model rankings, limits, circuit breaker state
+├── scripts/                    # Status line, tmux, metrics shell scripts
+├── tools/                      # Maintenance scripts (refresh_model_rankings.py)
+├── web-ui/                     # Svelte + bits-ui dashboard
+├── docs/                       # Extended documentation
+└── configs/crosstalk/          # Crosstalk presets & templates
 ```
 
 ---
@@ -218,26 +262,28 @@ python start_proxy.py --show-models  # List available models
 ```
 
 **Connection Refused**
-- Ensure proxy is running: `python start_proxy.py`
+- Ensure proxy is running: `proxies up` or `python start_proxy.py`
 - Check port 8082 is not in use
+
+**Stream Stalls / Infinite Lag**
+- Likely caused by upstream model emitting `reasoning_content` without client requesting it
+- Proxy now emits liveness heartbeat during unrequested reasoning (Option C handling)
+- Restart proxy to activate: `proxies restart`
 
 ---
 
 ## 🗜️ Compression Stack
 
-**NEW (April 2026):** Integrated compression layer for 95-99% cost savings
+**Integrated compression layer for 95-99% cost savings**
 
 ### Quick Start
 
 ```bash
 # Start compression stack
-cs-start
+proxies up
 
 # Use Claude with auto-compression
-csi  # or csr to resume
-
-# Quick stats
-cs-stats-quick
+cc  # or csr to resume
 ```
 
 ### Features
@@ -253,10 +299,12 @@ cs-stats-quick
 ### Architecture
 
 ```
-Claude Code → Proxy (:8082) → Headroom (:8787) → OpenRouter
-                           ↓
-                    GPU: 92% VRAM
-                    97% compression
+Claude Code → RTK → Proxy (:8082) → Headroom (:8787) → OpenRouter
+                        │
+                  Model Router
+                  Cascade Fallback
+                  Circuit Breaker
+                  Usage Tracking
 ```
 
 ### Documentation
@@ -264,8 +312,9 @@ Claude Code → Proxy (:8082) → Headroom (:8787) → OpenRouter
 - **Full Guide:** [docs/COMPRESSION-STACK.md](docs/COMPRESSION-STACK.md)
 - **Performance Analysis:** [docs/PERFORMANCE-ANALYSIS.md](docs/PERFORMANCE-ANALYSIS.md)
 - **GPU Optimization:** [docs/GPU-OPTIMIZATION.md](docs/GPU-OPTIMIZATION.md)
+- **Status Bars:** [docs/STATUS_BARS.md](docs/STATUS_BARS.md)
 - **Roadmap:** [ROADMAP.md](ROADMAP.md)
-- **Changelog:** [changelog.md](changelog.md)
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
 ### Low-VRAM / No-GPU Support
 

@@ -68,7 +68,7 @@ cmd_start() {
         
         # Set compression env
         export OPENAI_BASE_URL="http://127.0.0.1:$HEADROOM_PORT/v1"
-        export PROVIDER_BASE_URL="http://127.0.0.1:$HEADROOM_PORT/v1"
+        export BIG_ENDPOINT="http://127.0.0.1:$HEADROOM_PORT/v1"
         
         nohup python -u start_proxy.py --skip-validation > proxy.log 2>&1 &
         sleep 3

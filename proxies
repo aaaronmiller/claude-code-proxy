@@ -21,6 +21,7 @@ PROXY_DIR="/home/cheta/code/claude-code-proxy"
 LOG_DIR="/tmp/proxy-logs"
 TMUX_SESSION="proxies"
 CHAIN_FILE="$PROXY_DIR/config/proxy_chain.json"
+NO_ATTACH="${PROXIES_NO_ATTACH:-0}"
 
 # ── Colors ──
 GREEN='\033[0;32m'; RED='\033[0;31m'; CYAN='\033[0;36m'
@@ -40,6 +41,24 @@ _python() {
     else
         python3 "$@"
     fi
+}
+
+_service_stop_pattern() {
+    local cmd="$1"
+    local first second
+    read -r first second _ <<< "$cmd"
+    case "$(basename "${first:-}")" in
+        python|python3|bash|sh|zsh|env)
+            if [ -n "${second:-}" ]; then
+                basename "$second"
+            else
+                basename "${first:-}"
+            fi
+            ;;
+        *)
+            basename "${first:-}"
+            ;;
+    esac
 }
 
 # ── Read chain entries that have a service_cmd (in reverse start order) ──
@@ -91,19 +110,70 @@ wait_for_port() {
 # ── Kill all managed processes ──
 cmd_stop() {
     echo -e "\n${CYAN}Stopping proxies${NC}"
-    # Kill processes matching service_cmds in chain, plus legacy patterns
+    # Kill the tmux session first; child processes launched inside panes die with it.
+    tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
+
+    # Clean up any orphaned service processes matching chain commands.
     while IFS='|' read -r id name cmd port health type; do
         [ -z "$cmd" ] && continue  # skip cli_wrappers with no service_cmd
         local pattern
-        pattern=$(echo "$cmd" | awk '{print $1}' | xargs basename 2>/dev/null || echo "$id")
+        pattern=$(_service_stop_pattern "$cmd")
         pkill -f "$pattern" 2>/dev/null && echo "  Stopped: $name" || true
     done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
     # Legacy cleanup
     pkill -f "start_proxy.py" 2>/dev/null || true
     pkill -f "headroom proxy" 2>/dev/null || true
     pkill -f "cli-proxy-api-plus" 2>/dev/null || true
-    tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
     echo ""
+}
+
+# ── GPU detection for headroom kompressor ────────────────────────────────────
+# Returns the env-var prefix to prepend to headroom's service_cmd.
+# NVIDIA: ONNX/PyTorch+CUDA — no special vars needed (headroom detects CUDA auto)
+# Intel Arc: OpenVINO requires ONEAPI_DEVICE_SELECTOR=level_zero:0
+# CPU: no vars — headroom falls back to ONNX CPU
+#
+# WSL2 note: lspci only shows "Microsoft Basic Render Driver" — use clinfo or
+# /dev/dxg + /dev/dri to detect the real GPU passed through from Windows.
+_detect_gpu_env() {
+    # NVIDIA takes priority (usually faster for ML inference)
+    if command -v nvidia-smi &>/dev/null; then
+        local gpu_name
+        gpu_name=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
+        if [[ -n "$gpu_name" ]]; then
+            echo "# GPU: NVIDIA $gpu_name (CUDA — headroom auto-detects)"
+            return
+        fi
+    fi
+
+    # Intel GPU: try clinfo first (works in WSL2 where lspci shows only Microsoft stub)
+    if command -v clinfo &>/dev/null; then
+        local intel_cl
+        intel_cl=$(clinfo --list 2>/dev/null | grep -i intel | head -1)
+        if [[ -n "$intel_cl" ]]; then
+            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0"
+            return
+        fi
+    fi
+
+    # Intel GPU: lspci fallback (native Linux, not WSL2)
+    if command -v lspci &>/dev/null; then
+        local intel_gpu
+        intel_gpu=$(lspci 2>/dev/null | grep -i 'vga\|display\|3d' | grep -i intel | head -1)
+        if [[ -n "$intel_gpu" ]]; then
+            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0"
+            return
+        fi
+    fi
+
+    # WSL2 with /dev/dxg but no clinfo — DirectX GPU present, try level_zero anyway
+    if [[ -e /dev/dxg ]] && [[ -d /dev/dri ]]; then
+        echo "ONEAPI_DEVICE_SELECTOR=level_zero:0"
+        return
+    fi
+
+    # No GPU found — CPU fallback (headroom uses ONNX CPU runtime)
+    echo "# GPU: none detected — CPU fallback"
 }
 
 # ── Launch chain services inside a tmux session ──
@@ -117,6 +187,15 @@ _launch_chain_tmux() {
         return 1
     fi
 
+    # Detect GPU once and build env prefix for headroom
+    local gpu_env
+    gpu_env=$(_detect_gpu_env)
+    # Strip comment lines (CPU/NVIDIA paths emit comments, not real env vars)
+    local headroom_env_prefix=""
+    if [[ "$gpu_env" != "#"* ]]; then
+        headroom_env_prefix="$gpu_env "
+    fi
+
     # Note: Claude Code Proxy is now a first-class entry in proxy_chain.json
     # (order=0, so reversed-start puts it last — upstream services ready first).
 
@@ -126,21 +205,45 @@ _launch_chain_tmux() {
     tmux new-session -d -s "$TMUX_SESSION" -n "proxies"
     tmux send-keys -t "${TMUX_SESSION}:0.0" \
         "echo -e \"\\033[1;33m── $name (:$port) ──\\033[0m\"" C-m
-    tmux send-keys -t "${TMUX_SESSION}:0.0" "$cmd" C-m
+    tmux send-keys -t "${TMUX_SESSION}:0.0" "cd \"$PROXY_DIR\" && $cmd" C-m
 
     local pane=1
-    # Remaining chain entries
+    # Remaining chain entries — inject GPU env into headroom's cmd
     for entry in "${entries[@]:1}"; do
         IFS='|' read -r id name cmd port health <<< "$entry"
+        # For headroom: strip any existing ONEAPI_DEVICE_SELECTOR from the static
+        # service_cmd (it may be wrong for this machine) and inject the detected one.
+        if [[ "$id" == "headroom" ]]; then
+            cmd=$(echo "$cmd" | sed 's/ONEAPI_DEVICE_SELECTOR=[^ ]* //')
+            cmd="${headroom_env_prefix}${cmd}"
+        fi
         tmux split-window -v -t "${TMUX_SESSION}:0.$((pane-1))"
         tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
             "echo -e \"\\033[1;33m── $name (:$port) ──\\033[0m\"" C-m
-        tmux send-keys -t "${TMUX_SESSION}:0.${pane}" "$cmd" C-m
+        tmux send-keys -t "${TMUX_SESSION}:0.${pane}" "cd \"$PROXY_DIR\" && $cmd" C-m
         pane=$((pane+1))
     done
 
     # (Claude Code Proxy is launched via the entry loop above, as order=0 in
     # proxy_chain.json — reversed-start puts it in the final pane.)
+
+    # ── Optional watchdog pane ──
+    # When PROXY_WATCHDOG=true, start a background health-checker that auto-
+    # restarts dead services. Lives in a small pane at the bottom of the session.
+    if [ "${PROXY_WATCHDOG:-}" = "true" ] || [ "${PROXY_WATCHDOG:-}" = "1" ]; then
+        local watchdog_script="$PROXY_DIR/scripts/watchdog.sh"
+        if [ -x "$watchdog_script" ]; then
+            tmux split-window -v -t "${TMUX_SESSION}:0.$((pane-1))"
+            tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+                "echo -e \"\\033[1;33m── Watchdog ──\\033[0m\"" C-m
+            tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+                "PROXY_DIR=\"$PROXY_DIR\" CHAIN_FILE=\"$CHAIN_FILE\" \"$watchdog_script\"" C-m
+            tmux resize-pane -t "${TMUX_SESSION}:0.${pane}" -y 6
+            info "Watchdog started (PROXY_WATCHDOG=true)"
+        else
+            warn "PROXY_WATCHDOG=true but scripts/watchdog.sh not found"
+        fi
+    fi
 
     tmux select-layout -t "$TMUX_SESSION" even-vertical
     tmux rename-window -t "$TMUX_SESSION" "chain"
@@ -167,21 +270,57 @@ _launch_chain_tmux() {
 cmd_start() {
     echo -e "\n${CYAN}Starting proxy chain${NC}\n"
 
+    # Report GPU so the user knows what kompressor backend will be used
+    local _gpu_env
+    _gpu_env=$(_detect_gpu_env)
+    if [[ "$_gpu_env" == "ONEAPI_DEVICE_SELECTOR="* ]]; then
+        info "Kompressor: Intel GPU (OpenVINO) — $_gpu_env"
+    elif [[ "$_gpu_env" == "#"*"NVIDIA"* ]]; then
+        info "Kompressor: NVIDIA GPU (CUDA/ONNX — auto-detected by headroom)"
+    else
+        info "Kompressor: CPU fallback (no discrete GPU detected)"
+    fi
+    echo ""
+
+    # If session already exists, check health before deciding to restart.
+    # After Ctrl+C from tmux attach, the session and processes keep running —
+    # killing+restarting everything is wrong and forces the user to run twice.
     if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-        info "Existing tmux session found — killing..."
+        local all_healthy=true
+        while IFS='|' read -r id name cmd port health type; do
+            [ "$port" -gt 0 ] || continue
+            curl -sf --max-time 1 "http://127.0.0.1:$port$health" > /dev/null 2>&1 || { all_healthy=false; break; }
+        done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
+
+        if [ "$all_healthy" = true ]; then
+            ok "All services already running"
+            while IFS='|' read -r id name cmd port health type; do
+                [ "$port" -gt 0 ] && ok "$name :$port"
+            done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
+            echo ""
+            echo -e "  ${CYAN}View live output:${NC} tmux attach -t $TMUX_SESSION"
+            echo -e "  ${CYAN}Detach:${NC}          Ctrl+B, then D"
+            echo ""
+            if [ -t 1 ] && [ "$NO_ATTACH" != "1" ]; then
+                tmux attach -t "$TMUX_SESSION"
+            fi
+            return 0
+        fi
+
+        warn "Session exists but services are down — restarting..."
         tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
-        sleep 1
+        sleep 0.5
     fi
 
-    # Kill stale processes
+    # Kill any orphaned processes before starting fresh
     cmd_stop 2>/dev/null || true
-    sleep 1
+    sleep 0.5
 
     info "Launching chain in tmux..."
     _launch_chain_tmux
 
     info "Waiting for services to start..."
-    sleep 3
+    sleep 2
 
     local all_ok=true
 
@@ -192,15 +331,12 @@ cmd_start() {
         fi
     done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
 
-    # Health-check the proxy itself
-    wait_for_port 8082 30 /health && ok "Claude Code Proxy :8082" || { fail "Claude Code Proxy :8082"; all_ok=false; }
-
     echo ""
     if [ "$all_ok" = true ]; then
         echo -e "  ${CYAN}View live output:${NC} tmux attach -t $TMUX_SESSION"
         echo -e "  ${CYAN}Detach:${NC}          Ctrl+B, then D"
         echo ""
-        if [ -t 1 ]; then
+        if [ -t 1 ] && [ "$NO_ATTACH" != "1" ]; then
             info "Attaching to tmux session..."
             tmux attach -t "$TMUX_SESSION"
         fi
@@ -243,12 +379,6 @@ cmd_status() {
         idx=$((idx+1))
     done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
 
-    # Always show the proxy itself
-    if curl -sf --max-time 2 "http://127.0.0.1:8082/health" > /dev/null 2>&1; then
-        echo -e "  ${GREEN}[$idx]${NC} Claude Code Proxy  :8082  ${GREEN}(healthy)${NC}"
-    else
-        echo -e "  ${RED}[$idx]${NC} Claude Code Proxy  :8082  ${RED}(not running)${NC}"
-    fi
     echo ""
 }
 
@@ -435,9 +565,10 @@ cmd_config() {
         order)  _config_reorder "$@" ;;
         add)    _config_add "$@" ;;
         rm)     _config_remove "$@" ;;
+        where)  _config_where "$@" ;;   # US4 provenance query
         env)    _config_env ;;
         *)
-            echo -e "\n${CYAN}Usage:${NC} proxies config {show|set|toggle|order|add|rm|env}"
+            echo -e "\n${CYAN}Usage:${NC} proxies config {show|set|toggle|order|add|rm|where|env}"
             echo ""
             echo "  show                    Show all chain entries and settings"
             echo "  set <id> <key> <value>  Set a property on a chain entry"
@@ -445,6 +576,7 @@ cmd_config() {
             echo "  order <id> up|down      Move a chain entry up or down"
             echo "  add <id> <name> <url>   Add a new chain entry"
             echo "  rm <id>                 Remove a chain entry"
+            echo "  where <field_path>      Query where a config field's value came from"
             echo "  env                     Show all relevant env vars"
             echo ""
             echo -e "  ${CYAN}Examples:${NC}"
@@ -454,6 +586,7 @@ cmd_config() {
             echo "    proxies config set headroom service_cmd 'headroom proxy --port 8787 --mode cost_savings'"
             echo "    proxies config order headroom down"
             echo "    proxies config add myproxy 'My Proxy' http://127.0.0.1:9000/v1"
+            echo "    proxies config where assignments.big.model"
             echo ""
             ;;
     esac
@@ -734,6 +867,39 @@ _config_env() {
     echo ""
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Provenance query (US4)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_config_where() {
+    local field_path="$1"
+    if [ -z "$field_path" ]; then
+        fail "Usage: proxies config where <field_path>"
+        return 1
+    fi
+
+    local url="http://127.0.0.1:8082/api/config/${field_path}"
+    local auth_header=""
+    if [ -n "${PROXY_ADMIN_TOKEN:-}" ]; then
+        auth_header="-H \"Authorization: Bearer $PROXY_ADMIN_TOKEN\""
+    fi
+
+    # Query; require authenticated (read also needs auth? spec says read requires authenticated user, not necessarily admin)
+    # The endpoint requires authenticated user; our token may be admin or user token. Use it.
+    local resp
+    resp=$(curl -s ${auth_header} "$url" 2>/dev/null) || {
+        fail "Request failed (is proxy running and token set?)"
+        return 1
+    }
+
+    # Pretty print JSON if jq available
+    if command -v jq >/dev/null 2>&1; then
+        echo "$resp" | jq .
+    else
+        echo "$resp"
+    fi
+}
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ROUTER — View/edit task-based model substitutions
 # ══════════════════════════════════════════════════════════════════════════════
@@ -959,6 +1125,81 @@ print("    • Compression proxies (Headroom/RTK) still active if enabled")
 print()
 print("  To revert: proxies router enable")
 PYEOF
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BREAKERS — Circuit breaker inspection and manual reset
+# ══════════════════════════════════════════════════════════════════════════════
+
+cmd_breakers() {
+    local action="${1:-list}"
+    local model="${2:-}"
+
+    if ! curl -sf --max-time 2 "http://127.0.0.1:8082/health" > /dev/null 2>&1; then
+        fail "Proxy not running on :8082"
+        return 1
+    fi
+
+    case "$action" in
+        list|ls|"")
+            local data
+            data=$(curl -sf --max-time 5 "http://127.0.0.1:8082/api/breakers" 2>/dev/null)
+            if [ -z "$data" ]; then
+                fail "Could not fetch circuit breaker state"
+                return 1
+            fi
+            echo -e "\n${CYAN}Circuit Breakers${NC}"
+            _python - "$data" <<'PYEOF'
+import json, sys
+data = json.loads(sys.argv[1])
+breakers = data.get("breakers", [])
+if not breakers:
+    print("  (no circuit breakers active — no failures recorded yet)")
+    sys.exit(0)
+G, Y, R, C, D, NC = "\033[0;32m", "\033[0;33m", "\033[0;31m", "\033[0;36m", "\033[2m", "\033[0m"
+for b in breakers:
+    state = b["state"]
+    color = G if state == "closed" else R if state == "open" else Y
+    model = b["model"]
+    fails = b["failure_count"]
+    total = b["total_failures"]
+    successes = b["total_successes"]
+    cool = b.get("cooldown_remaining_s", 0)
+    threshold = b["failure_threshold"]
+    line = f"  {color}{'●':2}{NC} {model:<45} {state:<10}"
+    if state == "open":
+        line += f" cooldown: {cool:.0f}s"
+    line += f"  {D}fails: {fails}/{threshold}  total: {total}  ok: {successes}{NC}"
+    print(line)
+print()
+open_count = sum(1 for b in breakers if b["state"] == "open")
+if open_count:
+    print(f"  \033[0;33m{open_count} breaker(s) OPEN — reset with: proxies breakers reset <model>\033[0m")
+PYEOF
+            ;;
+
+        reset)
+            if [ -z "$model" ]; then
+                fail "Usage: proxies breakers reset <model>"
+                echo "  Example: proxies breakers reset openrouter/qwen3-235b-a22b:free"
+                return 1
+            fi
+            local result
+            result=$(curl -sf --max-time 5 -X POST \
+                "http://127.0.0.1:8082/api/breakers/$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe='/'))" "$model")/reset" 2>/dev/null)
+            if [ -z "$result" ]; then
+                fail "Reset failed (model not found or proxy unreachable)"
+                return 1
+            fi
+            ok "Reset: $model → CLOSED"
+            ;;
+
+        *)
+            fail "Unknown breakers action: $action"
+            echo "  Usage: proxies breakers [list|reset <model>]"
+            return 1
+            ;;
+    esac
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1249,7 +1490,137 @@ $(echo -e "${CYAN}EXAMPLES${NC}")
 HELP
 }
 
+# ── Restart a single service in its tmux pane ──────────────────────────────
+cmd_restart_service() {
+    local target="${1:-}"
+    if [ -z "$target" ]; then
+        fail "Usage: proxies restart <service-id>"
+        echo "  Available service IDs (from $CHAIN_FILE):"
+        while IFS='|' read -r id name cmd port health type; do
+            [ -n "$cmd" ] && echo "    $id  ($name)"
+        done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
+        return 1
+    fi
+
+    if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+        warn "No tmux session — starting full chain instead"
+        cmd_start
+        return
+    fi
+
+    # Find the service in the reversed list (pane 0 = first reversed entry)
+    local pane_idx=0
+    local found_cmd="" found_name=""
+    while IFS='|' read -r id name cmd port health; do
+        if [ "$id" = "$target" ]; then
+            found_cmd="$cmd"
+            found_name="$name"
+            break
+        fi
+        pane_idx=$((pane_idx + 1))
+    done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services_reversed)
+
+    if [ -z "$found_cmd" ]; then
+        fail "Service '$target' not found or has no service_cmd"
+        return 1
+    fi
+
+    # Inject GPU env for headroom (same logic as _launch_chain_tmux)
+    if [ "$target" = "headroom" ]; then
+        local gpu_env
+        gpu_env=$(_detect_gpu_env)
+        if [[ "$gpu_env" != "#"* ]]; then
+            found_cmd=$(echo "$found_cmd" | sed 's/ONEAPI_DEVICE_SELECTOR=[^ ]* //')
+            found_cmd="${gpu_env} ${found_cmd}"
+        fi
+    fi
+
+    info "Restarting $found_name in pane $pane_idx..."
+
+    # Send Ctrl+C to kill the running process
+    tmux send-keys -t "${TMUX_SESSION}:0.${pane_idx}" C-c 2>/dev/null || true
+    sleep 1
+
+    # Clear and re-run
+    tmux send-keys -t "${TMUX_SESSION}:0.${pane_idx}" "" C-m 2>/dev/null || true
+    tmux send-keys -t "${TMUX_SESSION}:0.${pane_idx}" \
+        "echo -e \"\\033[1;33m── $found_name (restarting) ──\\033[0m\"" C-m
+    tmux send-keys -t "${TMUX_SESSION}:0.${pane_idx}" \
+        "cd \"$PROXY_DIR\" && $found_cmd" C-m
+
+    # Wait for health
+    local port
+    port=$(CHAIN_FILE="$CHAIN_FILE" _chain_services | awk -F'|' -v id="$target" '$1==id{print $4}')
+    local health_path
+    health_path=$(CHAIN_FILE="$CHAIN_FILE" _chain_services | awk -F'|' -v id="$target" '$1==id{print $5}')
+
+    if [ "${port:-0}" -gt 0 ]; then
+        info "Waiting for $found_name :$port..."
+        wait_for_port "$port" 30 "${health_path:-/health}" && ok "$found_name :$port healthy" || fail "$found_name :$port did not come up"
+    else
+        ok "$found_name restarted (no health endpoint)"
+    fi
+}
+
+# ── Reliability score ──────────────────────────────────────────────────────
+cmd_reliability() {
+    local hours="${1:-24}"
+    if ! curl -sf --max-time 2 "http://127.0.0.1:8082/health" > /dev/null 2>&1; then
+        fail "Proxy not running on :8082"
+        return 1
+    fi
+    local data
+    data=$(curl -sf --max-time 5 "http://127.0.0.1:8082/api/reliability?hours=$hours" 2>/dev/null)
+    if [ -z "$data" ]; then
+        fail "Could not fetch reliability score"
+        return 1
+    fi
+    echo -e "\n${CYAN}Reliability Score (last ${hours}h)${NC}"
+    _python - "$data" <<'PYEOF'
+import json, sys
+d = json.loads(sys.argv[1])
+score = d.get("score")
+grade = d.get("grade", "?")
+total = d.get("total_requests", 0)
+G, Y, R, C, NC = "\033[0;32m", "\033[0;33m", "\033[0;31m", "\033[0;36m", "\033[0m"
+if score is None:
+    print(f"  {Y}No data yet — run some requests first{NC}")
+    sys.exit(0)
+color = G if grade in ("S","A") else Y if grade == "B" else R
+print(f"  {color}Grade: {grade}  Score: {score:.3f}{NC}  ({total} requests)")
+c = d.get("components", {})
+print(f"  Success rate:        {c.get('success_rate', 0):.1%}  (weight 50%)")
+print(f"  Cascade efficiency:  {c.get('cascade_efficiency', 0):.1%}  (weight 20%)")
+print(f"  Latency score:       {c.get('latency_score', 0):.1%}  (weight 15%)")
+print(f"  Cache hit rate:      {c.get('cache_hit_rate', 0):.1%}  (weight 15%)")
+p95 = d.get("p95_latency_ms")
+if p95: print(f"  p95 latency:         {p95:.0f}ms")
+avg_d = d.get("avg_cascade_depth", 0)
+print(f"  Avg cascade depth:   {avg_d:.2f}")
+errs = d.get("error_breakdown", {})
+if errs:
+    print(f"\n  {Y}Error breakdown:{NC}")
+    for k, v in sorted(errs.items(), key=lambda x: -x[1])[:5]:
+        print(f"    {k:<40} ×{v}")
+print()
+# Target guidance
+if score < 0.50:
+    print(f"  {R}Target: 0.85 (grade A) — fix cascade fallbacks and reduce 429s{NC}")
+elif score < 0.80:
+    print(f"  {Y}Target: 0.85 (grade A) — reduce cascade depth and improve cache hit rate{NC}")
+else:
+    print(f"  {G}On target. Keep optimizing cache hit rate and reducing latency.{NC}")
+PYEOF
+}
+
 # ── Main dispatch ──
+case "${1:-status}" in
+    --no-attach)
+        NO_ATTACH=1
+        shift
+        ;;
+esac
+
 case "${1:-status}" in
     up|start)       cmd_start ;;
     down|stop)      cmd_stop ;;
@@ -1262,7 +1633,15 @@ case "${1:-status}" in
     watch|mon)      cmd_watch "${2:-all}" "${3:-20}" ;;
     chain|tui)      cmd_chain ;;
     statusline|sl)  cmd_statusline ;;
-    restart)        cmd_stop; sleep 2; cmd_start ;;
+    breakers|cb)    shift; cmd_breakers "$@" ;;
+    reliability|rel) cmd_reliability "${2:-24}" ;;
+    restart)
+        if [ -n "${2:-}" ]; then
+            shift; cmd_restart_service "$@"
+        else
+            cmd_stop; sleep 2; cmd_start
+        fi
+        ;;
     help|--help|-h) cmd_help ;;
     *)
         fail "Unknown command: $1"

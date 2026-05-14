@@ -186,7 +186,7 @@ async def call_model(
         api_key = (
             os.environ.get("OPENROUTER_API_KEY") or
             os.environ.get("OPENAI_API_KEY") or
-            os.environ.get("PROVIDER_API_KEY")
+            os.environ.get("BIG_API_KEY")
         )
     
     if not api_key:

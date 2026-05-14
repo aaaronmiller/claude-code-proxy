@@ -2,7 +2,7 @@
 
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException
@@ -11,6 +11,24 @@ import httpx
 
 from src.core.config import config
 from src.core.logging import logger
+
+router = APIRouter()
+
+# Import config_events router for SSE live-reload (US3, T054)
+from src.api.config_events import router as config_events_router
+
+router.include_router(config_events_router)
+
+
+def validate_safe_filename(name: str) -> str:
+    if not name or any(c in name for c in ("/", "\\", ".", "\0")):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename format. Cannot contain path separators or dots.",
+        )
+    return name
+
+
 from src.cli.env_utils import update_env_values
 from src.services.models.free_model_rankings import get_or_build_free_model_rankings
 from src.services.models.selection_history import (
@@ -18,8 +36,6 @@ from src.services.models.selection_history import (
     record_selection,
 )
 from src.api.websocket_logs import get_cascade_stats
-
-router = APIRouter()
 
 # Profile storage path
 PROFILES_DIR = Path("configs/profiles")
@@ -30,8 +46,8 @@ class ConfigUpdate(BaseModel):
     """Configuration update model - supports all web UI settings"""
 
     # Core settings
-    provider_api_key: Optional[str] = None
-    provider_base_url: Optional[str] = None
+    big_api_key: Optional[str] = None
+    big_endpoint: Optional[str] = None
     proxy_auth_key: Optional[str] = None
 
     # Legacy fallback names
@@ -105,15 +121,24 @@ class ProfileCreate(BaseModel):
 
 @router.get("/api/config")
 async def get_config():
-    """Get current configuration - returns all settings for web UI"""
-    return {
+    """
+    Get current configuration — returns all settings for the web UI.
+    Now includes all 62 manifest settings plus legacy fields for backward compatibility.
+    """
+    try:
+        from src.core.config_manifest import as_config_response as _manifest_response
+        _manifest_vals = _manifest_response()
+    except ImportError:
+        _manifest_vals = {}
+
+    _legacy = {
         # ═══════════════════════════════════════════════════════════════════════════════
         # PROVIDER & AUTH
         # ═══════════════════════════════════════════════════════════════════════════════
-        "provider_api_key": "***"
-        if (os.getenv("PROVIDER_API_KEY") or config.openai_api_key)
+        "big_api_key": "***"
+        if (os.getenv("BIG_API_KEY") or config.openai_api_key)
         else "",
-        "provider_base_url": os.getenv("PROVIDER_BASE_URL") or config.openai_base_url,
+        "big_endpoint": os.getenv("BIG_ENDPOINT") or config.openai_base_url,
         "proxy_auth_key": "***"
         if (os.getenv("PROXY_AUTH_KEY") or config.anthropic_api_key)
         else "",
@@ -139,9 +164,6 @@ async def get_config():
         # ═══════════════════════════════════════════════════════════════════════════════
         # MODEL SETTINGS
         # ═══════════════════════════════════════════════════════════════════════════════
-        "big_model": config.big_model,
-        "middle_model": config.middle_model,
-        "small_model": config.small_model,
         # ═══════════════════════════════════════════════════════════════════════════════
         # REASONING CONFIGURATION
         # ═══════════════════════════════════════════════════════════════════════════════
@@ -224,8 +246,10 @@ async def get_config():
         # HYBRID MODE (Per-tier routing)
         # ═══════════════════════════════════════════════════════════════════════════════
         # Provider Registry
-        "providers": {name: {"url": entry["url"], "has_key": bool(entry.get("api_key"))}
-                      for name, entry in config.provider_registry.items()},
+        "providers": {
+            name: {"url": entry["url"], "has_key": bool(entry.get("api_key"))}
+            for name, entry in config.provider_registry.items()
+        },
         "big_model": os.getenv("BIG_MODEL", config.big_model),
         "middle_model": os.getenv("MIDDLE_MODEL", config.middle_model),
         "small_model": os.getenv("SMALL_MODEL", config.small_model),
@@ -245,6 +269,8 @@ async def get_config():
         if hasattr(config, "passthrough_mode")
         else False,
     }
+    # Merge: manifest values first, then legacy fields override for backward compat
+    return {**_manifest_vals, **_legacy}
 
 
 @router.post("/api/config")
@@ -265,11 +291,11 @@ async def update_config(config_update: ConfigUpdate):
 
         if config_update.openai_base_url:
             config.openai_base_url = config_update.openai_base_url
-        if config_update.provider_api_key is not None:
-            config.openai_api_key = config_update.provider_api_key or None
-        if config_update.provider_base_url is not None:
+        if config_update.big_api_key is not None:
+            config.openai_api_key = config_update.big_api_key or None
+        if config_update.big_endpoint is not None:
             config.openai_base_url = (
-                config_update.provider_base_url or config.openai_base_url
+                config_update.big_endpoint or config.openai_base_url
             )
 
         if config_update.big_model:
@@ -318,8 +344,8 @@ async def update_config(config_update: ConfigUpdate):
         payload = config_update.model_dump(exclude_none=True)
         env_updates = {}
         key_map = {
-            "provider_api_key": "PROVIDER_API_KEY",
-            "provider_base_url": "PROVIDER_BASE_URL",
+            "big_api_key": "BIG_API_KEY",
+            "big_endpoint": "BIG_ENDPOINT",
             "proxy_auth_key": "PROXY_AUTH_KEY",
             "host": "HOST",
             "port": "PORT",
@@ -338,9 +364,6 @@ async def update_config(config_update: ConfigUpdate):
             "dashboard_layout": "DASHBOARD_LAYOUT",
             "dashboard_refresh": "DASHBOARD_REFRESH",
             "compact_logger": "COMPACT_LOGGER",
-            "big_model": "BIG_MODEL",
-            "middle_model": "MIDDLE_MODEL",
-            "small_model": "SMALL_MODEL",
             "model_cascade": "MODEL_CASCADE",
             "big_cascade": "BIG_CASCADE",
             "middle_cascade": "MIDDLE_CASCADE",
@@ -409,6 +432,7 @@ async def get_proxy_chain():
     """Return the current proxy chain configuration."""
     try:
         from src.core.proxy_chain import get_chain
+
         chain = get_chain()
         return chain.to_dict()
     except Exception as e:
@@ -426,6 +450,7 @@ async def update_proxy_chain(body: dict):
     try:
         from src.core.proxy_chain import ProxyChain, reload_chain
         from src.core.model_router import reload_router
+
         new_chain = ProxyChain.from_dict(body)
         new_chain.save()
         reload_chain()
@@ -443,6 +468,7 @@ async def get_router_config():
     try:
         from src.core.proxy_chain import get_chain
         from dataclasses import asdict
+
         return asdict(get_chain().router)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -458,6 +484,7 @@ async def update_router_config(body: dict):
     try:
         from src.core.proxy_chain import RouterConfig, get_chain, reload_chain
         from src.core.model_router import reload_router
+
         chain = get_chain()
         # Merge supplied fields into current RouterConfig
         current = {k: v for k, v in vars(chain.router).items()}
@@ -503,7 +530,8 @@ async def list_profiles():
 async def save_profile(profile: ProfileCreate):
     """Save a configuration profile"""
     try:
-        profile_file = PROFILES_DIR / f"{profile.name}.json"
+        safe_name = validate_safe_filename(profile.name)
+        profile_file = PROFILES_DIR / f"{safe_name}.json"
         profile_data = {
             "name": profile.name,
             "modified": datetime.now().isoformat(),
@@ -525,7 +553,8 @@ async def save_profile(profile: ProfileCreate):
 async def get_profile(profile_name: str):
     """Get a specific profile"""
     try:
-        profile_file = PROFILES_DIR / f"{profile_name}.json"
+        safe_name = validate_safe_filename(profile_name)
+        profile_file = PROFILES_DIR / f"{safe_name}.json"
         if not profile_file.exists():
             raise HTTPException(status_code=404, detail="Profile not found")
 
@@ -540,10 +569,11 @@ async def get_profile(profile_name: str):
 
 
 @router.delete("/api/profiles/{profile_name}")
-async def delete_profile(profile_name: str):
+async def deactivate_profile(profile_name: str):
     """Delete a profile"""
     try:
-        profile_file = PROFILES_DIR / f"{profile_name}.json"
+        safe_name = validate_safe_filename(profile_name)
+        profile_file = PROFILES_DIR / f"{safe_name}.json"
         if not profile_file.exists():
             raise HTTPException(status_code=404, detail="Profile not found")
 
@@ -1218,7 +1248,6 @@ async def save_api_key(provider: str, api_key: str):
     """
     try:
         import os
-        import dotenv
 
         # Map provider to environment variable
         env_vars = {
@@ -1298,7 +1327,7 @@ async def get_stats():
             recent = []
             with usage_tracker.get_connection() as conn:
                 cursor = conn.execute("""
-                    SELECT original_model, input_tokens + output_tokens as total_tokens,
+                    SELECT routed_model, input_tokens + output_tokens as total_tokens,
                            duration_ms, estimated_cost, timestamp, status
                     FROM api_requests
                     ORDER BY timestamp DESC
@@ -1360,7 +1389,7 @@ async def get_recent_requests():
         recent = []
         with usage_tracker.get_connection() as conn:
             cursor = conn.execute("""
-                SELECT original_model, input_tokens + output_tokens as total_tokens,
+                SELECT routed_model, input_tokens + output_tokens as total_tokens,
                        duration_ms, estimated_cost, timestamp, status, endpoint, request_id
                 FROM api_requests
                 ORDER BY timestamp DESC
@@ -1419,7 +1448,6 @@ async def get_dashboard_analytics(days: int = 7):
 
         # Add model metadata from enriched data if available
         try:
-            from src.services.models.openrouter_enricher import enrich_model
             import json
             from pathlib import Path
 
@@ -1591,7 +1619,6 @@ async def refresh_model_metadata():
     """Manually refresh the OpenRouter model metadata cache."""
     try:
         from src.services.models.openrouter_fetcher import fetch_and_cache_models
-        import asyncio
 
         result = await fetch_and_cache_models()
         return {
@@ -1658,8 +1685,8 @@ async def get_analytics_health():
 async def test_provider_connection():
     """Test connection to the configured provider"""
     try:
-        provider_url = os.getenv("PROVIDER_BASE_URL") or config.openai_base_url
-        provider_key = os.getenv("PROVIDER_API_KEY") or config.openai_api_key
+        provider_url = os.getenv("BIG_ENDPOINT") or config.openai_base_url
+        provider_key = os.getenv("BIG_API_KEY") or config.openai_api_key
 
         if not provider_url or not provider_key:
             return {"success": False, "error": "Provider URL or API key not configured"}
@@ -1740,7 +1767,8 @@ async def list_crosstalk_presets():
 async def get_crosstalk_preset(preset_name: str):
     """Get a specific Crosstalk preset"""
     try:
-        preset_file = CROSSTALK_PRESETS_DIR / f"{preset_name}.json"
+        safe_name = validate_safe_filename(preset_name)
+        preset_file = CROSSTALK_PRESETS_DIR / f"{safe_name}.json"
         if not preset_file.exists():
             raise HTTPException(status_code=404, detail="Preset not found")
 
@@ -1774,7 +1802,8 @@ async def save_crosstalk_preset(preset: CrosstalkSessionCreate):
         CROSSTALK_PRESETS_DIR.mkdir(parents=True, exist_ok=True)
 
         name = preset.name or f"custom_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        preset_file = CROSSTALK_PRESETS_DIR / f"{name}.json"
+        safe_name = validate_safe_filename(name)
+        preset_file = CROSSTALK_PRESETS_DIR / f"{safe_name}.json"
 
         preset_data = {
             "name": name,
@@ -1829,7 +1858,8 @@ async def list_crosstalk_sessions():
 async def get_crosstalk_session(session_name: str):
     """Get a specific Crosstalk session transcript"""
     try:
-        session_file = CROSSTALK_SESSIONS_DIR / f"{session_name}.json"
+        safe_name = validate_safe_filename(session_name)
+        session_file = CROSSTALK_SESSIONS_DIR / f"{safe_name}.json"
         if not session_file.exists():
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -1860,7 +1890,6 @@ class CrosstalkRunRequest(BaseModel):
 @router.post("/api/crosstalk/run")
 async def run_crosstalk_session(request: CrosstalkRunRequest):
     """Run a Crosstalk session from the web UI"""
-    import asyncio
     from datetime import datetime
 
     try:
@@ -1909,8 +1938,8 @@ async def run_crosstalk_session(request: CrosstalkRunRequest):
 @router.get("/api/health")
 async def health_check():
     """Health check endpoint for auto-wizard"""
-    provider_url = os.getenv("PROVIDER_BASE_URL") or config.openai_base_url
-    provider_key = os.getenv("PROVIDER_API_KEY") or config.openai_api_key
+    provider_url = os.getenv("BIG_ENDPOINT") or config.openai_base_url
+    provider_key = os.getenv("BIG_API_KEY") or config.openai_api_key
 
     return {
         "status": "ok",
@@ -1963,7 +1992,7 @@ async def run_playground(request: PlaygroundRequest):
 
     # Get API key
     api_key = (
-        os.getenv("PROVIDER_API_KEY")
+        os.getenv("BIG_API_KEY")
         or os.getenv("OPENROUTER_API_KEY")
         or os.getenv("OPENAI_API_KEY")
     )

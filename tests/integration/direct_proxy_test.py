@@ -769,7 +769,7 @@ drwxr-xr-x  5 user  staff  160 Dec 29 09:00 ..
         return False, {"error": str(e), "type": type(e).__name__}, start_time
 
 
-def test_db_logging(start_time: str):
+def check_db_logging(start_time: str):
     """Verify DB logged requests since start_time."""
     if not DB_PATH.exists():
         return False, "DB not found"
@@ -906,7 +906,7 @@ def main():
     # DB logging check
     if start_time:
         print(f"\n[DB] Logging Check...")
-        ok, data = test_db_logging(start_time)
+        ok, data = check_db_logging(start_time)
         print(f"    {'PASS' if ok else 'FAIL'}: {data}")
         all_results.append(("DB Logging", ok))
 

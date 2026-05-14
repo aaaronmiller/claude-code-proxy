@@ -3,9 +3,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from src.api.endpoints import router as api_router
 from src.api.web_ui import router as web_ui_router
+from src.api.config_api import router as config_api_router
 from src.api.websocket_dashboard import router as websocket_router
 from src.api.websocket_logs import router as ws_logs_router
 from src.api.analytics import router as analytics_router
+from src.api.analytics_api import router as analytics_api_router
+from src.api.audit_api import router as audit_api_router
 from src.api.billing import router as billing_router
 from src.api.benchmarks import router as benchmarks_router
 from src.api.users import router as users_router
@@ -272,9 +275,14 @@ app = FastAPI(title="The Ultimate Proxy", version="2.1.0", lifespan=lifespan)
 app.include_router(api_router)
 app.include_router(openai_router)  # OpenAI-compatible endpoint for cross-IDE support
 app.include_router(web_ui_router)
+app.include_router(
+    config_api_router
+)  # NEW: unified config system (assignments, mappings, provenance)
 app.include_router(websocket_router)
 app.include_router(ws_logs_router)  # Live log streaming
 app.include_router(analytics_router)
+app.include_router(analytics_api_router)  # Per-assignment & per-model metrics (T074)
+app.include_router(audit_api_router)  # Audit log API (T075)
 app.include_router(billing_router)
 app.include_router(benchmarks_router)
 app.include_router(users_router)
@@ -389,6 +397,15 @@ async def serve_config_ui():
     return {"message": "Web UI not available"}
 
 
+@app.get("/settings")
+async def serve_settings_ui():
+    """Serve the settings dashboard (Alpine.js + shadcn-style UI)."""
+    settings_file = legacy_static_dir / "settings.html"
+    if settings_file.exists():
+        return FileResponse(settings_file)
+    return {"message": "Settings UI not available — expected at src/static/settings.html"}
+
+
 def main(env_updates: dict = None, skip_validation: bool = False):
     """Main entry point with optional environment updates."""
     # Apply environment updates from CLI
@@ -419,7 +436,9 @@ def main(env_updates: dict = None, skip_validation: bool = False):
         print("  PROXY_AUTH_KEY - Expected client API key for proxy validation")
         print("                   If set, clients must provide this exact key")
         print("  ENABLE_LEGACY_PROXY_AUTH=true")
-        print("                   Re-enable legacy ANTHROPIC_API_KEY proxy auth behavior")
+        print(
+            "                   Re-enable legacy ANTHROPIC_API_KEY proxy auth behavior"
+        )
         print(
             f"  OPENAI_BASE_URL - OpenAI API base URL (default: https://api.openai.com/v1)"
         )
@@ -581,6 +600,11 @@ def main(env_updates: dict = None, skip_validation: bool = False):
     if log_level not in valid_levels:
         log_level = "info"
 
+    # Initialize file logger for logs/proxy.log
+    from src.services.logging.proxy_logger import _setup_file_logger
+
+    _setup_file_logger()
+
     # Start terminal dashboard if enabled
     if enable_dashboard:
         import threading
@@ -604,6 +628,64 @@ def main(env_updates: dict = None, skip_validation: bool = False):
         import time
 
         time.sleep(0.5)
+
+    # Build a log config that suppresses noisy polling endpoints
+    # (/health, /api/stats) from the uvicorn access log.  These get
+    # hit every 5s by the tmux status bar and drown out real traffic.
+    import logging as _logging
+
+    class _QuietPollFilter(_logging.Filter):
+        """Drop access-log records for endpoints already captured by proxy_logger.
+
+        - Polling endpoints (/health, /api/stats): hit every 5s by tmux status bar
+        - API endpoints (/v1/messages, /v1/chat/completions): shown by proxy_logger
+          with full tokens/latency/routing info — the raw uvicorn line adds nothing
+          and creates confusing "duplicate" output next to the proxy_logger line.
+        """
+
+        _NOISE = {
+            "/health",
+            "/api/stats",
+            "/api/system/health",
+            "/v1/messages",
+            "/v1/chat/completions",
+            "/openai/v1/chat/completions",
+        }
+
+        def filter(self, record: _logging.LogRecord) -> bool:
+            msg = record.getMessage()
+            return not any(ep in msg for ep in self._NOISE)
+
+    # Apply filter directly to the uvicorn access logger.
+    # The previous dictConfig approach silently failed because
+    # LOGGING_CONFIG.copy() is shallow — handlers dict was shared.
+    _access_logger = _logging.getLogger("uvicorn.access")
+    _access_logger.addFilter(_QuietPollFilter())
+
+    # Prune reasoning logs older than 7 days. The Option C heartbeat path
+    # tees unrequested reasoning to disk per-message; without pruning, this
+    # directory grows without bound on a busy proxy.
+    try:
+        from pathlib import Path as _Path
+        import time as _time
+
+        _reasoning_dir = _Path("~/.cache/claude-code-proxy/reasoning").expanduser()
+        if _reasoning_dir.is_dir():
+            _cutoff = _time.time() - 7 * 86400
+            _pruned = 0
+            for _f in _reasoning_dir.glob("*.log"):
+                try:
+                    if _f.stat().st_mtime < _cutoff:
+                        _f.unlink()
+                        _pruned += 1
+                except OSError:
+                    pass
+            if _pruned:
+                _logging.getLogger(__name__).info(
+                    f"Pruned {_pruned} reasoning log(s) older than 7 days"
+                )
+    except Exception as _prune_err:
+        _logging.getLogger(__name__).debug(f"Reasoning log prune skipped: {_prune_err}")
 
     # Start server
     try:

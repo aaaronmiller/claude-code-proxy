@@ -122,7 +122,7 @@ trap 'handle_error \$?' EXIT
 if [[ "\$COMPRESSION_ENABLED" == "1" ]]; then
     # Set environment for compression
     export OPENAI_BASE_URL="http://127.0.0.1:\$HEADROOM_PORT/v1"
-    export PROVIDER_BASE_URL="http://127.0.0.1:\$HEADROOM_PORT/v1"
+    export BIG_ENDPOINT="http://127.0.0.1:\$HEADROOM_PORT/v1"
 fi
 
 # Execute the actual tool
@@ -155,7 +155,7 @@ with open('$settings', 'r') as f:
 if 'env' not in config:
     config['env'] = {}
 config['env']['OPENAI_BASE_URL'] = 'http://127.0.0.1:8787/v1'
-config['env']['PROVIDER_BASE_URL'] = 'http://127.0.0.1:8787/v1'
+config['env']['BIG_ENDPOINT'] = 'http://127.0.0.1:8787/v1'
 
 with open('$settings', 'w') as f:
     json.dump(config, f, indent=2)
@@ -182,7 +182,7 @@ with open('$settings', 'r') as f:
 if 'env' not in config:
     config['env'] = {}
 config['env']['OPENAI_BASE_URL'] = 'http://127.0.0.1:8787/v1'
-config['env']['PROVIDER_BASE_URL'] = 'http://127.0.0.1:8787/v1'
+config['env']['BIG_ENDPOINT'] = 'http://127.0.0.1:8787/v1'
 
 with open('$settings', 'w') as f:
     json.dump(config, f, indent=2)
@@ -200,7 +200,7 @@ configure_codex() {
     cat > "$config_dir/env" << ENV_EOF
 # Codex CLI - Compression Stack Integration
 OPENAI_BASE_URL=http://127.0.0.1:8787/v1
-PROVIDER_BASE_URL=http://127.0.0.1:8787/v1
+BIG_ENDPOINT=http://127.0.0.1:8787/v1
 ENV_EOF
     
     log_success "Codex env configured"
@@ -215,7 +215,7 @@ configure_opencode() {
     cat > "$config_dir/.env" << ENV_EOF
 # OpenCode - Compression Stack Integration
 OPENAI_BASE_URL=http://127.0.0.1:8787/v1
-PROVIDER_BASE_URL=http://127.0.0.1:8787/v1
+BIG_ENDPOINT=http://127.0.0.1:8787/v1
 ENV_EOF
     
     log_success "OpenCode env configured"
@@ -285,7 +285,7 @@ create_wrapper() {
 export COMPRESSION_ENABLED=1
 export HEADROOM_PORT=8787
 export OPENAI_BASE_URL="http://127.0.0.1:8787/v1"
-export PROVIDER_BASE_URL="http://127.0.0.1:8787/v1"
+export BIG_ENDPOINT="http://127.0.0.1:8787/v1"
 
 exec "$tool" "\$@"
 WRAPPER_EOF

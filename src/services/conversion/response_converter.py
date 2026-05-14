@@ -521,7 +521,7 @@ def streaming_transform_partial(
     real-time streaming validation failures on the client side.
 
     The client strictly validates streaming chunks against its tool schemas.
-    These operations were specifically put here to ensure Claude Code doesn't 
+    These operations were specifically put here to ensure Claude Code doesn't
     throw exceptions during the token-by-token stream.
 
     FIXED: We now use strict regex for 'prompt' to ensure we only replace
@@ -531,6 +531,7 @@ def streaming_transform_partial(
     if tool_name.lower() in ["bash", "repl", "runcommand", "runbash"]:
         # Only replace "prompt" if it acts as a JSON key (followed by colon)
         import re
+
         result = re.sub(r'"prompt"\s*:', '"command":', partial_args)
         # Fix string-wrapped numeric params ("timeout": "120" -> "timeout": 120)
         result = _NUMERIC_PARAM_RE.sub(r'"\1":\2', result)
@@ -676,14 +677,14 @@ async def convert_openai_streaming_to_claude(
     # Send initial SSE events - Message Start
     yield f"event: {Constants.EVENT_MESSAGE_START}\ndata: {json.dumps({'type': Constants.EVENT_MESSAGE_START, 'message': {'id': message_id, 'type': 'message', 'role': Constants.ROLE_ASSISTANT, 'model': original_request.model, 'content': [], 'stop_reason': None, 'stop_sequence': None, 'usage': {'input_tokens': 0, 'output_tokens': 0}}}, ensure_ascii=False)}\n\n"
 
-    # CRITICAL FIX: Always start with an empty text block.
-    # Claude CLI seems to require this to initialize its display loop, otherwise it says "(no content)"
+    # Claude Code's SSE parser requires a content_block_start before it renders any
+    # text — without this initial empty block the CLI shows "(no content)" even when
+    # subsequent deltas arrive correctly. This is a Claude Code client invariant.
     yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': 0, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"
 
     yield f"event: {Constants.EVENT_PING}\ndata: {json.dumps({'type': Constants.EVENT_PING}, ensure_ascii=False)}\n\n"
 
-    # State tracking
-    # Start with text block active at index 0
+    # State tracking — block 0 is the initial text block seeded above
     current_block_type = "text"
     current_block_index = 0
 
@@ -818,7 +819,18 @@ async def convert_openai_streaming_to_claude(
                         # If we just finished a reasoning heartbeat phase, break
                         # the placeholder line before the real answer streams in.
                         if reasoning_active and text_content.strip():
-                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': '\n\n'}}, ensure_ascii=False)}\n\n"
+                            payload = json.dumps(
+                                {
+                                    "type": Constants.EVENT_CONTENT_BLOCK_DELTA,
+                                    "index": current_block_index,
+                                    "delta": {
+                                        "type": Constants.DELTA_TEXT,
+                                        "text": "\n\n",
+                                    },
+                                },
+                                ensure_ascii=False,
+                            )
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {payload}\n\n"
                             reasoning_active = False
                         if tool_text_mode or "<tool_call>" in text_content:
                             tool_text_mode = True
@@ -1060,14 +1072,14 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     # Send initial SSE events - Message Start
     yield f"event: {Constants.EVENT_MESSAGE_START}\ndata: {json.dumps({'type': Constants.EVENT_MESSAGE_START, 'message': {'id': message_id, 'type': 'message', 'role': Constants.ROLE_ASSISTANT, 'model': original_request.model, 'content': [], 'stop_reason': None, 'stop_sequence': None, 'usage': {'input_tokens': 0, 'output_tokens': 0}}}, ensure_ascii=False)}\n\n"
 
-    # CRITICAL FIX: Always start with an empty text block.
-    # Claude CLI seems to require this to initialize its display loop, otherwise it says "(no content)"
+    # Claude Code's SSE parser requires a content_block_start before it renders any
+    # text — without this initial empty block the CLI shows "(no content)" even when
+    # subsequent deltas arrive correctly. This is a Claude Code client invariant.
     yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': 0, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"
 
     yield f"event: {Constants.EVENT_PING}\ndata: {json.dumps({'type': Constants.EVENT_PING}, ensure_ascii=False)}\n\n"
 
-    # State tracking
-    # Start with text block active at index 0
+    # State tracking — block 0 is the initial text block seeded above
     current_block_type = "text"
     current_block_index = 0
 
@@ -1093,6 +1105,9 @@ async def convert_openai_streaming_to_claude_with_cancellation(
 
     final_stop_reason = Constants.STOP_END_TURN
     usage_data = {"input_tokens": 0, "output_tokens": 0}
+    actual_model = original_request.model  # Track cascade fallback model
+    _output_chars = 0  # Track output chars for token estimation
+    _output_text_parts: list = []  # Accumulate actual text for accurate tiktoken count
     tool_text_buffer = ""
     tool_text_mode = False
     tool_text_parsed_any = False
@@ -1127,7 +1142,9 @@ async def convert_openai_streaming_to_claude_with_cancellation(
 
                     try:
                         chunk = json.loads(chunk_data)
-                        # logger.info(f"OpenAI chunk: {json.dumps(chunk, ensure_ascii=False)[:500]}")
+                        chunk_model = chunk.get("model")
+                        if chunk_model and chunk_model != original_request.model:
+                            actual_model = chunk_model
                         usage = chunk.get("usage", None)
                         if usage:
                             cache_read_input_tokens = 0
@@ -1242,7 +1259,18 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                     # Only process if content is non-empty (skip null/empty during tool calls)
                     if text_content:
                         if reasoning_active and text_content.strip():
-                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': '\n\n'}}, ensure_ascii=False)}\n\n"
+                            payload = json.dumps(
+                                {
+                                    "type": Constants.EVENT_CONTENT_BLOCK_DELTA,
+                                    "index": current_block_index,
+                                    "delta": {
+                                        "type": Constants.DELTA_TEXT,
+                                        "text": "\n\n",
+                                    },
+                                },
+                                ensure_ascii=False,
+                            )
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {payload}\n\n"
                             reasoning_active = False
                         if tool_text_mode or "<tool_call>" in text_content:
                             tool_text_mode = True
@@ -1290,6 +1318,8 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                                 yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': current_block_index, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"
 
                             yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': current_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': text_content}}, ensure_ascii=False)}\n\n"
+                            _output_chars += len(text_content)
+                            _output_text_parts.append(text_content)
                             # Only log non-empty text content to avoid spam
                             if text_content.strip():
                                 logger.debug(
@@ -1556,7 +1586,12 @@ async def convert_openai_streaming_to_claude_with_cancellation(
             try:
                 duration_ms = (time.monotonic() - stream_start_time) * 1000
                 import asyncio
-                asyncio.ensure_future(on_complete(usage_data, final_stop_reason, duration_ms, str(e)))
+
+                asyncio.ensure_future(
+                    on_complete(
+                        usage_data, final_stop_reason, duration_ms, str(e), actual_model
+                    )
+                )
             except Exception:
                 pass
         return
@@ -1575,7 +1610,12 @@ async def convert_openai_streaming_to_claude_with_cancellation(
             try:
                 duration_ms = (time.monotonic() - stream_start_time) * 1000
                 import asyncio
-                asyncio.ensure_future(on_complete(usage_data, final_stop_reason, duration_ms, str(e)))
+
+                asyncio.ensure_future(
+                    on_complete(
+                        usage_data, final_stop_reason, duration_ms, str(e), actual_model
+                    )
+                )
             except Exception:
                 pass
         return
@@ -1604,11 +1644,32 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     yield f"event: {Constants.EVENT_MESSAGE_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_MESSAGE_DELTA, 'delta': {'stop_reason': final_stop_reason, 'stop_sequence': None}, 'usage': usage_data}, ensure_ascii=False)}\n\n"
     yield f"event: {Constants.EVENT_MESSAGE_STOP}\ndata: {json.dumps({'type': Constants.EVENT_MESSAGE_STOP}, ensure_ascii=False)}\n\n"
 
+    # If provider sent no usage data, count output tokens from accumulated text.
+    # Uses tiktoken (accurate) rather than the old len//4 heuristic.
+    if not usage_data.get("output_tokens") and _output_chars > 0:
+        try:
+            from src.services.token_cache import count_tokens as _count_tokens
+            output_text = "".join(_output_text_parts)
+            usage_data["output_tokens"] = _count_tokens(output_text) if output_text else max(1, _output_chars // 4)
+        except Exception:
+            usage_data["output_tokens"] = max(1, _output_chars // 4)
+        finally:
+            _output_text_parts.clear()  # Free memory
+
     # Fire completion callback with accumulated metrics
     if on_complete:
         try:
             duration_ms = (time.monotonic() - stream_start_time) * 1000
             import asyncio
-            asyncio.ensure_future(on_complete(usage_data, final_stop_reason, duration_ms, stream_error))
+
+            asyncio.ensure_future(
+                on_complete(
+                    usage_data,
+                    final_stop_reason,
+                    duration_ms,
+                    stream_error,
+                    actual_model,
+                )
+            )
         except Exception as cb_err:
             logger.warning(f"on_complete callback failed: {cb_err}")

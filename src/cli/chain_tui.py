@@ -21,10 +21,13 @@ Keybindings (chain list):
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
+import urllib.error
+import urllib.request
 from dataclasses import fields
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from textual import on
 from textual.app import App, ComposeResult
@@ -46,10 +49,66 @@ from textual.widgets import (
 )
 
 from src.core.proxy_chain import ProxyChain, ProxyEntry, RouterConfig
+from src.cli.assignment_tui import AssignmentPanel
+from src.cli.identifier_mapping_tui import IdentifierMappingPanel
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helper: Chain API client (talks to running proxy on 127.0.0.1:8082)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class ChainAPI:
+    """Thin wrapper around the chain management HTTP API."""
+
+    BASE = "http://127.0.0.1:8082"
+
+    @classmethod
+    def _request(
+        cls, method: str, path: str, *, json: dict | None = None, expected: int
+    ) -> Any:
+        url = f"{cls.BASE}{path}"
+        data = json.dumps(json).encode() if json is not None else None
+        req = urllib.request.Request(
+            url, data=data, headers={"Content-Type": "application/json"}, method=method
+        )
+        try:
+            with urllib.request.urlopen(req) as resp:
+                if resp.status != expected:
+                    raise RuntimeError(f"HTTP {resp.status}: {resp.read().decode()}")
+                return json.loads(resp.read()) if resp.read() else None
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            raise RuntimeError(f"HTTP {e.code}: {body}") from e
+        except Exception as e:
+            raise RuntimeError(f"API error: {e}") from e
+
+    @classmethod
+    def list_chain(cls) -> list[dict]:
+        return cls._request("GET", "/api/chain", expected=200) or []
+
+    @classmethod
+    def create(cls, payload: dict) -> dict:
+        return cls._request("POST", "/api/chain", json=payload, expected=201)
+
+    @classmethod
+    def update(cls, entry_id: str, payload: dict) -> dict:
+        return cls._request(
+            "PATCH", f"/api/chain/{entry_id}", json=payload, expected=200
+        )
+
+    @classmethod
+    def delete(cls, entry_id: str) -> None:
+        cls._request("DELETE", f"/api/chain/{entry_id}", expected=204)
+
+    @classmethod
+    def reorder(cls, order: list[str]) -> None:
+        cls._request("POST", "/api/chain/reorder", json={"order": order}, expected=200)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper: status badge
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _badge(entry: ProxyEntry) -> str:
     if not entry.enabled:
@@ -62,6 +121,7 @@ def _badge(entry: ProxyEntry) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # Edit-entry modal
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class EntryEditScreen(ModalScreen):
     """Full-screen form to create or edit a ProxyEntry."""
@@ -91,9 +151,15 @@ class EntryEditScreen(ModalScreen):
             yield Label("URL  (leave blank for CLI wrapper)")
             yield Input(e.url, id="f-url", placeholder="http://127.0.0.1:8787/v1")
             yield Label("Auth key  (blank = inherit OPENROUTER_API_KEY from env)")
-            yield Input(e.auth_key or "", id="f-auth", placeholder="${OPENROUTER_API_KEY}")
+            yield Input(
+                e.auth_key or "", id="f-auth", placeholder="${OPENROUTER_API_KEY}"
+            )
             yield Label("Service start command  (blank = not managed here)")
-            yield Input(e.service_cmd or "", id="f-cmd", placeholder="headroom proxy --port 8787")
+            yield Input(
+                e.service_cmd or "",
+                id="f-cmd",
+                placeholder="headroom proxy --port 8787",
+            )
             yield Label("Port  (for health-check display, 0 = not applicable)")
             yield Input(str(e.port), id="f-port", placeholder="8787")
             yield Label("Health path")
@@ -141,6 +207,7 @@ class EntryEditScreen(ModalScreen):
 # Router-config panel (inline, shown in right pane)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class RouterPanel(Container):
     """Editable panel for RouterConfig fields."""
 
@@ -165,19 +232,33 @@ class RouterPanel(Container):
         yield Label("Default  (general tasks, blank = BIG_MODEL)")
         yield Input(rc.default, id="r-default", placeholder="")
         yield Label("Background  (lightweight background tasks)")
-        yield Input(rc.background, id="r-background", placeholder="nvidia/nemotron-nano-9b-v2:free")
+        yield Input(
+            rc.background,
+            id="r-background",
+            placeholder="nvidia/nemotron-nano-9b-v2:free",
+        )
         yield Label("Think  (reasoning / Plan Mode)")
         yield Input(rc.think, id="r-think", placeholder="")
         yield Label("Long-context model")
-        yield Input(rc.long_context, id="r-long-context", placeholder="minimax/minimax-m2.5:free")
+        yield Input(
+            rc.long_context,
+            id="r-long-context",
+            placeholder="minimax/minimax-m2.5:free",
+        )
         yield Label("Long-context threshold (tokens)")
-        yield Input(str(rc.long_context_threshold), id="r-threshold", placeholder="60000")
+        yield Input(
+            str(rc.long_context_threshold), id="r-threshold", placeholder="60000"
+        )
         yield Label("Web search model  (add :online suffix for OpenRouter)")
         yield Input(rc.web_search, id="r-web-search", placeholder="")
         yield Label("Image model  (vision-capable)")
         yield Input(rc.image, id="r-image", placeholder="qwen/qwen2.5-vl-72b-instruct")
         yield Label("Custom router path  (.py or .js)")
-        yield Input(rc.custom_router_path, id="r-custom-path", placeholder="config/custom_router.py")
+        yield Input(
+            rc.custom_router_path,
+            id="r-custom-path",
+            placeholder="config/custom_router.py",
+        )
 
     def collect(self) -> RouterConfig:
         """Read current field values into a RouterConfig."""
@@ -201,11 +282,12 @@ class RouterPanel(Container):
 # Main app
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class ChainTUI(App):
     """Proxy chain management TUI."""
 
     TITLE = "Claude Code Proxy — Chain Manager"
-    SUB_TITLE = "Tab = switch panel · Q = quit & save"
+    SUB_TITLE = "[R]outer · [A]ssignments · [M]appings · Q = quit & save"
 
     CSS = """
     Screen {
@@ -219,6 +301,15 @@ class ChainTUI(App):
     #right-panel {
         width: 45%;
         padding: 0 1;
+        layout: vertical;
+    }
+    #right-tabs {
+        height: 1;
+        width: 100%;
+        align: center middle;
+    }
+    #right-content {
+        height: 1fr;
     }
     #chain-table {
         height: 1fr;
@@ -235,6 +326,10 @@ class ChainTUI(App):
         color: $text-muted;
     }
     Button { margin: 0 1; }
+    TabButton {
+        margin: 0 1;
+        padding: 0 2;
+    }
     """
 
     BINDINGS = [
@@ -244,13 +339,19 @@ class ChainTUI(App):
         Binding("d", "delete_entry", "Delete"),
         Binding("e", "edit_entry", "Edit"),
         Binding("t", "toggle_entry", "Toggle"),
+        Binding("space", "toggle_entry", "Toggle", show=False),
         Binding("w", "move_up", "Move Up"),
         Binding("s", "move_down", "Move Down"),
+        Binding("shift+up", "move_up", "Move Up", show=False),
+        Binding("shift+down", "move_down", "Move Down", show=False),
         Binding("r", "restart_service", "Restart svc"),
-        Binding("tab", "focus_next", "Next Panel", show=False),
+        Binding("R", "show_router", "Router tab", show=False),
+        Binding("A", "show_assignments", "Assignments tab", show=False),
+        Binding("M", "show_mappings", "Mappings tab", show=False),
     ]
 
     _selected_row: reactive[int] = reactive(0)
+    _right_mode: reactive[str] = reactive("router")  # router | assignments | mappings
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -262,7 +363,9 @@ class ChainTUI(App):
         yield Header()
         with Horizontal():
             with Vertical(id="left-panel"):
-                yield Label("[bold]Proxy Chain[/bold]  (W/S = reorder · E = edit · T = toggle)")
+                yield Label(
+                    "[bold]Proxy Chain[/bold]  (W/S = reorder · E = edit · T = toggle)"
+                )
                 yield Rule()
                 yield DataTable(id="chain-table", zebra_stripes=True, cursor_type="row")
                 yield Rule()
@@ -274,13 +377,145 @@ class ChainTUI(App):
                     yield Button("↑ [W]", id="btn-up")
                     yield Button("↓ [S]", id="btn-down")
                 yield Static("", id="status-bar")
-            with ScrollableContainer(id="right-panel"):
-                yield RouterPanel(self._chain.router, id="router-panel")
+            with Vertical(id="right-panel"):
+                # Tab bar
+                with Horizontal(id="right-tabs"):
+                    yield Button("Router", id="tab-router", variant="primary")
+                    yield Button("Assignments", id="tab-assignments")
+                    yield Button("Identifier Mappings", id="tab-mappings")
+                # Content area — only one child visible at a time
+                with ScrollableContainer(id="right-content"):
+                    yield RouterPanel(self._chain.router, id="router-panel")
+                    yield AssignmentPanel(id="assignments-panel")
+                    yield IdentifierMappingPanel(id="mappings-panel")
         yield Footer()
 
-    def on_mount(self) -> None:
+    async     async def on_mount(self) -> None:
         self._refresh_table()
         self.query_one("#chain-table", DataTable).focus()
+        self._update_right_panel_visibility()
+        # Start SSE listener for live config changes (T060)
+        self._sse_task = asyncio.create_task(self._sse_listener())
+
+    async def _sse_listener(self) -> None:
+        """Background task: listen for config change events and refresh UI."""
+        import httpx
+
+        while True:
+            try:
+                async with httpx.AsyncClient(timeout=None) as client:
+                    async with client.stream(
+                        "GET", "http://127.0.0.1:8082/api/config/events"
+                    ) as resp:
+                        async for line in resp.aiter_lines():
+                            line = line.strip()
+                            if line.startswith("data:"):
+                                # Config change detected — refresh chain and panels
+                                self.call_from_thread(self._refresh_chain_data)
+                            # ignore non-data lines
+            except Exception as e:
+                self._set_status(f"SSE disconnected: {e}; reconnecting...")
+                await asyncio.sleep(5)
+
+    def _refresh_chain_data(self) -> None:
+        """Reload chain from disk and refresh all panels (chain, assignments, mappings)."""
+        try:
+            self._chain = ProxyChain.load()
+            self._refresh_table()
+            # Refresh assignment panel if visible
+            try:
+                assign_panel = self.query_one("#assignments-panel", AssignmentPanel)
+                assign_panel.refresh_table()
+            except Exception:
+                pass
+            # Refresh identifier mapping panel if visible
+            try:
+                mapping_panel = self.query_one("#mappings-panel", IdentifierMappingPanel)
+                mapping_panel.refresh_table()
+            except Exception:
+                pass
+        except Exception as e:
+            self._set_status(f"Error refreshing config: {e}")
+
+    def on_unmount(self) -> None:
+        """Clean up SSE listener task."""
+        if hasattr(self, "_sse_task") and self._sse_task:
+            self._sse_task.cancel()
+        # Start SSE listener for live config changes (T060)
+        self._sse_task = asyncio.create_task(self._sse_listener())
+
+    async def _sse_listener(self) -> None:
+        """Background task: listen for config change events and refresh chain data."""
+        import httpx
+
+        while True:
+            try:
+                async with httpx.AsyncClient(timeout=None) as client:
+                    async with client.stream(
+                        "GET", "http://127.0.0.1:8082/api/config/events"
+                    ) as resp:
+                        async for line in resp.aiter_lines():
+                            line = line.strip()
+                            if line.startswith("data:"):
+                                # Config change detected — reload chain and refresh UI
+                                try:
+                                    self._chain = ProxyChain.load()
+                                    self._refresh_table()
+                                except Exception as e:
+                                    self._set_status(f"Error reloading chain: {e}")
+                            # else ignore (comments, event lines)
+            except Exception as e:
+                self._set_status(f"SSE disconnected: {e}; retrying in 5s...")
+                await asyncio.sleep(5)
+
+    def on_unmount(self) -> None:
+        """Clean up SSE listener task."""
+        if hasattr(self, "_sse_task") and self._sse_task:
+            self._sse_task.cancel()
+
+    def _update_right_panel_visibility(self) -> None:
+        """Show only the active right-panel and highlight the correct tab."""
+        modes = ("router", "assignments", "mappings")
+        panels = {
+            "router": self.query_one("#router-panel"),
+            "assignments": self.query_one("#assignments-panel"),
+            "mappings": self.query_one("#mappings-panel"),
+        }
+        tabs = {
+            "router": self.query_one("#tab-router", Button),
+            "assignments": self.query_one("#tab-assignments", Button),
+            "mappings": self.query_one("#tab-mappings", Button),
+        }
+        for m, widget in panels.items():
+            widget.display = m == self._right_mode
+        for m, btn in tabs.items():
+            btn.variant = "primary" if m == self._right_mode else "default"
+
+    # ── Tab navigation ────────────────────────────────────────────────────────
+
+    def action_show_router(self) -> None:
+        self._right_mode = "router"
+        self._update_right_panel_visibility()
+
+    def action_show_assignments(self) -> None:
+        self._right_mode = "assignments"
+        self._update_right_panel_visibility()
+
+    def action_show_mappings(self) -> None:
+        self._right_mode = "mappings"
+        self._update_right_panel_visibility()
+
+    @on(Button.Pressed, "#tab-router")
+    def _tab_router(self) -> None:
+        self.action_show_router()
+
+    @on(Button.Pressed, "#tab-assignments")
+    def _tab_assignments(self) -> None:
+        self.action_show_assignments()
+
+    @on(Button.Pressed, "#tab-mappings")
+    def _tab_mappings(self) -> None:
+        self.action_show_mappings()
 
     # ── Table helpers ─────────────────────────────────────────────────────────
 
@@ -289,7 +524,9 @@ class ChainTUI(App):
         table.clear(columns=True)
         table.add_columns("#", "Name", "Type", "URL / Mode", "Status")
         for i, e in enumerate(self._chain.entries):
-            url_display = e.display_url[:38] + "…" if len(e.display_url) > 40 else e.display_url
+            url_display = (
+                e.display_url[:38] + "…" if len(e.display_url) > 40 else e.display_url
+            )
             table.add_row(
                 str(i + 1),
                 e.name,
@@ -313,10 +550,28 @@ class ChainTUI(App):
     def action_add_entry(self) -> None:
         def _on_result(entry: Optional[ProxyEntry]) -> None:
             if entry:
-                self._chain.add(entry)
-                self._selected_row = len(self._chain.entries) - 1
-                self._refresh_table()
-                self._set_status(f"Added: {entry.name}")
+                try:
+                    payload = {
+                        "id": entry.id,
+                        "name": entry.name,
+                        "url": entry.url or "",
+                        "enabled": entry.enabled,
+                        "port": entry.port or 0,
+                        "type": entry.type,
+                        "auth_key": entry.auth_key or "",
+                        "service_cmd": entry.service_cmd or "",
+                        "health_path": entry.health_path or "/health",
+                        "timeout": entry.timeout,
+                        "extra_headers": entry.extra_headers or {},
+                        "model_prefixes": entry.model_prefixes or [],
+                    }
+                    ChainAPI.create(payload)
+                    self._chain = ProxyChain.load()
+                    self._selected_row = len(self._chain.entries) - 1
+                    self._refresh_table()
+                    self._set_status(f"Added: {entry.name}")
+                except Exception as e:
+                    self._set_status(f"Error adding: {e}")
 
         self.push_screen(EntryEditScreen(), _on_result)
 
@@ -328,12 +583,26 @@ class ChainTUI(App):
 
         def _on_result(updated: Optional[ProxyEntry]) -> None:
             if updated:
-                updated.order = entry.order
-                updated.enabled = entry.enabled
-                self._chain.entries[idx] = updated
-                self._chain._renumber()
-                self._refresh_table()
-                self._set_status(f"Updated: {updated.name}")
+                try:
+                    payload = {
+                        "name": updated.name,
+                        "url": updated.url or "",
+                        "enabled": updated.enabled,
+                        "port": updated.port or 0,
+                        "type": updated.type,
+                        "auth_key": updated.auth_key or "",
+                        "service_cmd": updated.service_cmd or "",
+                        "health_path": updated.health_path or "/health",
+                        "timeout": updated.timeout,
+                        "extra_headers": updated.extra_headers or {},
+                        "model_prefixes": updated.model_prefixes or [],
+                    }
+                    ChainAPI.update(entry.id, payload)
+                    self._chain = ProxyChain.load()
+                    self._refresh_table()
+                    self._set_status(f"Updated: {updated.name}")
+                except Exception as e:
+                    self._set_status(f"Error updating: {e}")
 
         self.push_screen(EntryEditScreen(entry), _on_result)
 
@@ -341,35 +610,59 @@ class ChainTUI(App):
         idx = self._current_idx()
         if not self._chain.entries:
             return
-        name = self._chain.entries[idx].name
-        self._chain.remove(idx)
-        self._selected_row = max(0, idx - 1)
-        self._refresh_table()
-        self._set_status(f"Deleted: {name}")
+        entry = self._chain.entries[idx]
+        try:
+            ChainAPI.delete(entry.id)
+            self._chain = ProxyChain.load()
+            self._selected_row = max(0, idx - 1)
+            self._refresh_table()
+            self._set_status(f"Deleted: {entry.name}")
+        except Exception as e:
+            self._set_status(f"Error deleting: {e}")
 
     def action_toggle_entry(self) -> None:
         idx = self._current_idx()
         if not self._chain.entries:
             return
         e = self._chain.entries[idx]
-        e.enabled = not e.enabled
-        self._refresh_table()
-        state = "enabled" if e.enabled else "disabled"
-        self._set_status(f"{e.name}: {state}")
+        try:
+            new_enabled = not e.enabled
+            ChainAPI.update(e.id, {"enabled": new_enabled})
+            self._chain = ProxyChain.load()
+            self._refresh_table()
+            state = "enabled" if new_enabled else "disabled"
+            self._set_status(f"{e.name}: {state}")
+        except Exception as ex:
+            self._set_status(f"Error toggling: {ex}")
 
     def action_move_up(self) -> None:
         idx = self._current_idx()
-        if idx > 0:
-            self._chain.move_up(idx)
+        if idx <= 0 or not self._chain.entries:
+            return
+        try:
+            # Build new order: swap idx-1 and idx
+            ids = [e.id for e in self._chain.entries]
+            ids[idx - 1], ids[idx] = ids[idx], ids[idx - 1]
+            ChainAPI.reorder(ids)
+            self._chain = ProxyChain.load()
             self._selected_row = idx - 1
             self._refresh_table()
+        except Exception as ex:
+            self._set_status(f"Error moving up: {ex}")
 
     def action_move_down(self) -> None:
         idx = self._current_idx()
-        if idx < len(self._chain.entries) - 1:
-            self._chain.move_down(idx)
+        if idx >= len(self._chain.entries) - 1 or not self._chain.entries:
+            return
+        try:
+            ids = [e.id for e in self._chain.entries]
+            ids[idx], ids[idx + 1] = ids[idx + 1], ids[idx]
+            ChainAPI.reorder(ids)
+            self._chain = ProxyChain.load()
             self._selected_row = idx + 1
             self._refresh_table()
+        except Exception as ex:
+            self._set_status(f"Error moving down: {ex}")
 
     def action_restart_service(self) -> None:
         idx = self._current_idx()
@@ -419,17 +712,22 @@ class ChainTUI(App):
     # ── Save & quit ───────────────────────────────────────────────────────────
 
     def action_quit_save(self) -> None:
-        # Collect router config from panel
+        # Collect router config from panel and persist only the router
         try:
             router_panel = self.query_one("#router-panel", RouterPanel)
-            self._chain.router = router_panel.collect()
-        except Exception:
-            pass
-        self._chain.save()
+            new_router = router_panel.collect()
+            # Load fresh chain to avoid overwriting concurrent edits
+            fresh = ProxyChain.load()
+            fresh.router = new_router
+            fresh.save()
+        except Exception as ex:
+            self._set_status(f"Error saving router: {ex}")
+            return
         # Reload singleton so the running proxy picks up changes without restart
         try:
             from src.core.proxy_chain import reload_chain
             from src.core.model_router import reload_router
+
             reload_chain()
             reload_router()
         except Exception:
@@ -440,6 +738,7 @@ class ChainTUI(App):
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     ChainTUI().run()

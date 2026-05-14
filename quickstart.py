@@ -214,7 +214,7 @@ def setup_environment(project_root: Path, non_interactive: bool = False) -> bool
                 "OPENROUTER_API_KEY=" in content
                 or "OPENAI_API_KEY=" in content
                 or "OPENAI_BASE_URL=" in content
-                or "PROVIDER_API_KEY=" in content
+                or "BIG_API_KEY=" in content
                 or "BIG_MODEL=" in content
             ):
                 has_valid_config = True

@@ -56,8 +56,8 @@ ollama pull qwen2.5:72b
 
 # Configure proxy
 cat > .env << 'EOF'
-PROVIDER_API_KEY="dummy"
-PROVIDER_BASE_URL="http://localhost:11434/v1"
+BIG_API_KEY="dummy"
+BIG_ENDPOINT="http://localhost:11434/v1"
 BIG_MODEL="qwen2.5:72b"
 MIDDLE_MODEL="qwen2.5:72b"
 SMALL_MODEL="qwen2.5:14b"
@@ -85,8 +85,8 @@ python start_proxy.py --setup
 
 # Or manual .env:
 cat > .env << 'EOF'
-PROVIDER_API_KEY="sk-or-v1-YOUR_KEY_HERE"
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-YOUR_KEY_HERE"
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 BIG_MODEL="anthropic/claude-sonnet-4"
 MIDDLE_MODEL="google/gemini-flash-1.5"
 SMALL_MODEL="x-ai/grok-beta:free"
@@ -107,8 +107,8 @@ Get OpenRouter key: https://openrouter.ai/keys
 Use 100% free models from OpenRouter:
 
 ```bash
-PROVIDER_API_KEY="sk-or-v1-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-..."
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 
 # All free models
 BIG_MODEL="google/gemini-flash-1.5:free"
@@ -132,8 +132,8 @@ USAGE_DB_PATH="usage.db"
 Expensive models for hard tasks, cheap for easy:
 
 ```bash
-PROVIDER_API_KEY="sk-or-v1-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-..."
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 
 # Expensive for BIG (complex reasoning)
 BIG_MODEL="anthropic/claude-sonnet-4"  # ~$3/M tokens
@@ -155,8 +155,8 @@ TRACK_USAGE="true"
 
 ```bash
 # Default: Local Ollama (free)
-PROVIDER_API_KEY="dummy"
-PROVIDER_BASE_URL="http://localhost:11434/v1"
+BIG_API_KEY="dummy"
+BIG_ENDPOINT="http://localhost:11434/v1"
 
 # Override SMALL to cloud (faster)
 ENABLE_SMALL_ENDPOINT="true"
@@ -179,8 +179,8 @@ MIDDLE_MODEL="qwen2.5:14b"
 
 ```bash
 # Everything local
-PROVIDER_API_KEY="dummy"
-PROVIDER_BASE_URL="http://localhost:11434/v1"
+BIG_API_KEY="dummy"
+BIG_ENDPOINT="http://localhost:11434/v1"
 
 BIG_MODEL="qwen2.5:72b"
 MIDDLE_MODEL="qwen2.5:14b"
@@ -202,8 +202,8 @@ Secure your proxy with authentication:
 
 ```bash
 # .env
-PROVIDER_API_KEY="sk-or-v1-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-..."
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 BIG_MODEL="anthropic/claude-sonnet-4"
 
 # Require auth from clients
@@ -248,8 +248,8 @@ Follow these rules without exception.
 ### Maximum Reasoning (GPT-5 / o-series)
 
 ```bash
-PROVIDER_API_KEY="sk-..."
-PROVIDER_BASE_URL="https://api.openai.com/v1"
+BIG_API_KEY="sk-..."
+BIG_ENDPOINT="https://api.openai.com/v1"
 
 # Use reasoning models
 BIG_MODEL="gpt-5:high"           # High reasoning effort
@@ -267,8 +267,8 @@ REASONING_EXCLUDE="false"        # Show thinking process
 ### Claude 4 Extended Thinking
 
 ```bash
-PROVIDER_API_KEY="sk-or-v1-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-..."
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 
 # Claude 4 with 16k thinking tokens
 BIG_MODEL="anthropic/claude-opus-4-20250514:16000"
@@ -283,8 +283,8 @@ MIDDLE_MODEL_REASONING="8192"
 ### Gemini 2/3 Extended Thinking
 
 ```bash
-PROVIDER_API_KEY="your-gemini-key"
-PROVIDER_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
+BIG_API_KEY="your-gemini-key"
+BIG_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/openai/"
 
 # Gemini 3 with thinking
 BIG_MODEL="gemini-3-pro-preview-11-2025-thinking:24000"
@@ -325,8 +325,8 @@ TERMINAL_SHOW_COST="true"
 
 ```bash
 # Default: OpenRouter
-PROVIDER_API_KEY="sk-or-v1-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-..."
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 
 # BIG: Local Ollama (privacy + free)
 ENABLE_BIG_ENDPOINT="true"
@@ -353,8 +353,8 @@ SMALL_MODEL="x-ai/grok-beta:free"
 
 ```bash
 # Primary: US region
-PROVIDER_API_KEY="sk-or-v1-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-..."
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 
 # BIG: Azure EU (compliance)
 ENABLE_BIG_ENDPOINT="true"
@@ -378,8 +378,8 @@ Use profiles to switch between dev and prod configs:
 
 **profiles/development.env:**
 ```bash
-PROVIDER_API_KEY="dummy"
-PROVIDER_BASE_URL="http://localhost:11434/v1"
+BIG_API_KEY="dummy"
+BIG_ENDPOINT="http://localhost:11434/v1"
 BIG_MODEL="qwen2.5:72b"
 MIDDLE_MODEL="qwen2.5:14b"
 SMALL_MODEL="llama3.1:8b"
@@ -389,8 +389,8 @@ ENABLE_DASHBOARD="true"
 
 **profiles/production.env:**
 ```bash
-PROVIDER_API_KEY="sk-or-v1-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-..."
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 BIG_MODEL="anthropic/claude-sonnet-4"
 MIDDLE_MODEL="google/gemini-pro-1.5"
 SMALL_MODEL="google/gemini-flash-1.5:free"
@@ -417,8 +417,8 @@ python start_proxy.py
 ### Code Review Assistant
 
 ```bash
-PROVIDER_API_KEY="sk-or-v1-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-..."
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 
 BIG_MODEL="anthropic/claude-sonnet-4"
 ENABLE_CUSTOM_BIG_PROMPT="true"
@@ -633,10 +633,10 @@ LOG_LEVEL="DEBUG"
 TERMINAL_DISPLAY_MODE="debug"
 
 # Check API key
-python -c "import os; from dotenv import load_dotenv; load_dotenv(); print(f'API Key: {os.getenv(\"PROVIDER_API_KEY\")[:10]}...')"
+python -c "import os; from dotenv import load_dotenv; load_dotenv(); print(f'API Key: {os.getenv(\"BIG_API_KEY\")[:10]}...')"
 
 # Test provider directly
-curl -H "Authorization: Bearer $PROVIDER_API_KEY" "$PROVIDER_BASE_URL/models"
+curl -H "Authorization: Bearer $BIG_API_KEY" "$BIG_ENDPOINT/models"
 
 # Restart proxy with verbose output
 python start_proxy.py
@@ -651,8 +651,8 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 
-print('PROVIDER_API_KEY:', os.getenv('PROVIDER_API_KEY')[:10] + '...' if os.getenv('PROVIDER_API_KEY') else 'NOT SET')
-print('PROVIDER_BASE_URL:', os.getenv('PROVIDER_BASE_URL'))
+print('BIG_API_KEY:', os.getenv('BIG_API_KEY')[:10] + '...' if os.getenv('BIG_API_KEY') else 'NOT SET')
+print('BIG_ENDPOINT:', os.getenv('BIG_ENDPOINT'))
 print('BIG_MODEL:', os.getenv('BIG_MODEL'))
 print('MIDDLE_MODEL:', os.getenv('MIDDLE_MODEL'))
 print('SMALL_MODEL:', os.getenv('SMALL_MODEL'))

@@ -40,7 +40,7 @@ async def create_alert_rule(rule_data: Dict[str, Any]):
         # Generate ID
         rule_id = f"rule_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        cursor = conn.execute("""
+        conn.execute("""
             INSERT INTO alert_rules (
                 id, name, description, condition_json, condition_logic,
                 actions_json, cooldown_minutes, priority, time_window,
@@ -599,7 +599,7 @@ async def create_notification_channel(channel_data: Dict[str, Any]):
 
         channel_id = f"chan_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        cursor = conn.execute("""
+        conn.execute("""
             INSERT INTO notification_channels (id, name, type, config, created_at)
             VALUES (?, ?, ?, ?, ?)
         """, (

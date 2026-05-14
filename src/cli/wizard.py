@@ -101,12 +101,12 @@ class SetupWizard:
         
         # Check for provider key
         api_key = (
-            os.environ.get("PROVIDER_API_KEY")
+            os.environ.get("BIG_API_KEY")
             or os.environ.get("OPENAI_API_KEY")
             or os.environ.get("OPENROUTER_API_KEY")
         )
         base_url = (
-            os.environ.get("PROVIDER_BASE_URL")
+            os.environ.get("BIG_ENDPOINT")
             or os.environ.get("OPENAI_BASE_URL")
             or os.environ.get("OPENROUTER_BASE_URL")
         )
@@ -344,8 +344,8 @@ class SetupWizard:
             print("VibeProxy handles OAuth authentication - no API key needed!")
             print("Download: https://github.com/AntonioCiolworking/VibeProxy/releases\n")
 
-            config["PROVIDER_API_KEY"] = "dummy"
-            config["PROVIDER_BASE_URL"] = "http://127.0.0.1:8317/v1"
+            config["BIG_API_KEY"] = "dummy"
+            config["BIG_ENDPOINT"] = "http://127.0.0.1:8317/v1"
 
             # Fetch available models
             print("Fetching available models from VibeProxy...", end="", flush=True)
@@ -436,12 +436,12 @@ class SetupWizard:
             print("\n📝 OpenRouter Configuration")
             print("Get your API key at: https://openrouter.ai/keys\n")
 
-            config["PROVIDER_API_KEY"] = questionary.password(
+            config["BIG_API_KEY"] = questionary.password(
                 "Enter your OpenRouter API key:",
                 style=custom_style
             ).ask() or ""
 
-            config["PROVIDER_BASE_URL"] = "https://openrouter.ai/api/v1"
+            config["BIG_ENDPOINT"] = "https://openrouter.ai/api/v1"
 
             # Suggest popular models
             model_choices = [
@@ -511,12 +511,12 @@ class SetupWizard:
             print("\n📝 Google Gemini Configuration")
             print("Get your API key at: https://makersuite.google.com/app/apikey\n")
 
-            config["PROVIDER_API_KEY"] = questionary.password(
+            config["BIG_API_KEY"] = questionary.password(
                 "Enter your Gemini API key:",
                 style=custom_style
             ).ask() or ""
 
-            config["PROVIDER_BASE_URL"] = "https://generativelanguage.googleapis.com/v1beta/openai/"
+            config["BIG_ENDPOINT"] = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
             # Gemini models
             model_choices = [
@@ -540,12 +540,12 @@ class SetupWizard:
             print("\n📝 OpenAI Configuration")
             print("Get your API key at: https://platform.openai.com/api-keys\n")
 
-            config["PROVIDER_API_KEY"] = questionary.password(
+            config["BIG_API_KEY"] = questionary.password(
                 "Enter your OpenAI API key:",
                 style=custom_style
             ).ask() or ""
 
-            config["PROVIDER_BASE_URL"] = "https://api.openai.com/v1"
+            config["BIG_ENDPOINT"] = "https://api.openai.com/v1"
 
             model_choices = [
                 "gpt-4o",
@@ -576,7 +576,7 @@ class SetupWizard:
         elif provider == "azure":
             print("\n📝 Azure OpenAI Configuration\n")
 
-            config["PROVIDER_API_KEY"] = questionary.password(
+            config["BIG_API_KEY"] = questionary.password(
                 "Enter your Azure API key:",
                 style=custom_style
             ).ask() or ""
@@ -591,7 +591,7 @@ class SetupWizard:
                 style=custom_style
             ).ask() or "your-deployment"
 
-            config["PROVIDER_BASE_URL"] = f"https://{resource_name}.openai.azure.com/openai/deployments/{deployment_name}"
+            config["BIG_ENDPOINT"] = f"https://{resource_name}.openai.azure.com/openai/deployments/{deployment_name}"
             config["AZURE_API_VERSION"] = "2024-03-01-preview"
             config["BIG_MODEL"] = "gpt-4"
             config["MIDDLE_MODEL"] = "gpt-4"
@@ -601,8 +601,8 @@ class SetupWizard:
             print("\n📝 Ollama Configuration")
             print("Make sure Ollama is running: ollama serve\n")
 
-            config["PROVIDER_API_KEY"] = "dummy"
-            config["PROVIDER_BASE_URL"] = "http://localhost:11434/v1"
+            config["BIG_API_KEY"] = "dummy"
+            config["BIG_ENDPOINT"] = "http://localhost:11434/v1"
 
             model = questionary.text(
                 "Enter Ollama model name (e.g., qwen2.5:72b, llama3.1:70b):",
@@ -618,7 +618,7 @@ class SetupWizard:
             print("\n📝 LM Studio Configuration")
             print("Make sure LM Studio server is running\n")
 
-            config["PROVIDER_API_KEY"] = "dummy"
+            config["BIG_API_KEY"] = "dummy"
 
             port = questionary.text(
                 "Enter LM Studio port:",
@@ -626,7 +626,7 @@ class SetupWizard:
                 style=custom_style
             ).ask() or "1234"
 
-            config["PROVIDER_BASE_URL"] = f"http://127.0.0.1:{port}/v1"
+            config["BIG_ENDPOINT"] = f"http://127.0.0.1:{port}/v1"
 
             model = questionary.text(
                 "Enter model name:",
@@ -640,12 +640,12 @@ class SetupWizard:
         else:  # custom
             print("\n📝 Custom Provider Configuration\n")
 
-            config["PROVIDER_API_KEY"] = questionary.password(
+            config["BIG_API_KEY"] = questionary.password(
                 "Enter API key:",
                 style=custom_style
             ).ask() or ""
 
-            config["PROVIDER_BASE_URL"] = questionary.text(
+            config["BIG_ENDPOINT"] = questionary.text(
                 "Enter base URL:",
                 default="https://api.example.com/v1",
                 style=custom_style
@@ -1011,7 +1011,7 @@ class SetupWizard:
             f.write("# CORE CONFIGURATION\n")
             f.write("# ═══════════════════════════════════════════════════════════════\n\n")
 
-            for key in ["PROVIDER_API_KEY", "PROVIDER_BASE_URL", "PROXY_AUTH_KEY"]:
+            for key in ["BIG_API_KEY", "BIG_ENDPOINT", "PROXY_AUTH_KEY"]:
                 if key in config:
                     f.write(f'{key}="{config[key]}"\n')
 

@@ -26,8 +26,8 @@ def main(args=None):
         sys.exit(1)
 
     # 1. Check Mode (Proxy vs Direct)
-    # We check ANTHROPIC_BASE_URL or PROVIDER_BASE_URL
-    base_url = os.environ.get("ANTHROPIC_BASE_URL", "") or os.environ.get("PROVIDER_BASE_URL", "")
+    # We check ANTHROPIC_BASE_URL or BIG_ENDPOINT
+    base_url = os.environ.get("ANTHROPIC_BASE_URL", "") or os.environ.get("BIG_ENDPOINT", "")
     is_proxy_mode = "localhost" in base_url or "127.0.0.1" in base_url
 
     # 2. Prepare Environment

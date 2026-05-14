@@ -16,8 +16,8 @@ def clean_env(monkeypatch):
     """Clean environment for testing"""
     # Remove all proxy-related env vars
     env_vars_to_clear = [
-        "PROVIDER_API_KEY",
-        "PROVIDER_BASE_URL",
+        "BIG_API_KEY",
+        "BIG_ENDPOINT",
         "PROXY_AUTH_KEY",
         "OPENAI_API_KEY",
         "OPENAI_BASE_URL",
@@ -51,8 +51,8 @@ def clean_env(monkeypatch):
 @pytest.fixture
 def sample_config(monkeypatch):
     """Sample valid configuration"""
-    monkeypatch.setenv("PROVIDER_API_KEY", "sk-test-1234567890123456789012345678")
-    monkeypatch.setenv("PROVIDER_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("BIG_API_KEY", "sk-test-1234567890123456789012345678")
+    monkeypatch.setenv("BIG_ENDPOINT", "https://api.openai.com/v1")
     monkeypatch.setenv("BIG_MODEL", "gpt-4o")
     monkeypatch.setenv("MIDDLE_MODEL", "gpt-4o")
     monkeypatch.setenv("SMALL_MODEL", "gpt-4o-mini")

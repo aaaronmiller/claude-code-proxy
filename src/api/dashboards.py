@@ -8,7 +8,7 @@ Date: 2026-01-05
 """
 
 from fastapi import APIRouter, HTTPException
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 import sqlite3
 import json
 from datetime import datetime
@@ -249,7 +249,7 @@ async def get_dashboard_data(dashboard_id: str):
             widget_id = widget["id"]
             metric = widget["config"]["metric"]
             period = widget["config"]["period"]
-            aggregate = widget["config"]["aggregate"]
+            _aggregate = widget["config"]["aggregate"]
 
             # Calculate date range
             from datetime import timedelta

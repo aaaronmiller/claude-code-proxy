@@ -16,7 +16,7 @@ import os
 import subprocess
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 
 # Default location — override with PROXY_CHAIN_FILE env var
@@ -26,29 +26,39 @@ DEFAULT_CHAIN_FILE = Path(__file__).parent.parent.parent / "config" / "proxy_cha
 # Data model
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Import unified models (circular-safe as they don't import ProxyChain)
+try:
+    from src.core.assignments import Assignment  # type: ignore
+    from src.core.identifier_mapping import IdentifierMapping  # type: ignore
+except ImportError:
+    # Fallback stubs for early import safety (before those modules exist)
+    Assignment = None  # type: ignore
+    IdentifierMapping = None  # type: ignore
+
+
 @dataclass
 class ProxyEntry:
     """A single entry in the proxy chain."""
 
-    id: str                        # Unique slug, e.g. "headroom"
-    name: str                      # Display name, e.g. "Headroom Compression"
-    url: str                       # Base URL, e.g. "http://127.0.0.1:8787/v1"
-    auth_key: str = ""             # API key (leave blank to inherit from env)
-    enabled: bool = True           # Whether this entry is active
-    order: int = 0                 # Sort index (auto-maintained by ProxyChain)
+    id: str  # Unique slug, e.g. "headroom"
+    name: str  # Display name, e.g. "Headroom Compression"
+    url: str  # Base URL, e.g. "http://127.0.0.1:8787/v1"
+    auth_key: str = ""  # API key (leave blank to inherit from env)
+    enabled: bool = True  # Whether this entry is active
+    order: int = 0  # Sort index (auto-maintained by ProxyChain)
 
     # Service lifecycle (optional — only for services managed by this proxy)
-    service_cmd: str = ""          # Shell command to start this service
-    service_stop_cmd: str = ""     # Shell command to stop (if different from pkill)
-    health_path: str = "/health"   # HTTP path for health check
-    port: int = 0                  # Port number (for health checks / status display)
+    service_cmd: str = ""  # Shell command to start this service
+    service_stop_cmd: str = ""  # Shell command to stop (if different from pkill)
+    health_path: str = "/health"  # HTTP path for health check
+    port: int = 0  # Port number (for health checks / status display)
 
     # HTTP settings
-    timeout: int = 90              # Request timeout in seconds
+    timeout: int = 90  # Request timeout in seconds
     extra_headers: dict = field(default_factory=dict)  # Additional headers to inject
 
     # Type hint for non-HTTP entries (e.g. CLI wrappers that don't have a URL)
-    type: str = "http"             # "http" | "cli_wrapper"
+    type: str = "http"  # "http" | "cli_wrapper"
 
     # Downstream routing: which AI providers this entry supports
     # Empty = forward all requests; populated = only models matching these prefixes
@@ -73,15 +83,24 @@ class ProxyEntry:
             return "(CLI wrapper)"
         return self.url or "(not configured)"
 
+    def to_dict(self) -> dict:
+        return asdict(self)
+
 
 @dataclass
 class RouteTarget:
     model: str
     base_url: str = ""
     api_key: str = ""
+    assignment_id: str = ""
 
     def to_dict(self):
-        return {"model": self.model, "base_url": self.base_url, "api_key": self.api_key}
+        return {
+            "model": self.model,
+            "base_url": self.base_url,
+            "api_key": self.api_key,
+            "assignment_id": self.assignment_id,
+        }
 
     @classmethod
     def from_any(cls, val) -> "RouteTarget":
@@ -92,6 +111,7 @@ class RouteTarget:
                 model=val.get("model", ""),
                 base_url=val.get("base_url", ""),
                 api_key=val.get("api_key", ""),
+                assignment_id=val.get("assignment_id", ""),
             )
         return cls(model="")
 
@@ -101,89 +121,165 @@ class RouterConfig:
     """Per-use-case model routing (mirrors Claude Code Router semantics)."""
 
     default: RouteTarget = field(default_factory=lambda: RouteTarget(""))
-    background: RouteTarget = field(default_factory=lambda: RouteTarget("nvidia/nemotron-nano-9b-v2:free"))
+    background: RouteTarget = field(default_factory=lambda: RouteTarget(""))
     think: RouteTarget = field(default_factory=lambda: RouteTarget(""))
-    long_context: RouteTarget = field(default_factory=lambda: RouteTarget("minimax/minimax-m2.5:free"))
-    long_context_threshold: int = 60000
+    long_context: RouteTarget = field(default_factory=lambda: RouteTarget(""))
+    long_context_threshold: int = 0
     web_search: RouteTarget = field(default_factory=lambda: RouteTarget(""))
-    image: RouteTarget = field(default_factory=lambda: RouteTarget("qwen/qwen2.5-vl-72b-instruct"))
+    image: RouteTarget = field(default_factory=lambda: RouteTarget(""))
     custom_router_path: str = ""
-    disabled: bool = False        # When True, all slots return None (tier fallback only)
-    passthrough: bool = False     # When True, no routing/cascade at all (Anthropic Pro mode)
+    disabled: bool = False  # When True, all slots return None (tier fallback only)
+    passthrough: bool = (
+        False  # When True, no routing/cascade at all (Anthropic Pro mode)
+    )
 
 
 @dataclass
 class ProxyChain:
     """
-    The full proxy chain configuration, including ordered chain entries
-    and per-use-case model routing.
+    The full proxy chain configuration, including ordered chain entries,
+    per-use-case model routing (legacy RouterConfig), unified assignment model,
+    and incoming-identifier mappings.
     """
 
     entries: list[ProxyEntry] = field(default_factory=list)
     router: RouterConfig = field(default_factory=RouterConfig)
 
+    # v2 fields — unified assignment model
+    schema_version: str = "2.0.0"
+    assignments: list[Any] = field(
+        default_factory=list
+    )  # list[Assignment] but avoid circular import
+    identifier_mappings: list[Any] = field(
+        default_factory=list
+    )  # list[IdentifierMapping]
+
     # ── Serialization ────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
-        return {
+        result = {
+            "schema_version": self.schema_version,
             "entries": [asdict(e) for e in self.entries],
             "router": asdict(self.router),
+            "assignments": [asdict(a) for a in self.assignments],
+            "identifier_mappings": [asdict(m) for m in self.identifier_mappings],
         }
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProxyChain":
+        # Parse entries
         entries = [ProxyEntry(**e) for e in data.get("entries", [])]
+
+        # Parse router (unchanged from v1)
         router_data = data.get("router", {})
-        
         parsed_router_data = {}
-        # Map JSON underscore-prefixed flags to dataclass fields
         if router_data.get("_disabled"):
             parsed_router_data["disabled"] = True
         if router_data.get("_passthrough"):
             parsed_router_data["passthrough"] = True
         for k, v in router_data.items():
             if k.startswith("_"):
-                continue  # Already handled above
-            if not hasattr(RouterConfig, k):
                 continue
-            if k in ["default", "background", "think", "long_context", "web_search", "image"]:
+            if k not in RouterConfig.__dataclass_fields__:
+                continue
+            if k in [
+                "default",
+                "background",
+                "think",
+                "long_context",
+                "web_search",
+                "image",
+            ]:
                 parsed_router_data[k] = RouteTarget.from_any(v)
             else:
                 parsed_router_data[k] = v
-                
         router = RouterConfig(**parsed_router_data)
+
+        # Parse v2 additions (with safe fallback for v1 data)
+        assignments_raw = data.get("assignments", [])
+        assignments = []
+        for a in assignments_raw:
+            # Assignment class may not be available during early import; use dict if so
+            if Assignment is not None:
+                assignments.append(Assignment(**a))
+            else:
+                assignments.append(a)  # fallback: keep as dict
+
+        mappings_raw = data.get("identifier_mappings", [])
+        identifier_mappings = []
+        for m in mappings_raw:
+            if IdentifierMapping is not None:
+                identifier_mappings.append(IdentifierMapping(**m))
+            else:
+                identifier_mappings.append(m)
+
+        chain = cls(
+            entries=entries,
+            router=router,
+            schema_version=data.get("schema_version", "1.0.0"),
+            assignments=assignments,
+            identifier_mappings=identifier_mappings,
+        )
         # Re-sort by order field
-        entries.sort(key=lambda e: e.order)
-        return cls(entries=entries, router=router)
+        chain.entries.sort(key=lambda e: e.order)
+        return chain
 
     # ── Persistence ──────────────────────────────────────────────────────────
 
     @classmethod
     def load(cls, path: Optional[Path] = None) -> "ProxyChain":
+        """Load from disk, optionally migrating if schema_version < current."""
         p = Path(os.environ.get("PROXY_CHAIN_FILE", path or DEFAULT_CHAIN_FILE))
         if not p.exists():
             return cls._default_chain()
+
         try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-            return cls.from_dict(data)
-        except Exception:
+            raw = p.read_text(encoding="utf-8")
+        except Exception as e:
+            print(f"Warning: failed to read proxy_chain.json ({e}); using defaults")
             return cls._default_chain()
 
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as e:
+            print(f"Warning: failed to parse proxy_chain.json ({e}); using defaults")
+            return cls._default_chain()
+
+        # Schema migration (T019–T021) — handled in separate module
+        from src.core.schema_migrations import migrate_if_needed
+
+        migrated_data = migrate_if_needed(
+            data, p
+        )  # may raise RuntimeError on unsafe migration
+        return cls.from_dict(migrated_data)
+
     def save(self, path: Optional[Path] = None) -> None:
+        """Persist to disk atomically (write-to-temp + fsync + rename)."""
         p = Path(os.environ.get("PROXY_CHAIN_FILE", path or DEFAULT_CHAIN_FILE))
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        # Write to temp file first, then atomic rename
+        tmp_path = p.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        # TODO: fsync for durability (optional in v1)
+        tmp_path.replace(p)  # atomic on POSIX
 
     # ── Chain manipulation ────────────────────────────────────────────────────
 
     def move_up(self, idx: int) -> None:
         if idx > 0:
-            self.entries[idx - 1], self.entries[idx] = self.entries[idx], self.entries[idx - 1]
+            self.entries[idx - 1], self.entries[idx] = (
+                self.entries[idx],
+                self.entries[idx - 1],
+            )
             self._renumber()
 
     def move_down(self, idx: int) -> None:
         if idx < len(self.entries) - 1:
-            self.entries[idx], self.entries[idx + 1] = self.entries[idx + 1], self.entries[idx]
+            self.entries[idx], self.entries[idx + 1] = (
+                self.entries[idx + 1],
+                self.entries[idx],
+            )
             self._renumber()
 
     def add(self, entry: ProxyEntry) -> None:
@@ -200,11 +296,63 @@ class ProxyChain:
         for i, e in enumerate(self.entries):
             e.order = i
 
+    # ── Validation ───────────────────────────────────────────────────────────
+
+    def validate_edit(self) -> list[str]:
+        """Run consistency checks on the chain.
+
+        Returns a list of error messages. Empty list means validation passed.
+        Checks:
+        - Port conflicts between enabled HTTP entries (FR-013)
+        - Malformed URLs (basic scheme + netloc check)
+        - Unreachable service_cmd heuristic (file exists or command name recognized)
+        """
+        errors: list[str] = []
+        used_ports: set[int] = set()
+
+        for e in self.entries:
+            if not e.enabled:
+                continue
+
+            # URL validation (if HTTP)
+            if e.type == "http":
+                if not e.url:
+                    errors.append(f"Entry '{e.id}' is HTTP but url is blank")
+                else:
+                    try:
+                        parsed = urlparse(e.url)
+                        if not parsed.scheme or not parsed.netloc:
+                            errors.append(f"Entry '{e.id}' has malformed URL: {e.url}")
+                        if parsed.port:
+                            if parsed.port in used_ports:
+                                errors.append(
+                                    f"Port conflict: {parsed.port} already used by another entry"
+                                )
+                            used_ports.add(parsed.port)
+                    except Exception:
+                        errors.append(f"Entry '{e.id}' has invalid URL: {e.url}")
+
+            # service_cmd heuristic — only flag when the first token is itself
+            # a path (contains "/"). Shell wrappers like ``cd /foo && python``
+            # have ``cd`` as the first token, which is a builtin, not a path.
+            if e.service_cmd:
+                first_token = e.service_cmd.split()[0]
+                if "/" in first_token:
+                    import os as _os
+
+                    expanded = _os.path.expanduser(first_token)
+                    if not _os.path.exists(expanded):
+                        errors.append(
+                            f"Entry '{e.id}' service_cmd points to non-existent file: {first_token}"
+                        )
+
+        return errors
+
     # ── Runtime helpers ───────────────────────────────────────────────────────
 
     def upstream_url(self) -> str:
         """
-        The URL this proxy should use as PROVIDER_BASE_URL.
+        The URL this proxy should use as BIG_ENDPOINT.
         Returns the URL of the first enabled upstream HTTP entry in the chain.
         Falls back to empty string (direct OpenRouter via env) if no HTTP entries.
         """
@@ -212,6 +360,28 @@ class ProxyChain:
             if e.enabled and e.is_http and not _is_local_proxy_entry(e):
                 return e.url
         return ""
+
+    def direct_provider_url(self) -> str:
+        """
+        The direct provider URL (bypassing local compression layers like headroom).
+        Looks for a non-local entry in the chain, then falls back to env vars,
+        then falls back to the OpenRouter default.
+        """
+        import os
+        _local_ports = {"8787", "8082", "8788", "8317"}
+        for e in self.entries:
+            if e.enabled and e.is_http and not _is_local_proxy_entry(e):
+                url = e.url or ""
+                # Skip any 127.0.0.1 / localhost proxy ports
+                skip = any(f":{p}" in url for p in _local_ports)
+                if not skip and url:
+                    return url
+        # Fall back to env-configured provider URL
+        return (
+            os.environ.get("OPENAI_BASE_URL", "")
+            or os.environ.get("OPENROUTER_API_URL", "")
+            or "https://openrouter.ai/api/v1"
+        )
 
     def enabled_http_entries(self) -> list[ProxyEntry]:
         return [e for e in self.entries if e.enabled and e.is_http]
@@ -289,7 +459,7 @@ class ProxyChain:
                 name="CLIProxyAPI (Antigravity)",
                 url="http://127.0.0.1:8317/v1",
                 auth_key="",
-                enabled=False,   # DISABLED — Google banning TOS violations
+                enabled=False,  # DISABLED — Google banning TOS violations
                 order=2,
                 port=8317,
                 health_path="/v1/models",

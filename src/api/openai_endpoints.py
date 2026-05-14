@@ -208,7 +208,7 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
             status_code=500,
             detail={
                 "error": {
-                    "message": "No API key configured. Set PROVIDER_API_KEY or OPENAI_API_KEY environment variable.",
+                    "message": "No API key configured. Set BIG_API_KEY or OPENAI_API_KEY environment variable.",
                     "type": "configuration_error",
                     "code": "missing_api_key",
                 }
@@ -220,7 +220,7 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
             status_code=500,
             detail={
                 "error": {
-                    "message": "No base URL configured. Set PROVIDER_BASE_URL or OPENAI_BASE_URL environment variable.",
+                    "message": "No base URL configured. Set BIG_ENDPOINT or OPENAI_BASE_URL environment variable.",
                     "type": "configuration_error",
                     "code": "missing_base_url",
                 }

@@ -9,8 +9,7 @@ import sqlite3
 import os
 import json
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Tuple
-from pathlib import Path
+from typing import Dict, Any, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -79,7 +78,7 @@ class UsageTracker:
     - Privacy-focused (opt-in, no content storage)
     """
 
-    def __init__(self, db_path: str = "usage_tracking.db", enabled: bool = None):
+    def __init__(self, db_path: str = None, enabled: bool = None):
         """
         Initialize usage tracker.
 
@@ -87,13 +86,13 @@ class UsageTracker:
             db_path: Path to SQLite database
             enabled: Override environment variable (for testing)
         """
-        self.db_path = db_path
+        self.db_path = db_path or os.getenv("USAGE_DB_PATH", "usage_tracking.db")
 
         # Check if tracking is enabled
         if enabled is None:
             enabled = os.getenv("TRACK_USAGE", "false").lower() == "true"
         self.enabled = enabled
-        
+
         # Check if full content logging is enabled (for debugging/testing)
         self.log_full_content = os.getenv("LOG_FULL_CONTENT", "false").lower() == "true"
 
@@ -109,59 +108,165 @@ class UsageTracker:
         """Get a database connection."""
         return sqlite3.connect(self.db_path)
 
-    def _init_db(self):
-        """Initialize SQLite database with schema."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+    def _migrate_api_requests_table(self, cursor) -> None:
+        """Migrate api_requests table from old schema to new RequestMetric schema (T072)."""
+        # Read all existing data
+        cursor.execute("SELECT * FROM api_requests")
+        rows = cursor.fetchall()
+        old_cols = [col[0] for col in cursor.description]
 
-        # Main usage table
+        # Drop old table
+        cursor.execute("DROP TABLE api_requests")
+
+        # Create new table with full RequestMetric schema
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS api_requests (
+            CREATE TABLE api_requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                request_id TEXT UNIQUE NOT NULL,
+                request_id TEXT NOT NULL,
+                attempt_index INTEGER NOT NULL DEFAULT 0,
                 timestamp TEXT NOT NULL,
-
-                -- Model info
+                incoming_identifier TEXT,
+                resolved_assignment_id TEXT,
+                resolved_model TEXT,
                 original_model TEXT NOT NULL,
                 routed_model TEXT NOT NULL,
                 provider TEXT,
                 endpoint TEXT,
-
-                -- Token usage
                 input_tokens INTEGER,
                 output_tokens INTEGER,
                 thinking_tokens INTEGER DEFAULT 0,
                 total_tokens INTEGER,
-
-                -- Performance
                 duration_ms REAL,
                 tokens_per_second REAL,
-
-                -- Cost estimation
                 estimated_cost REAL DEFAULT 0.0,
-
-                -- Request metadata
                 stream BOOLEAN,
                 message_count INTEGER,
                 has_system BOOLEAN,
                 has_tools BOOLEAN,
                 has_images BOOLEAN,
-
-                -- Status
                 status TEXT DEFAULT 'success',
                 error_message TEXT,
-
-                -- Session tracking
                 session_id TEXT,
                 client_ip TEXT,
-
-                -- JSON detection (for TOON analysis)
                 has_json_content BOOLEAN DEFAULT 0,
                 json_size_bytes INTEGER DEFAULT 0,
-
-                -- Full content logging (optional, for debugging/testing)
                 request_content TEXT,
-                response_content TEXT
+                response_content TEXT,
+                UNIQUE (request_id, attempt_index)
+            )
+        """)
+
+        # Map old rows → new table
+        for row in rows:
+            old_data = dict(zip(old_cols, row))
+            # Map columns: original_model → incoming_identifier; routed_model → resolved_model
+            cursor.execute(
+                """
+                INSERT INTO api_requests (
+                    request_id, attempt_index, timestamp,
+                    incoming_identifier, resolved_assignment_id, resolved_model,
+                    original_model, routed_model, provider, endpoint,
+                    input_tokens, output_tokens, thinking_tokens, total_tokens,
+                    duration_ms, tokens_per_second, estimated_cost,
+                    stream, message_count, has_system, has_tools, has_images,
+                    status, error_message,
+                    session_id, client_ip,
+                    has_json_content, json_size_bytes,
+                    request_content, response_content
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    old_data.get("request_id"),
+                    0,  # attempt_index = 0 for legacy rows
+                    old_data.get("timestamp"),
+                    old_data.get(
+                        "original_model"
+                    ),  # incoming_identifier = original_model
+                    None,  # resolved_assignment_id unknown
+                    old_data.get("routed_model"),  # resolved_model = routed_model
+                    old_data.get("original_model"),
+                    old_data.get("routed_model"),
+                    old_data.get("provider"),
+                    old_data.get("endpoint"),
+                    old_data.get("input_tokens"),
+                    old_data.get("output_tokens"),
+                    old_data.get("thinking_tokens"),
+                    old_data.get("total_tokens"),
+                    old_data.get("duration_ms"),
+                    old_data.get("tokens_per_second"),
+                    old_data.get("estimated_cost"),
+                    old_data.get("stream"),
+                    old_data.get("message_count"),
+                    old_data.get("has_system"),
+                    old_data.get("has_tools"),
+                    old_data.get("has_images"),
+                    old_data.get("status"),
+                    old_data.get("error_message"),
+                    old_data.get("session_id"),
+                    old_data.get("client_ip"),
+                    old_data.get("has_json_content"),
+                    old_data.get("json_size_bytes"),
+                    old_data.get("request_content"),
+                    old_data.get("response_content"),
+                ),
+            )
+
+    def _init_db(self):
+        """Initialize SQLite database with schema."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # --- Migration for RequestMetric schema (T072) ---
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='api_requests'"
+        )
+        table_exists = cursor.fetchone() is not None
+        needs_migration = False
+        if table_exists:
+            cursor.execute("PRAGMA table_info(api_requests)")
+            cols = [row[1] for row in cursor.fetchall()]
+            if "attempt_index" not in cols:
+                needs_migration = True
+
+        if needs_migration:
+            self._migrate_api_requests_table(cursor)
+            conn.commit()
+
+        # Main usage table (new schema for fresh or post-migration)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS api_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id TEXT NOT NULL,
+                attempt_index INTEGER NOT NULL DEFAULT 0,
+                timestamp TEXT NOT NULL,
+                incoming_identifier TEXT,
+                resolved_assignment_id TEXT,
+                resolved_model TEXT,
+                original_model TEXT NOT NULL,
+                routed_model TEXT NOT NULL,
+                provider TEXT,
+                endpoint TEXT,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                thinking_tokens INTEGER DEFAULT 0,
+                total_tokens INTEGER,
+                duration_ms REAL,
+                tokens_per_second REAL,
+                estimated_cost REAL DEFAULT 0.0,
+                stream BOOLEAN,
+                message_count INTEGER,
+                has_system BOOLEAN,
+                has_tools BOOLEAN,
+                has_images BOOLEAN,
+                status TEXT DEFAULT 'success',
+                error_message TEXT,
+                session_id TEXT,
+                client_ip TEXT,
+                has_json_content BOOLEAN DEFAULT 0,
+                json_size_bytes INTEGER DEFAULT 0,
+                request_content TEXT,
+                response_content TEXT,
+                UNIQUE (request_id, attempt_index)
             )
         """)
 
@@ -288,19 +393,43 @@ class UsageTracker:
             )
         """)
 
-        # Indexes for performance
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON api_requests(timestamp)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_model ON api_requests(routed_model)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_session ON api_requests(session_id)")
+        # Indexes for performance (extended for new columns)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_timestamp ON api_requests(timestamp)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_model ON api_requests(routed_model)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_session ON api_requests(session_id)"
+        )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON api_requests(status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_terminal_session ON terminal_output(session_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_terminal_timestamp ON terminal_output(timestamp)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_assignment ON api_requests(resolved_assignment_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_request_id ON api_requests(request_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_terminal_session ON terminal_output(session_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_terminal_timestamp ON terminal_output(timestamp)"
+        )
 
         # New indexes for analytics
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON daily_model_stats(date)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_stats_model ON daily_model_stats(model)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_savings_date ON savings_tracking(date)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_token_breakdown_model ON token_breakdown(model)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON daily_model_stats(date)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_daily_stats_model ON daily_model_stats(model)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_savings_date ON savings_tracking(date)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_token_breakdown_model ON token_breakdown(model)"
+        )
 
         conn.commit()
         conn.close()
@@ -339,7 +468,12 @@ class UsageTracker:
         audio_tokens: Optional[int] = None,
         # Savings calculation
         original_cost: Optional[float] = None,
-        model_tier: Optional[str] = None
+        model_tier: Optional[str] = None,
+        # RequestMetric extensions (T072, T073)
+        attempt_index: int = 0,
+        resolved_assignment_id: Optional[str] = None,
+        incoming_identifier: Optional[str] = None,
+        resolved_model: Optional[str] = None,
     ) -> bool:
         """
         Log an API request.
@@ -356,39 +490,93 @@ class UsageTracker:
 
             # Calculate derived metrics
             total_tokens = input_tokens + output_tokens + thinking_tokens
-            tokens_per_second = output_tokens / (duration_ms / 1000) if duration_ms > 0 and output_tokens > 0 else 0.0
+            tokens_per_second = (
+                output_tokens / (duration_ms / 1000)
+                if duration_ms > 0 and output_tokens > 0
+                else 0.0
+            )
+
+            # Resolve RequestMetric fields (T072)
+            incoming_identifier = incoming_identifier or original_model
+            resolved_model = resolved_model or routed_model
 
             # Conditionally store content if enabled, with sanitization to prevent token waste
-            req_content = sanitize_content_for_logging(request_content) if self.log_full_content and request_content else None
-            resp_content = sanitize_content_for_logging(response_content) if self.log_full_content and response_content else None
+            req_content = (
+                sanitize_content_for_logging(request_content)
+                if self.log_full_content and request_content
+                else None
+            )
+            resp_content = (
+                sanitize_content_for_logging(response_content)
+                if self.log_full_content and response_content
+                else None
+            )
 
-            # Insert request
-            cursor.execute("""
-                INSERT INTO api_requests (
-                    request_id, timestamp,
-                    original_model, routed_model, provider, endpoint,
-                    input_tokens, output_tokens, thinking_tokens, total_tokens,
-                    duration_ms, tokens_per_second, estimated_cost,
-                    stream, message_count, has_system, has_tools, has_images,
-                    status, error_message,
-                    session_id, client_ip,
-                    has_json_content, json_size_bytes,
-                    request_content, response_content
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                request_id, datetime.utcnow().isoformat(),
-                original_model, routed_model, provider, endpoint,
-                input_tokens, output_tokens, thinking_tokens, total_tokens,
-                duration_ms, tokens_per_second, estimated_cost,
-                stream, message_count, has_system, has_tools, has_images,
-                status, error_message,
-                session_id, client_ip,
-                has_json_content, json_size_bytes,
-                req_content, resp_content
-            ))
+            # Insert request (ignore duplicates or handle via exception)
+            # New schema uses UNIQUE(request_id, attempt_index)
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO api_requests (
+                        request_id, attempt_index, timestamp,
+                        incoming_identifier, resolved_assignment_id, resolved_model,
+                        original_model, routed_model, provider, endpoint,
+                        input_tokens, output_tokens, thinking_tokens, total_tokens,
+                        duration_ms, tokens_per_second, estimated_cost,
+                        stream, message_count, has_system, has_tools, has_images,
+                        status, error_message,
+                        session_id, client_ip,
+                        has_json_content, json_size_bytes,
+                        request_content, response_content
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        request_id,
+                        attempt_index,
+                        datetime.utcnow().isoformat(),
+                        incoming_identifier,
+                        resolved_assignment_id,
+                        resolved_model,
+                        original_model,
+                        routed_model,
+                        provider,
+                        endpoint,
+                        input_tokens,
+                        output_tokens,
+                        thinking_tokens,
+                        total_tokens,
+                        duration_ms,
+                        tokens_per_second,
+                        estimated_cost,
+                        stream,
+                        message_count,
+                        has_system,
+                        has_tools,
+                        has_images,
+                        status,
+                        error_message,
+                        session_id,
+                        client_ip,
+                        has_json_content,
+                        json_size_bytes,
+                        req_content,
+                        resp_content,
+                    ),
+                )
+            except sqlite3.IntegrityError:
+                # Duplicate (request_id, attempt_index) — update status/error instead
+                cursor.execute(
+                    """
+                    UPDATE api_requests SET
+                        status = ?, error_message = ?
+                    WHERE request_id = ? AND attempt_index = ?
+                """,
+                    (status, error_message, request_id, attempt_index),
+                )
 
             # Update model summary
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO model_usage_summary (
                     model, request_count,
                     total_input_tokens, total_output_tokens, total_thinking_tokens,
@@ -402,15 +590,22 @@ class UsageTracker:
                     total_cost = total_cost + excluded.total_cost,
                     avg_duration_ms = (avg_duration_ms * request_count + excluded.avg_duration_ms) / (request_count + 1),
                     last_used = excluded.last_used
-            """, (
-                routed_model,
-                input_tokens, output_tokens, thinking_tokens,
-                estimated_cost, duration_ms, datetime.utcnow().isoformat()
-            ))
+            """,
+                (
+                    routed_model,
+                    input_tokens,
+                    output_tokens,
+                    thinking_tokens,
+                    estimated_cost,
+                    duration_ms,
+                    datetime.utcnow().isoformat(),
+                ),
+            )
 
             # Update session summary if session_id provided
             if session_id:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO session_summary (
                         session_id, start_time, end_time,
                         request_count, total_tokens, total_cost,
@@ -423,23 +618,26 @@ class UsageTracker:
                         total_cost = total_cost + excluded.total_cost,
                         json_requests = json_requests + excluded.json_requests,
                         total_json_bytes = total_json_bytes + excluded.total_json_bytes
-                """, (
-                    session_id,
-                    datetime.utcnow().isoformat(),
-                    datetime.utcnow().isoformat(),
-                    total_tokens,
-                    estimated_cost,
-                    1 if has_json_content else 0,
-                    json_size_bytes
-                ))
+                """,
+                    (
+                        session_id,
+                        datetime.utcnow().isoformat(),
+                        datetime.utcnow().isoformat(),
+                        total_tokens,
+                        estimated_cost,
+                        1 if has_json_content else 0,
+                        json_size_bytes,
+                    ),
+                )
 
             # ===== EXTENDED ANALYTICS LOGGING =====
 
             # Get today's date for daily stats
-            today = datetime.utcnow().strftime('%Y-%m-%d')
+            today = datetime.utcnow().strftime("%Y-%m-%d")
 
             # Update daily model stats
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO daily_model_stats (
                     date, model, provider,
                     request_count, input_tokens, output_tokens, thinking_tokens,
@@ -458,22 +656,33 @@ class UsageTracker:
                     has_images_count = has_images_count + excluded.has_images_count,
                     success_count = success_count + excluded.success_count,
                     error_count = error_count + excluded.error_count
-            """, (
-                today, routed_model, provider,
-                input_tokens, output_tokens, thinking_tokens,
-                total_tokens, estimated_cost, duration_ms,
-                1 if has_tools else 0,
-                1 if has_images else 0,
-                1 if status == "success" else 0,
-                1 if status != "success" else 0
-            ))
+            """,
+                (
+                    today,
+                    routed_model,
+                    provider,
+                    input_tokens,
+                    output_tokens,
+                    thinking_tokens,
+                    total_tokens,
+                    estimated_cost,
+                    duration_ms,
+                    1 if has_tools else 0,
+                    1 if has_images else 0,
+                    1 if status == "success" else 0,
+                    1 if status != "success" else 0,
+                ),
+            )
 
             # Update model comparison stats (if model tier is provided)
             if model_tier:
                 # Calculate cost per 1K tokens
-                cost_per_1k = (estimated_cost / total_tokens * 1000) if total_tokens > 0 else 0.0
+                cost_per_1k = (
+                    (estimated_cost / total_tokens * 1000) if total_tokens > 0 else 0.0
+                )
                 tokens_per_req = total_tokens
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO model_comparison_stats (
                         date, model_tier, model, cost_per_1k_tokens, tokens_per_request, avg_latency_ms
                     ) VALUES (?, ?, ?, ?, ?, ?)
@@ -481,13 +690,25 @@ class UsageTracker:
                         cost_per_1k_tokens = (cost_per_1k_tokens * request_count + excluded.cost_per_1k_tokens) / (request_count + 1),
                         tokens_per_request = (tokens_per_request * request_count + excluded.tokens_per_request) / (request_count + 1),
                         avg_latency_ms = (avg_latency_ms * request_count + excluded.avg_latency_ms) / (request_count + 1)
-                """, (today, model_tier, routed_model, cost_per_1k, tokens_per_req, duration_ms))
+                """,
+                    (
+                        today,
+                        model_tier,
+                        routed_model,
+                        cost_per_1k,
+                        tokens_per_req,
+                        duration_ms,
+                    ),
+                )
 
             # Update savings tracking (if original cost is provided)
             if original_cost is not None and original_cost > 0:
                 savings = original_cost - estimated_cost
-                savings_percent = (savings / original_cost * 100) if original_cost > 0 else 0.0
-                cursor.execute("""
+                savings_percent = (
+                    (savings / original_cost * 100) if original_cost > 0 else 0.0
+                )
+                cursor.execute(
+                    """
                     INSERT INTO savings_tracking (
                         date, original_model, routed_model,
                         original_cost, actual_cost, savings, savings_percent, request_count
@@ -498,21 +719,40 @@ class UsageTracker:
                         savings = savings + excluded.savings,
                         savings_percent = (savings_percent * request_count + excluded.savings_percent) / (request_count + 1),
                         request_count = request_count + 1
-                """, (today, original_model, routed_model, original_cost, estimated_cost, savings, savings_percent))
+                """,
+                    (
+                        today,
+                        original_model,
+                        routed_model,
+                        original_cost,
+                        estimated_cost,
+                        savings,
+                        savings_percent,
+                    ),
+                )
 
             # Store detailed token breakdown (if provided)
             if prompt_tokens is not None or completion_tokens is not None:
                 # Use the breakdown values or fall back to input/output tokens
                 p_tokens = prompt_tokens if prompt_tokens is not None else input_tokens
-                c_tokens = completion_tokens if completion_tokens is not None else output_tokens
-                r_tokens = reasoning_tokens if reasoning_tokens is not None else thinking_tokens
+                c_tokens = (
+                    completion_tokens
+                    if completion_tokens is not None
+                    else output_tokens
+                )
+                r_tokens = (
+                    reasoning_tokens
+                    if reasoning_tokens is not None
+                    else thinking_tokens
+                )
 
                 # Total tokens from breakdown (or use calculated total)
                 bd_total = (p_tokens or 0) + (c_tokens or 0) + (r_tokens or 0)
                 if bd_total == 0:
                     bd_total = total_tokens
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO token_breakdown (
                         request_id, timestamp, model,
                         prompt_tokens, completion_tokens, reasoning_tokens,
@@ -526,11 +766,20 @@ class UsageTracker:
                         tool_use_tokens = excluded.tool_use_tokens,
                         audio_tokens = excluded.audio_tokens,
                         total_tokens = excluded.total_tokens
-                """, (
-                    request_id, datetime.utcnow().isoformat(), routed_model,
-                    p_tokens or 0, c_tokens or 0, r_tokens or 0,
-                    cached_tokens or 0, tool_use_tokens or 0, audio_tokens or 0, bd_total
-                ))
+                """,
+                    (
+                        request_id,
+                        datetime.utcnow().isoformat(),
+                        routed_model,
+                        p_tokens or 0,
+                        c_tokens or 0,
+                        r_tokens or 0,
+                        cached_tokens or 0,
+                        tool_use_tokens or 0,
+                        audio_tokens or 0,
+                        bd_total,
+                    ),
+                )
 
             conn.commit()
             conn.close()
@@ -554,7 +803,7 @@ class UsageTracker:
         poem_content: Optional[str] = None,
         folder_listed: bool = False,
         success: bool = False,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ) -> bool:
         """
         Log Claude Code terminal output for correlation with API requests.
@@ -569,7 +818,8 @@ class UsageTracker:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO terminal_output (
                     session_id, test_config, timestamp,
                     stdout, stderr, exit_code,
@@ -577,13 +827,24 @@ class UsageTracker:
                     poem_created, poem_content, folder_listed,
                     success, error_message
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                session_id, test_config, datetime.utcnow().isoformat(),
-                stdout, stderr, exit_code,
-                workspace_path, prompt, duration_seconds,
-                poem_created, poem_content, folder_listed,
-                success, error_message
-            ))
+            """,
+                (
+                    session_id,
+                    test_config,
+                    datetime.utcnow().isoformat(),
+                    stdout,
+                    stderr,
+                    exit_code,
+                    workspace_path,
+                    prompt,
+                    duration_seconds,
+                    poem_created,
+                    poem_content,
+                    folder_listed,
+                    success,
+                    error_message,
+                ),
+            )
 
             conn.commit()
             conn.close()
@@ -604,12 +865,15 @@ class UsageTracker:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM terminal_output
                 WHERE session_id = ?
                 ORDER BY timestamp DESC
                 LIMIT 1
-            """, (session_id,))
+            """,
+                (session_id,),
+            )
 
             row = cursor.fetchone()
             conn.close()
@@ -629,11 +893,14 @@ class UsageTracker:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM model_usage_summary
                 ORDER BY request_count DESC
                 LIMIT ?
-            """, (limit,))
+            """,
+                (limit,),
+            )
 
             results = [dict(row) for row in cursor.fetchall()]
             conn.close()
@@ -643,11 +910,51 @@ class UsageTracker:
             logger.error(f"Failed to get top models: {e}")
             return []
 
-    def get_daily_model_request_count(self, model: str, date_utc: Optional[str] = None) -> int:
+    def get_daily_total_tokens(self, date_utc: Optional[str] = None) -> int:
+        """Get total tokens consumed today across all models."""
+        if not self.enabled:
+            return 0
+        target_date = date_utc or datetime.utcnow().strftime("%Y-%m-%d")
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COALESCE(SUM(total_tokens), 0) FROM daily_model_stats WHERE date = ?",
+                (target_date,),
+            )
+            row = cursor.fetchone()
+            conn.close()
+            return int(row[0]) if row else 0
+        except Exception as e:
+            logger.error(f"Failed to get daily total tokens: {e}")
+            return 0
+
+    def get_daily_total_cost(self, date_utc: Optional[str] = None) -> float:
+        """Get total estimated cost (USD) consumed today across all models."""
+        if not self.enabled:
+            return 0.0
+        target_date = date_utc or datetime.utcnow().strftime("%Y-%m-%d")
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COALESCE(SUM(total_cost), 0.0) FROM daily_model_stats WHERE date = ?",
+                (target_date,),
+            )
+            row = cursor.fetchone()
+            conn.close()
+            return float(row[0]) if row else 0.0
+        except Exception as e:
+            logger.error(f"Failed to get daily total cost: {e}")
+            return 0.0
+
+    def get_daily_model_request_count(
+        self, model: str, date_utc: Optional[str] = None
+    ) -> int:
         """Get request count for a model on a UTC calendar day."""
         if not self.enabled:
             return 0
-        target_date = date_utc or datetime.utcnow().strftime('%Y-%m-%d')
+        target_date = date_utc or datetime.utcnow().strftime("%Y-%m-%d")
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -677,7 +984,8 @@ class UsageTracker:
 
             since = (datetime.utcnow() - timedelta(days=days)).isoformat()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     COUNT(*) as total_requests,
                     SUM(input_tokens) as total_input_tokens,
@@ -689,7 +997,9 @@ class UsageTracker:
                     AVG(tokens_per_second) as avg_tokens_per_second
                 FROM api_requests
                 WHERE timestamp >= ? AND status = 'success'
-            """, (since,))
+            """,
+                (since,),
+            )
 
             row = cursor.fetchone()
             conn.close()
@@ -704,7 +1014,7 @@ class UsageTracker:
                     "total_cost": round(row[5] or 0.0, 4),
                     "avg_duration_ms": round(row[6] or 0.0, 2),
                     "avg_tokens_per_second": round(row[7] or 0.0, 2),
-                    "days": days
+                    "days": days,
                 }
             return {}
 
@@ -742,7 +1052,9 @@ class UsageTracker:
 
                 # Estimate TOON savings (typically 20-40% for JSON)
                 estimated_toon_savings = int(total_json_bytes * 0.3)
-                json_percentage = (json_requests / total_requests * 100) if total_requests > 0 else 0
+                json_percentage = (
+                    (json_requests / total_requests * 100) if total_requests > 0 else 0
+                )
 
                 return {
                     "total_requests": total_requests,
@@ -751,7 +1063,7 @@ class UsageTracker:
                     "total_json_bytes": total_json_bytes,
                     "avg_json_size": round(avg_json_size, 0),
                     "estimated_toon_savings_bytes": estimated_toon_savings,
-                    "recommended": json_percentage > 30 and avg_json_size > 500
+                    "recommended": json_percentage > 30 and avg_json_size > 500,
                 }
             return {}
 
@@ -773,16 +1085,19 @@ class UsageTracker:
 
             since = (datetime.utcnow() - timedelta(days=days)).isoformat()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM api_requests
                 WHERE timestamp >= ?
                 ORDER BY timestamp DESC
-            """, (since,))
+            """,
+                (since,),
+            )
 
             rows = cursor.fetchall()
 
             if rows:
-                with open(output_file, 'w', newline='') as f:
+                with open(output_file, "w", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=rows[0].keys())
                     writer.writeheader()
                     writer.writerows([dict(row) for row in rows])
@@ -808,23 +1123,30 @@ class UsageTracker:
 
             since = (datetime.utcnow() - timedelta(days=days)).isoformat()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM api_requests
                 WHERE timestamp >= ?
                 ORDER BY timestamp DESC
-            """, (since,))
+            """,
+                (since,),
+            )
 
             rows = cursor.fetchall()
 
             if rows:
                 data = [dict(row) for row in rows]
-                with open(output_file, 'w') as f:
-                    json.dump({
-                        "exported_at": datetime.utcnow().isoformat(),
-                        "days": days,
-                        "record_count": len(data),
-                        "records": data
-                    }, f, indent=2)
+                with open(output_file, "w") as f:
+                    json.dump(
+                        {
+                            "exported_at": datetime.utcnow().isoformat(),
+                            "days": days,
+                            "record_count": len(data),
+                            "records": data,
+                        },
+                        f,
+                        indent=2,
+                    )
 
                 logger.info(f"Exported {len(rows)} records to {output_file}")
 
@@ -859,7 +1181,8 @@ class UsageTracker:
             since = (datetime.utcnow() - timedelta(days=days)).isoformat()
 
             # Get daily aggregates from the new daily_model_stats table
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     date,
                     SUM(total_tokens) as total_tokens,
@@ -874,7 +1197,9 @@ class UsageTracker:
                 WHERE date >= ?
                 GROUP BY date
                 ORDER BY date
-            """, (since,))
+            """,
+                (since,),
+            )
 
             rows = cursor.fetchall()
             conn.close()
@@ -884,25 +1209,25 @@ class UsageTracker:
                 "tokens": [],
                 "cost": [],
                 "requests": [],
-                "token_breakdown": {
-                    "input": [],
-                    "output": [],
-                    "thinking": []
-                },
-                "success_rate": []
+                "token_breakdown": {"input": [], "output": [], "thinking": []},
+                "success_rate": [],
             }
 
             for row in rows:
-                result["dates"].append(row['date'])
-                result["tokens"].append(row['total_tokens'] or 0)
-                result["cost"].append(round(row['total_cost'] or 0, 4))
-                result["requests"].append(row['total_requests'] or 0)
-                result["token_breakdown"]["input"].append(row['input_tokens'] or 0)
-                result["token_breakdown"]["output"].append(row['output_tokens'] or 0)
-                result["token_breakdown"]["thinking"].append(row['thinking_tokens'] or 0)
+                result["dates"].append(row["date"])
+                result["tokens"].append(row["total_tokens"] or 0)
+                result["cost"].append(round(row["total_cost"] or 0, 4))
+                result["requests"].append(row["total_requests"] or 0)
+                result["token_breakdown"]["input"].append(row["input_tokens"] or 0)
+                result["token_breakdown"]["output"].append(row["output_tokens"] or 0)
+                result["token_breakdown"]["thinking"].append(
+                    row["thinking_tokens"] or 0
+                )
 
-                total = (row['success_count'] or 0) + (row['error_count'] or 0)
-                success_rate = (row['success_count'] / total * 100) if total > 0 else 100
+                total = (row["success_count"] or 0) + (row["error_count"] or 0)
+                success_rate = (
+                    (row["success_count"] / total * 100) if total > 0 else 100
+                )
                 result["success_rate"].append(round(success_rate, 1))
 
             return result
@@ -933,7 +1258,8 @@ class UsageTracker:
             since = (datetime.utcnow() - timedelta(days=days)).isoformat()
 
             # Aggregate model performance data
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     model,
                     provider,
@@ -948,23 +1274,31 @@ class UsageTracker:
                 GROUP BY model, provider
                 HAVING total_requests > 0
                 ORDER BY total_requests DESC
-            """, (since,))
+            """,
+                (since,),
+            )
 
             rows = cursor.fetchall()
             conn.close()
 
             result = []
             for row in rows:
-                result.append({
-                    "model": row['model'],
-                    "provider": row['provider'],
-                    "total_requests": row['total_requests'],
-                    "avg_tokens_per_request": round(row['avg_tokens_per_request'] or 0, 0),
-                    "avg_cost_per_1k_tokens": round(row['avg_cost_per_1k_tokens'] or 0, 4),
-                    "avg_duration_ms": round(row['avg_duration_ms'] or 0, 1),
-                    "tool_requests": row['tool_requests'],
-                    "image_requests": row['image_requests']
-                })
+                result.append(
+                    {
+                        "model": row["model"],
+                        "provider": row["provider"],
+                        "total_requests": row["total_requests"],
+                        "avg_tokens_per_request": round(
+                            row["avg_tokens_per_request"] or 0, 0
+                        ),
+                        "avg_cost_per_1k_tokens": round(
+                            row["avg_cost_per_1k_tokens"] or 0, 4
+                        ),
+                        "avg_duration_ms": round(row["avg_duration_ms"] or 0, 1),
+                        "tool_requests": row["tool_requests"],
+                        "image_requests": row["image_requests"],
+                    }
+                )
 
             return result
 
@@ -989,7 +1323,8 @@ class UsageTracker:
 
             since = (datetime.utcnow() - timedelta(days=days)).isoformat()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     original_model,
                     routed_model,
@@ -1002,22 +1337,28 @@ class UsageTracker:
                 WHERE date >= ?
                 GROUP BY original_model, routed_model
                 ORDER BY total_savings DESC
-            """, (since,))
+            """,
+                (since,),
+            )
 
             rows = cursor.fetchall()
             conn.close()
 
             result = []
             for row in rows:
-                result.append({
-                    "original_model": row['original_model'],
-                    "routed_model": row['routed_model'],
-                    "request_count": row['total_requests'],
-                    "original_cost": round(row['total_original_cost'] or 0, 4),
-                    "actual_cost": round(row['total_actual_cost'] or 0, 4),
-                    "total_savings": round(row['total_savings'] or 0, 4),
-                    "avg_savings_percent": round(row['avg_savings_percent'] or 0, 1)
-                })
+                result.append(
+                    {
+                        "original_model": row["original_model"],
+                        "routed_model": row["routed_model"],
+                        "request_count": row["total_requests"],
+                        "original_cost": round(row["total_original_cost"] or 0, 4),
+                        "actual_cost": round(row["total_actual_cost"] or 0, 4),
+                        "total_savings": round(row["total_savings"] or 0, 4),
+                        "avg_savings_percent": round(
+                            row["avg_savings_percent"] or 0, 1
+                        ),
+                    }
+                )
 
             return result
 
@@ -1046,7 +1387,8 @@ class UsageTracker:
 
             since = (datetime.utcnow() - timedelta(days=days)).isoformat()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     SUM(prompt_tokens) as total_prompt,
                     SUM(completion_tokens) as total_completion,
@@ -1058,7 +1400,9 @@ class UsageTracker:
                     COUNT(*) as request_count
                 FROM token_breakdown
                 WHERE timestamp >= ?
-            """, (since,))
+            """,
+                (since,),
+            )
 
             row = cursor.fetchone()
             conn.close()
@@ -1075,28 +1419,28 @@ class UsageTracker:
                 "request_count": row[7],
                 "prompt": {
                     "absolute": row[0] or 0,
-                    "percentage": round((row[0] or 0) / total * 100, 1)
+                    "percentage": round((row[0] or 0) / total * 100, 1),
                 },
                 "completion": {
                     "absolute": row[1] or 0,
-                    "percentage": round((row[1] or 0) / total * 100, 1)
+                    "percentage": round((row[1] or 0) / total * 100, 1),
                 },
                 "reasoning": {
                     "absolute": row[2] or 0,
-                    "percentage": round((row[2] or 0) / total * 100, 1)
+                    "percentage": round((row[2] or 0) / total * 100, 1),
                 },
                 "cached": {
                     "absolute": row[3] or 0,
-                    "percentage": round((row[3] or 0) / total * 100, 1)
+                    "percentage": round((row[3] or 0) / total * 100, 1),
                 },
                 "tool_use": {
                     "absolute": row[4] or 0,
-                    "percentage": round((row[4] or 0) / total * 100, 1)
+                    "percentage": round((row[4] or 0) / total * 100, 1),
                 },
                 "audio": {
                     "absolute": row[5] or 0,
-                    "percentage": round((row[5] or 0) / total * 100, 1)
-                }
+                    "percentage": round((row[5] or 0) / total * 100, 1),
+                },
             }
 
         except Exception as e:
@@ -1119,7 +1463,8 @@ class UsageTracker:
 
             since = (datetime.utcnow() - timedelta(days=days)).isoformat()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     provider,
                     SUM(request_count) as total_requests,
@@ -1131,23 +1476,32 @@ class UsageTracker:
                 WHERE date >= ? AND provider IS NOT NULL
                 GROUP BY provider
                 ORDER BY total_cost DESC
-            """, (since,))
+            """,
+                (since,),
+            )
 
             rows = cursor.fetchall()
             conn.close()
 
             result = []
             for row in rows:
-                tokens = row['total_tokens'] or 0
-                result.append({
-                    "provider": row['provider'],
-                    "total_requests": row['total_requests'],
-                    "total_tokens": tokens,
-                    "total_cost": round(row['total_cost'] or 0, 4),
-                    "avg_cost_per_1k_tokens": round((row['total_cost'] or 0) / tokens * 1000 if tokens > 0 else 0, 4),
-                    "avg_duration_ms": round(row['avg_duration_ms'] or 0, 1),
-                    "tool_requests": row['tool_requests']
-                })
+                tokens = row["total_tokens"] or 0
+                result.append(
+                    {
+                        "provider": row["provider"],
+                        "total_requests": row["total_requests"],
+                        "total_tokens": tokens,
+                        "total_cost": round(row["total_cost"] or 0, 4),
+                        "avg_cost_per_1k_tokens": round(
+                            (row["total_cost"] or 0) / tokens * 1000
+                            if tokens > 0
+                            else 0,
+                            4,
+                        ),
+                        "avg_duration_ms": round(row["avg_duration_ms"] or 0, 1),
+                        "tool_requests": row["tool_requests"],
+                    }
+                )
 
             return result
 
@@ -1184,24 +1538,28 @@ class UsageTracker:
             overall = self.get_cost_summary(days)
 
             # Calculate additional metrics
-            total_savings = sum(s['total_savings'] for s in savings)
-            avg_savings_percent = sum(s['avg_savings_percent'] for s in savings) / len(savings) if savings else 0
+            total_savings = sum(s["total_savings"] for s in savings)
+            avg_savings_percent = (
+                sum(s["avg_savings_percent"] for s in savings) / len(savings)
+                if savings
+                else 0
+            )
 
             return {
                 "summary": {
-                    "total_requests": overall.get('total_requests', 0),
-                    "total_tokens": overall.get('total_tokens', 0),
-                    "total_cost": overall.get('total_cost', 0),
-                    "avg_latency_ms": overall.get('avg_duration_ms', 0),
+                    "total_requests": overall.get("total_requests", 0),
+                    "total_tokens": overall.get("total_tokens", 0),
+                    "total_cost": overall.get("total_cost", 0),
+                    "avg_latency_ms": overall.get("avg_duration_ms", 0),
                     "total_savings": round(total_savings, 4),
                     "avg_savings_percent": round(avg_savings_percent, 1),
-                    "days": days
+                    "days": days,
                 },
                 "time_series": time_series,
                 "models": models,
                 "savings": savings,
                 "token_breakdown": token_stats,
-                "providers": providers
+                "providers": providers,
             }
 
         except Exception as e:

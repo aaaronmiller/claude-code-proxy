@@ -1,55 +1,6 @@
 {
   "schema_version": "2.0.0",
-  "entries": [
-    {
-      "id": "claude_code_proxy",
-      "name": "Claude Code Proxy",
-      "url": "http://127.0.0.1:8082/v1",
-      "auth_key": "",
-      "enabled": true,
-      "order": 0,
-      "service_cmd": ".venv/bin/python start_proxy.py --skip-validation",
-      "service_stop_cmd": "",
-      "health_path": "/health",
-      "port": 8082,
-      "timeout": 90,
-      "extra_headers": {},
-      "type": "http",
-      "model_prefixes": []
-    },
-    {
-      "id": "headroom",
-      "name": "Headroom",
-      "url": "http://127.0.0.1:8787/v1",
-      "auth_key": "",
-      "enabled": true,
-      "order": 1,
-      "service_cmd": "headroom proxy --port 8787",
-      "service_stop_cmd": "",
-      "health_path": "/health",
-      "port": 8787,
-      "timeout": 90,
-      "extra_headers": {},
-      "type": "http",
-      "model_prefixes": []
-    },
-    {
-      "id": "rtk",
-      "name": "RTK",
-      "url": "http://127.0.0.1:8788/v1",
-      "auth_key": "",
-      "enabled": false,
-      "order": 2,
-      "service_cmd": "rtk serve --port 8788",
-      "service_stop_cmd": "",
-      "health_path": "/health",
-      "port": 8788,
-      "timeout": 90,
-      "extra_headers": {},
-      "type": "http",
-      "model_prefixes": []
-    }
-  ],
+  "entries": [],
   "router": {
     "default": {
       "model": "",
@@ -96,7 +47,7 @@
     {
       "id": "big",
       "kind": "tier",
-      "model": "openrouter/elephant-alpha",
+      "model": "after-write",
       "provider": "openrouter",
       "base_url": "https://openrouter.ai/api/v1",
       "api_key": "${OPENROUTER_API_KEY}",
@@ -106,22 +57,28 @@
     {
       "id": "middle",
       "kind": "tier",
-      "model": "minimax/minimax-m2.5:free",
-      "provider": "openrouter",
-      "base_url": "",
-      "api_key": "",
+      "model": "opencode_go/minimax-m2.7",
+      "provider": "opencode_go",
+      "base_url": "https://opencode.ai/zen/go/v1",
+      "api_key": "${OPENCODE_GO_API_KEY}",
       "enabled": true,
-      "cascade": []
+      "cascade": [
+        "minimax/minimax-m2.5-20260211:free",
+        "nvidia/nemotron-3-super-120b-a12b:free"
+      ]
     },
     {
       "id": "small",
       "kind": "tier",
-      "model": "z-ai/glm-4.5-air:free",
+      "model": "tencent/hy3-preview:free",
       "provider": "openrouter",
-      "base_url": "",
-      "api_key": "",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "${OPENROUTER_API_KEY}",
       "enabled": true,
-      "cascade": ["minimax/minimax-m2.5:free", "openai/gpt-oss-120b:free"]
+      "cascade": [
+        "minimax/minimax-m2.5:free",
+        "openai/gpt-oss-120b:free"
+      ]
     },
     {
       "id": "background",
@@ -154,5 +111,34 @@
       "cascade": []
     }
   ],
-  "identifier_mappings": []
+  "identifier_mappings": [
+    {
+      "incoming_identifier": "gemini-3-flash",
+      "assignment_id": "small",
+      "enabled": true,
+      "priority": 0,
+      "notes": ""
+    },
+    {
+      "incoming_identifier": "gemini-3-pro-preview",
+      "assignment_id": "big",
+      "enabled": true,
+      "priority": 0,
+      "notes": ""
+    },
+    {
+      "incoming_identifier": "google/gemini-3-flash",
+      "assignment_id": "small",
+      "enabled": true,
+      "priority": 0,
+      "notes": ""
+    },
+    {
+      "incoming_identifier": "google/gemini-3-flash-preview",
+      "assignment_id": "small",
+      "enabled": true,
+      "priority": 0,
+      "notes": ""
+    }
+  ]
 }

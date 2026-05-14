@@ -494,7 +494,7 @@ configure_integration() {
             cat >> "$envrc" << EOF
 
 # Compression stack integration
-export PROVIDER_BASE_URL="http://127.0.0.1:${HEADROOM_PORT}/v1"
+export BIG_ENDPOINT="http://127.0.0.1:${HEADROOM_PORT}/v1"
 export HEADROOM_PORT="${HEADROOM_PORT}"
 # Headroom configuration (all settings in one place)
 export HEADROOM_BACKEND="${HEADROOM_BACKEND:-openrouter}"
@@ -628,7 +628,7 @@ start_services() {
         fi
 
         export OPENAI_BASE_URL="http://127.0.0.1:$HEADROOM_PORT/v1"
-        export PROVIDER_BASE_URL="http://127.0.0.1:$HEADROOM_PORT/v1"
+        export BIG_ENDPOINT="http://127.0.0.1:$HEADROOM_PORT/v1"
 
         nohup python -u start_proxy.py --skip-validation > proxy.log 2>&1 &
         sleep 3

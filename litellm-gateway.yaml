@@ -1,0 +1,207 @@
+# ---
+# date: 2026-04-18 12:00:00 PDT
+# ver: 1.0.0
+# author: Sliither (for Ice-ninja)
+# tags: [litellm, proxy, circuit-breaker, cache, four-layer-cascade]
+# ---
+# LiteLLM proxy config — sits between Hermes and the providers, adds
+#   1. four-layer fallback cascade (OpenRouter native → NVIDIA NIM → OR proxy → GLM direct)
+#   2. circuit breaker (provider marked dead after 3 timeouts, 30s open, 1 probe to close)
+#   3. response cache (prompt-content SHA → response, skips repeated embed/encode work)
+#   4. per-role temperature control (solves the hermes-has-no-temperature-key problem)
+#
+# Launch: litellm --config ~/.litellm/hermes-gateway.yaml --port 4000
+# Point Hermes at it: hermes config set model.base_url http://localhost:4000/v1
+#
+# Docs: https://docs.litellm.ai/docs/proxy/configs
+
+model_list:
+  # ============================================================================
+  # PRIMARY — Nemotron 3 Super via OpenRouter (first choice, fastest)
+  # ============================================================================
+  - model_name: primary
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.2
+      top_p: 0.95
+      timeout: 30
+      stream_timeout: 60
+
+  # NVIDIA NIM direct — identical model, separate endpoint, 40 RPM independent budget
+  - model_name: primary-nvidia
+    litellm_params:
+      model: openai/nvidia/nemotron-3-super-120b-a12b
+      api_base: https://integrate.api.nvidia.com/v1
+      api_key: os.environ/NVIDIA_API_KEY
+      temperature: 0.2
+      top_p: 0.95
+      timeout: 30
+
+  # ============================================================================
+  # FALLBACKS — architectural diversity
+  # ============================================================================
+  - model_name: fallback-glm
+    litellm_params:
+      model: openrouter/z-ai/glm-4.5-air:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.2
+      top_p: 0.95
+      timeout: 30
+
+  - model_name: fallback-glm-direct
+    litellm_params:
+      model: openai/glm-4.5-air
+      api_base: https://api.z.ai/api/coding/paas/v4
+      api_key: os.environ/ZAI_API_KEY
+      temperature: 0.2
+      top_p: 0.95
+      timeout: 30
+
+  - model_name: fallback-trinity
+    litellm_params:
+      model: openrouter/arcee-ai/trinity-large-preview:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.3
+      top_p: 0.95
+      timeout: 30
+
+  - model_name: fallback-nemotron-nano-9b
+    litellm_params:
+      model: openrouter/nvidia/nemotron-nano-9b-v2:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.1
+      top_p: 1.0
+      timeout: 20
+
+  # ============================================================================
+  # AUXILIARY — per-role temperature control
+  # ============================================================================
+  - model_name: aux-compression
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.1
+      top_p: 1.0
+      timeout: 180
+
+  - model_name: aux-vision
+    litellm_params:
+      model: openrouter/nvidia/nemotron-nano-12b-v2-vl:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.0
+      top_p: 1.0
+      timeout: 60
+
+  - model_name: aux-search
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-nano-30b-a3b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.0
+      top_p: 1.0
+      timeout: 45
+
+  - model_name: aux-approval
+    litellm_params:
+      model: openrouter/nvidia/nemotron-nano-9b-v2:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.0
+      top_p: 1.0
+      timeout: 30
+
+  - model_name: aux-flush-memories
+    litellm_params:
+      model: openrouter/nvidia/nemotron-nano-9b-v2:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.1
+      top_p: 1.0
+      timeout: 30
+
+  - model_name: aux-web-extract
+    litellm_params:
+      model: openrouter/z-ai/glm-4.5-air:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.1
+      top_p: 1.0
+      timeout: 360
+
+router_settings:
+  routing_strategy: latency-based-routing
+
+  # circuit breaker: provider marked dead after 3 consecutive failures in 30s window,
+  # cooldown 30s, then half-open probe with 1 request before closing
+  cooldown_time: 30
+  allowed_fails: 3
+  disable_cooldowns: false
+
+  # model_group -> fallback chain (ordered diversity for correlated-failure protection)
+  fallbacks:
+    - primary:
+        - primary-nvidia         # same model, different endpoint — exhausts nemotron first
+        - fallback-glm           # different arch family
+        - fallback-glm-direct    # different endpoint for GLM family too
+        - fallback-trinity       # different provider entirely
+        - fallback-nemotron-nano-9b  # last resort, tiny model
+
+    - aux-compression:
+        - primary-nvidia
+        - aux-web-extract
+        - fallback-nemotron-nano-9b
+
+    - aux-web-extract:
+        - fallback-glm-direct
+        - aux-compression
+
+  # context window fallbacks — if primary hits context limit, escalate to 1M-context model
+  context_window_fallbacks:
+    - primary: ["aux-compression"]  # same 1M-context model
+
+  retry_policy:
+    BadRequestErrorRetries: 0        # 400s are our fault, don't retry
+    AuthenticationErrorRetries: 0    # 401/403 — config problem, fail fast
+    TimeoutErrorRetries: 2
+    RateLimitErrorRetries: 3
+    ContentPolicyViolationErrorRetries: 0
+    InternalServerErrorRetries: 3
+
+  # per-provider cooldown override (free-tier nemotron needs longer after a 429)
+  provider_budget_config:
+    openrouter:
+      budget_limit: 100.0
+      time_period: 1d
+
+# ============================================================================
+# CACHING — response cache keyed on (model, messages, temperature, top_p)
+# Skips the expensive embed/encode on repeated queries. In-memory for speed,
+# upgrade to redis for multi-process setups.
+# ============================================================================
+litellm_settings:
+  cache: true
+  cache_params:
+    type: local                  # change to "redis" for cross-process cache
+    ttl: 3600                    # 1 hour — tune based on how fresh you need
+    supported_call_types:
+      - completion
+      - acompletion
+      - embedding
+      - aembedding
+
+  # structured logging — one JSONL per request for forensic queries
+  success_callback: ["logging"]
+  failure_callback: ["logging"]
+  json_logs: true
+  set_verbose: false
+
+  # drop params that a provider doesn't support rather than erroring
+  drop_params: true
+
+  # request timeout override (litellm default is 600s)
+  request_timeout: 60
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # database_url: os.environ/DATABASE_URL   # uncomment to enable persistent spend tracking
+  disable_spend_logs: false
+  disable_error_logs: false
+  health_check_interval: 300
+  allow_client_side_credentials: false

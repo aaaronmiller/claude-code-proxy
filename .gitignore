@@ -359,3 +359,9 @@ antigravity_claude_coode_toolcall_failure_resolution.md
 
 # Optional: include web-ui lib (already handled above but keeping)
 !web-ui/src/lib/
+
+# Node.js dependencies (explicit)
+node_modules/
+
+# SvelteKit build output
+.svelte-kit/

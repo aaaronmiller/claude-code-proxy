@@ -188,7 +188,7 @@ cd ~/code/claude-code-proxy && source .venv/bin/activate && source .envrc && pyt
 | `RESOURCE_EXHAUSTED` / 429 | Model quota hit — switch BIG_MODEL or wait for reset |
 | Empty text in responses | Reasoning model used all tokens thinking — increase max_tokens |
 | `No endpoints found` (404) | OpenRouter privacy settings blocking free models — use non-free |
-| `passthrough mode` | PROVIDER_API_KEY not set — run `source .envrc` before starting |
+| `passthrough mode` | BIG_API_KEY not set — run `source .envrc` before starting |
 | Proxy not picking up .env changes | Kill and restart the proxy process |
 
 ### Check what's running
@@ -210,7 +210,7 @@ kill $(pgrep -f "start_proxy.py") $(pgrep -f "cli-proxy-api") 2>/dev/null
 | File | Purpose |
 |---|---|
 | `~/code/claude-code-proxy/.env` | Proxy config (models, endpoints, auth) |
-| `~/code/claude-code-proxy/.envrc` | Activates venv, sets PROVIDER_API_KEY |
+| `~/code/claude-code-proxy/.envrc` | Activates venv, sets BIG_API_KEY |
 | `~/code/cliproxyapi/config.yaml` | CLIProxyAPIPlus config |
 | `~/.cli-proxy-api/` | OAuth credential files (auto-managed) |
 | `~/.secrets` | OPENROUTER_API_KEY |

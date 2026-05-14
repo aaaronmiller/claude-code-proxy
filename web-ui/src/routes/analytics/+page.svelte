@@ -3,36 +3,37 @@
   Interactive metrics visualization and data exploration
 -->
 <script>
-  import { onMount } from 'svelte';
-  import { LineChart, BarChart, TimeRangePicker } from '../../components/charts/index.js';
-  import { 
-    generateMockTimeSeries, 
-    generateMockAggregate, 
-    generateMockProviderComparison,
-    generateMockModelComparison,
-    generateMockTopEndpoints
-  } from '$lib/services/mockAnalytics.js';
-  import NanoBanana from '$lib/components/icons/NanoBanana.svelte';
-  import Particles from '$lib/components/icons/Particles.svelte';
+	import { onMount } from 'svelte';
+	import { LineChart, BarChart, TimeRangePicker } from '../../components/charts/index.js';
+	import {
+		generateMockTimeSeries,
+		generateMockAggregate,
+		generateMockProviderComparison,
+		generateMockModelComparison,
+		generateMockTopEndpoints
+	} from '$lib/services/mockAnalytics.js';
+	import NanoBanana from '$lib/components/icons/NanoBanana.svelte';
+	import Particles from '$lib/components/icons/Particles.svelte';
 
-  // State
-  let metrics = {
-    tokens: { labels: [], datasets: [] },
-    cost: { labels: [], datasets: [] },
-    requests: { labels: [], datasets: [] }
-  };
+	// State
+	let metrics = {
+		tokens: { labels: [], datasets: [] },
+		cost: { labels: [], datasets: [] },
+		requests: { labels: [], datasets: [] }
+	};
 
-  let aggregate = null;
-  let providerComparison = null;
-  let modelComparison = null;
+	let aggregate = null;
+	let providerComparison = null;
+	let modelComparison = null;
+	let assignmentPivot = null; // T077
 
-  let dateRange = {
-    start: '',
-    end: ''
-  };
+	let dateRange = {
+		start: '',
+		end: ''
+	};
 
-  let loading = false;
-  let activeTab = 'timeseries';
+	let loading = false;
+	let activeTab = 'timeseries';
 
   // API Functions
   async function fetchTimeSeriesData(start, end) {
@@ -88,30 +89,42 @@
     }
   }
 
-  async function fetchModelComparison(start, end) {
-    try {
-      const res = await fetch(`/api/analytics/model-comparison?start_date=${start}&end_date=${end}`);
-      if (!res.ok) throw new Error('API unavailable');
-      modelComparison = await res.json();
-    } catch (error) {
-      console.warn('Using mock model comparison data');
-      modelComparison = generateMockModelComparison();
-    }
-  }
+	async function fetchModelComparison(start, end) {
+		try {
+			const res = await fetch(`/api/analytics/model-comparison?start_date=${start}&end_date=${end}`);
+			if (!res.ok) throw new Error('API unavailable');
+			modelComparison = await res.json();
+		} catch (error) {
+			console.warn('Using mock model comparison data');
+			modelComparison = generateMockModelComparison();
+		}
+	}
 
-  // Handle date range change
-  async function handleDateChange(event) {
-    const { start, end } = event.detail;
-    dateRange = { start, end };
+	async function fetchAssignmentPivot(start, end) {
+		try {
+			const res = await fetch(`/api/metrics/by-assignment?since=${start}T00:00:00Z`);
+			if (!res.ok) throw new Error('API unavailable');
+			assignmentPivot = await res.json();
+		} catch (error) {
+			console.warn('Using mock assignment pivot data');
+			assignmentPivot = [];
+		}
+	}
 
-    // Fetch all data
-    await Promise.all([
-      fetchTimeSeriesData(start, end),
-      fetchAggregateData(start, end),
-      fetchProviderComparison(start, end),
-      fetchModelComparison(start, end)
-    ]);
-  }
+	// Handle date range change
+	async function handleDateChange(event) {
+		const { start, end } = event.detail;
+		dateRange = { start, end };
+
+		// Fetch all data
+		await Promise.all([
+			fetchTimeSeriesData(start, end),
+			fetchAggregateData(start, end),
+			fetchProviderComparison(start, end),
+			fetchModelComparison(start, end),
+			fetchAssignmentPivot(start, end)
+		]);
+	}
 
   // Initialize with default date range (last 7 days)
   function initializeDates() {
@@ -191,18 +204,19 @@
     }
   }
 
-  // Initialize
-  onMount(async () => {
-    initializeDates();
-    if (dateRange.start && dateRange.end) {
-      await Promise.all([
-        fetchTimeSeriesData(dateRange.start, dateRange.end),
-        fetchAggregateData(dateRange.start, dateRange.end),
-        fetchProviderComparison(dateRange.start, dateRange.end),
-        fetchModelComparison(dateRange.start, dateRange.end)
-      ]);
-    }
-  });
+   // Initialize
+   onMount(async () => {
+     initializeDates();
+     if (dateRange.start && dateRange.end) {
+       await Promise.all([
+         fetchTimeSeriesData(dateRange.start, dateRange.end),
+         fetchAggregateData(dateRange.start, dateRange.end),
+         fetchProviderComparison(dateRange.start, dateRange.end),
+         fetchModelComparison(dateRange.start, dateRange.end),
+         fetchAssignmentPivot(dateRange.start, dateRange.end)
+       ]);
+     }
+   });
 </script>
 
 <svelte:head>
@@ -374,47 +388,87 @@
         </div>
       {/if}
 
-      <!-- Model Comparison -->
-      {#if modelComparison && modelComparison.models.length > 0}
-        <div class="chart-card full-width">
-          <h3>Usage by Model</h3>
-          <BarChart
-            labels={modelComparison.models.map(m => m.model)}
-            datasets={[{
-              label: 'Tokens',
-              data: modelComparison.models.map(m => m.tokens)
-            }]}
-            height="300px"
-            showLegend={false}
-          />
-          <div class="comparison-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Model</th>
-                  <th>Requests</th>
-                  <th>Tokens</th>
-                  <th>Cost</th>
-                  <th>Cost/Token</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each modelComparison.models as model}
-                  <tr>
-                    <td>{model.model}</td>
-                    <td>{formatNumber(model.requests)}</td>
-                    <td>{formatNumber(model.tokens)}</td>
-                    <td>{formatCurrency(model.cost)}</td>
-                    <td>${model.cost_per_token.toFixed(6)}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      {/if}
-    </div>
-  {/if}
+       <!-- Model Comparison -->
+       {#if modelComparison && modelComparison.models.length > 0}
+         <div class="chart-card full-width">
+           <h3>Usage by Model</h3>
+           <BarChart
+             labels={modelComparison.models.map(m => m.model)}
+             datasets={[{
+               label: 'Tokens',
+               data: modelComparison.models.map(m => m.tokens)
+             }]}
+             height="300px"
+             showLegend={false}
+           />
+           <div class="comparison-table">
+             <table>
+               <thead>
+                 <tr>
+                   <th>Model</th>
+                   <th>Requests</th>
+                   <th>Tokens</th>
+                   <th>Cost</th>
+                   <th>Cost/Token</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {#each modelComparison.models as model}
+                   <tr>
+                     <td>{model.model}</td>
+                     <td>{formatNumber(model.requests)}</td>
+                     <td>{formatNumber(model.tokens)}</td>
+                     <td>{formatCurrency(model.cost)}</td>
+                     <td>${model.cost_per_token.toFixed(6)}</td>
+                   </tr>
+                 {/each}
+               </tbody>
+             </table>
+           </div>
+         </div>
+       {/if}
+
+       <!-- Per-Assignment Pivot (FR-032) -->
+       {#if assignmentPivot && assignmentPivot.length > 0}
+         <div class="chart-card full-width">
+           <h3>Usage by Assignment</h3>
+           <BarChart
+             labels={assignmentPivot.map(a => a.resolved_assignment_id === 'unassigned' ? 'unassigned' : a.resolved_assignment_id)}
+             datasets={[{
+               label: 'Requests',
+               data: assignmentPivot.map(a => a.total_requests)
+             }]}
+             height="300px"
+             showLegend={false}
+           />
+           <div class="comparison-table">
+             <table>
+               <thead>
+                 <tr>
+                   <th>Assignment</th>
+                   <th>Requests</th>
+                   <th>Success Rate</th>
+                   <th>Cascade Rate</th>
+                   <th>Avg Duration (ms)</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {#each assignmentPivot as a}
+                   <tr>
+                     <td>{a.resolved_assignment_id === 'unassigned' ? 'unassigned' : a.resolved_assignment_id}</td>
+                     <td>{formatNumber(a.total_requests)}</td>
+                     <td>{((a.success_rate || 0) * 100).toFixed(1)}%</td>
+                     <td>{((a.cascade_rate || 0) * 100).toFixed(1)}%</td>
+                     <td>{Math.round(a.avg_duration_ms || 0)}</td>
+                   </tr>
+                 {/each}
+               </tbody>
+             </table>
+           </div>
+         </div>
+       {/if}
+     </div>
+   {/if}
 
   <!-- Empty State -->
   {#if !loading && (!metrics.tokens.labels || metrics.tokens.labels.length === 0)}

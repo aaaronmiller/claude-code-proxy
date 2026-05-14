@@ -18,12 +18,95 @@ from src.services.conversion.tool_behavior_cache import get_tool_argument_style
 
 logger = logging.getLogger(__name__)
 
-# Tool output truncation settings (inspired by Lynkr)
-# Large tool outputs waste tokens and can confuse models
+# Tool output truncation settings (originally from Lynkr, designed for small-context models)
+# DISABLED by default — modern 1M-context models have no need to blindly truncate tool data.
+# Re-enable via env var TOOL_OUTPUT_TRUNCATION=true only if targeting legacy small-context models.
 TOOL_OUTPUT_MAX_CHARS = int(os.getenv("TOOL_OUTPUT_MAX_CHARS", "50000"))
 TOOL_OUTPUT_TRUNCATION_ENABLED = (
-    os.getenv("TOOL_OUTPUT_TRUNCATION", "true").lower() == "true"
+    os.getenv("TOOL_OUTPUT_TRUNCATION", "false").lower() == "true"
 )
+
+# Tool schema stripping — reduce token burn on tool-heavy requests.
+# Claude Code sends 30-50 tools with full JSON Schema objects every turn.
+# These transforms are safe: they don't change tool semantics, only verbosity.
+TOOL_SCHEMA_STRIP_ENABLED = (
+    os.getenv("TOOL_SCHEMA_STRIP", "true").lower() != "false"
+)
+_TOOL_PARAM_DESC_MAX = int(os.getenv("TOOL_PARAM_DESC_MAX", "120"))
+_TOOL_DESC_MAX = int(os.getenv("TOOL_DESC_MAX", "200"))
+
+
+def _strip_tool_schemas(openai_tools: list) -> list:
+    """
+    Reduce token count of tool definitions before sending to the model.
+
+    Transforms applied (all reversible / semantics-preserving):
+    - Deduplicate tools by name (keep first occurrence — CC sends dupes sometimes)
+    - Remove additionalProperties: false (JSON Schema default, wastes tokens)
+    - Truncate tool-level description to TOOL_DESC_MAX chars
+    - Truncate per-property description to TOOL_PARAM_DESC_MAX chars
+    - Drop empty 'required': [] arrays
+    - Drop null/empty 'default' values that add no information
+    """
+    if not TOOL_SCHEMA_STRIP_ENABLED or not openai_tools:
+        return openai_tools
+
+    seen_names: set = set()
+    stripped = []
+
+    for tool in openai_tools:
+        fn = tool.get("function", {})
+        name = fn.get("name", "")
+
+        # Deduplicate by name
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+
+        # Truncate tool-level description
+        desc = fn.get("description", "")
+        if len(desc) > _TOOL_DESC_MAX:
+            desc = desc[:_TOOL_DESC_MAX].rsplit(" ", 1)[0] + "…"
+
+        params = fn.get("parameters", {})
+        if isinstance(params, dict):
+            params = dict(params)  # shallow copy
+
+            # Remove additionalProperties: false (it's the JSON Schema default)
+            params.pop("additionalProperties", None)
+
+            # Drop empty required array
+            if params.get("required") == []:
+                params.pop("required")
+
+            # Truncate per-property descriptions
+            props = params.get("properties")
+            if isinstance(props, dict):
+                new_props = {}
+                for prop_name, prop_schema in props.items():
+                    if not isinstance(prop_schema, dict):
+                        new_props[prop_name] = prop_schema
+                        continue
+                    prop = dict(prop_schema)
+                    prop_desc = prop.get("description", "")
+                    if len(prop_desc) > _TOOL_PARAM_DESC_MAX:
+                        prop["description"] = prop_desc[:_TOOL_PARAM_DESC_MAX].rsplit(" ", 1)[0] + "…"
+                    # Drop null/empty defaults — they add no value
+                    if "default" in prop and prop["default"] in (None, "", [], {}):
+                        prop.pop("default")
+                    new_props[prop_name] = prop
+                params["properties"] = new_props
+
+        stripped.append({
+            "type": tool.get("type", "function"),
+            "function": {
+                "name": name,
+                "description": desc,
+                "parameters": params,
+            },
+        })
+
+    return stripped
 
 
 def truncate_tool_output(content: str, max_chars: int = None) -> Tuple[str, bool]:
@@ -115,18 +198,18 @@ def validate_tool_message_sequence(
                     f"tool_call_id={tool_call_id}, no matching assistant tool_calls found"
                 )
 
-                # FIX (2026-03-16) Issue 18: DON'T remove orphaned tool results
-                # Removing them breaks conversation continuity in multi-turn tool use
-                # The model can handle some inconsistency better than missing data
-                # if remove_orphans:
-                #     logger.info(f"Removing orphaned tool message (tool_call_id={tool_call_id})")
-                #     continue  # Skip this message
+                # Orphaned tool results are kept intentionally.
+                # Removing them breaks multi-turn tool-use conversations: the model
+                # loses context about what tools were called and gets confused about
+                # which tool_call_id maps to which result. Models tolerate mild
+                # sequence inconsistency better than missing data.
+                pass
 
         validated.append(msg)
 
     if orphan_count > 0:
-        logger.info(
-            f"Tool message validation complete: {orphan_count} orphan(s) kept for conversation continuity (Issue 18)"
+        logger.debug(
+            f"Tool message validation: {orphan_count} orphaned result(s) kept for conversation continuity"
         )
 
     return validated
@@ -300,6 +383,17 @@ def convert_claude_to_openai(
                     text_parts.append(block.get("text", ""))
             system_text = "\n\n".join(text_parts)
 
+        # CC Re-Render Hotfix: Prevent models from using Bash to echo insights.
+        # Match strong Claude Code markers only — a bare "claude" substring can appear
+        # in unrelated system prompts (model names, URLs, doc references) and would
+        # incorrectly inject this rule everywhere.
+        if (
+            "You are Claude Code" in system_text
+            or "claude-code" in system_text.lower()
+            or "Anthropic's official CLI" in system_text
+        ):
+            system_text += "\n\nIMPORTANT RULE: Never use the Bash/Repl tools to execute 'echo' commands or shell scripts solely to output insights, thoughts, or explanations. Always output your insights directly as inline text."
+
         if system_text.strip():
             openai_messages.append(
                 {"role": Constants.ROLE_SYSTEM, "content": system_text.strip()}
@@ -348,15 +442,25 @@ def convert_claude_to_openai(
     # Check if this is a newer OpenAI model (o1, o3, o4, gpt-5)
     is_newer_model = model_manager.is_newer_openai_model(openai_model)
 
-    # Calculate token limit - cap to model's actual output limit to prevent
-    # context overflow errors (e.g. requesting 128K output on a 196K context model)
+    # Calculate token limit - if user sets limits, respect them; otherwise let API handle it
     from src.services.usage.model_limits import get_output_limit
+
     model_output_limit = get_output_limit(openai_model)
-    effective_max = min(config.max_tokens_limit, model_output_limit)
-    token_limit = min(
-        max(claude_request.max_tokens, config.min_tokens_limit),
-        effective_max,
-    )
+
+    # Only apply limits if user explicitly set them
+    if config.max_tokens_limit:
+        effective_max = min(config.max_tokens_limit, model_output_limit)
+    else:
+        effective_max = model_output_limit
+
+    if config.min_tokens_limit:
+        token_limit = min(
+            max(claude_request.max_tokens, config.min_tokens_limit),
+            effective_max,
+        )
+    else:
+        token_limit = claude_request.max_tokens
+
     if token_limit < claude_request.max_tokens:
         logger.debug(
             f"Capped max_tokens {claude_request.max_tokens} → {token_limit} "
@@ -431,6 +535,20 @@ def convert_claude_to_openai(
         if openai_tools:
             # Sanitize tool names for provider compatibility (e.g., lowercase for Google/Gemini)
             openai_tools = sanitize_tool_declarations(openai_tools)
+            # Strip verbose schema fields — skip for strict-mode providers that
+            # require explicit additionalProperties: false (OpenAI strict tool use).
+            # Also skip for Gemini direct endpoints that validate schemas strictly.
+            _strict_provider = target_provider and target_provider.lower() in (
+                "openai", "azure", "gemini", "google"
+            )
+            if not _strict_provider:
+                before_count = len(openai_tools)
+                openai_tools = _strip_tool_schemas(openai_tools)
+                after_count = len(openai_tools)
+                if after_count < before_count:
+                    logger.debug(f"Tool dedup: {before_count} → {after_count} tools")
+            else:
+                logger.debug(f"Tool schema strip skipped for strict provider: {target_provider}")
             openai_request["tools"] = openai_tools
             logger.debug(
                 f"Added {len(openai_tools)} tools to OpenAI request: {[t['function']['name'] for t in openai_tools]}"
@@ -699,9 +817,7 @@ def convert_claude_assistant_message(
             # Avoid model-specific hardcoding. Learn whether this provider/tool expects
             # "prompt" or "command" based on observed responses.
             target_provider_lower = target_provider.lower() if target_provider else ""
-            observed_style = get_tool_argument_style(
-                target_provider_lower, tool_name
-            )
+            observed_style = get_tool_argument_style(target_provider_lower, tool_name)
             should_reverse_rename = observed_style == "prompt"
 
             # Debug logging

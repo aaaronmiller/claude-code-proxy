@@ -73,7 +73,7 @@ class ProfileManager:
                 "path": profile_file,
                 "modified": modified,
                 "description": description,
-                "provider": config.get("PROVIDER_BASE_URL", "").replace("https://", "").replace("/v1", ""),
+                "provider": config.get("BIG_ENDPOINT", "").replace("https://", "").replace("/v1", ""),
                 "big_model": config.get("BIG_MODEL", ""),
                 "size": stats.st_size,
             })
@@ -153,7 +153,7 @@ class ProfileManager:
             # Show profile info
             config = self._read_profile_config(profile_path)
             console.print("[bold]Active Configuration:[/bold]")
-            console.print(f"  Provider: [cyan]{config.get('PROVIDER_BASE_URL', 'Not set')}[/cyan]")
+            console.print(f"  Provider: [cyan]{config.get('BIG_ENDPOINT', 'Not set')}[/cyan]")
             console.print(f"  BIG Model: [yellow]{config.get('BIG_MODEL', 'Not set')}[/yellow]")
             console.print(f"  MIDDLE Model: [yellow]{config.get('MIDDLE_MODEL', 'Not set')}[/yellow]")
             console.print(f"  SMALL Model: [yellow]{config.get('SMALL_MODEL', 'Not set')}[/yellow]")

@@ -65,8 +65,8 @@ export ANTHROPIC_BASE_URL=http://localhost:8082
 ### Provider Authentication
 
 Configured via environment variables:
-- `PROVIDER_API_KEY` - API key for backend provider
-- `PROVIDER_BASE_URL` - Backend provider's base URL
+- `BIG_API_KEY` - API key for backend provider
+- `BIG_ENDPOINT` - Backend provider's base URL
 
 ---
 

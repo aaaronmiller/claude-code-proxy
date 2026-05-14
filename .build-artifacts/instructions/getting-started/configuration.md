@@ -48,10 +48,10 @@ Environment variables can be set in your `.env` file or exported in your shell.
 
 ```bash
 # Your provider's API key
-PROVIDER_API_KEY="your-api-key-here"
+BIG_API_KEY="your-api-key-here"
 
 # Provider base URL
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 ```
 
 ### Legacy Names (Deprecated)
@@ -59,8 +59,8 @@ PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
 These still work but show deprecation warnings:
 
 ```bash
-OPENAI_API_KEY="..."       # Use PROVIDER_API_KEY instead
-OPENAI_BASE_URL="..."      # Use PROVIDER_BASE_URL instead
+OPENAI_API_KEY="..."       # Use BIG_API_KEY instead
+OPENAI_BASE_URL="..."      # Use BIG_ENDPOINT instead
 ANTHROPIC_API_KEY="..."    # Use PROXY_AUTH_KEY instead
 ```
 
@@ -78,8 +78,8 @@ PROXY_AUTH_KEY="your-secret-key"
 ### VibeProxy / Antigravity (Recommended)
 Free access to Claude and Gemini models via Google's Antigravity service. No API keys needed.
 ```bash
-PROVIDER_API_KEY="dummy"  # Not used - OAuth handled by VibeProxy
-PROVIDER_BASE_URL="http://127.0.0.1:8317/v1"
+BIG_API_KEY="dummy"  # Not used - OAuth handled by VibeProxy
+BIG_ENDPOINT="http://127.0.0.1:8317/v1"
 
 # Recommended models
 BIG_MODEL="gemini-claude-opus-4-5-thinking"     # Claude Opus with 128k thinking
@@ -92,29 +92,29 @@ REASONING_MAX_TOKENS="128000"
 ### OpenRouter (Recommended)
 352+ models, generous free tier, best for experimentation.
 ```bash
-PROVIDER_API_KEY="sk-or-v1-..."
-PROVIDER_BASE_URL="https://openrouter.ai/api/v1"
+BIG_API_KEY="sk-or-v1-..."
+BIG_ENDPOINT="https://openrouter.ai/api/v1"
 ```
 
 ### Google Gemini
 Free with API key, excellent for development.
 ```bash
-PROVIDER_API_KEY="AIza..."
-PROVIDER_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
+BIG_API_KEY="AIza..."
+BIG_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/openai/"
 ```
 
 ### OpenAI
 Official OpenAI API.
 ```bash
-PROVIDER_API_KEY="sk-..."
-PROVIDER_BASE_URL="https://api.openai.com/v1"
+BIG_API_KEY="sk-..."
+BIG_ENDPOINT="https://api.openai.com/v1"
 ```
 
 ### Local Models (Ollama)
 100% free, runs on your machine.
 ```bash
-PROVIDER_API_KEY="dummy"  # Any value works
-PROVIDER_BASE_URL="http://localhost:11434/v1"
+BIG_API_KEY="dummy"  # Any value works
+BIG_ENDPOINT="http://localhost:11434/v1"
 ```
 
 ---

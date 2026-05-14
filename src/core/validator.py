@@ -69,28 +69,28 @@ class ConfigValidator:
         """Check that required environment variables are set"""
         # Core variables
         provider_key = (
-            os.getenv("PROVIDER_API_KEY")
+            os.getenv("BIG_API_KEY")
             or os.getenv("OPENAI_API_KEY")
             or os.getenv("OPENROUTER_API_KEY")
         )
         provider_url = (
-            os.getenv("PROVIDER_BASE_URL")
+            os.getenv("BIG_ENDPOINT")
             or os.getenv("OPENAI_BASE_URL")
             or os.getenv("OPENROUTER_BASE_URL")
         )
 
         if not provider_key:
             self.errors.append(
-                "PROVIDER_API_KEY is not set\n"
+                "BIG_API_KEY is not set\n"
                 "  → Run: python setup_wizard.py\n"
-                '  → Or add to .env: PROVIDER_API_KEY="your-key-here"'
+                '  → Or add to .env: BIG_API_KEY="your-key-here"'
             )
 
         if not provider_url:
             self.errors.append(
-                "PROVIDER_BASE_URL is not set\n"
+                "BIG_ENDPOINT is not set\n"
                 "  → Run: python setup_wizard.py\n"
-                '  → Or add to .env: PROVIDER_BASE_URL="https://api.provider.com/v1"'
+                '  → Or add to .env: BIG_ENDPOINT="https://api.provider.com/v1"'
             )
 
         # Model configuration (at least one should be set)
@@ -135,7 +135,7 @@ class ConfigValidator:
             )
 
         # Check for OpenRouter format
-        provider_url = os.getenv("PROVIDER_BASE_URL", "")
+        provider_url = os.getenv("BIG_ENDPOINT", "")
         if "openrouter.ai" in provider_url:
             for model_name, model_var in [
                 (big_model, "BIG_MODEL"),
@@ -228,8 +228,8 @@ class ConfigValidator:
         from src.core.config import validate_api_key_format, set_provider_status
 
         # Get provider config
-        provider_key = os.getenv("PROVIDER_API_KEY") or os.getenv("OPENAI_API_KEY")
-        provider_url = os.getenv("PROVIDER_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+        provider_key = os.getenv("BIG_API_KEY") or os.getenv("OPENAI_API_KEY")
+        provider_url = os.getenv("BIG_ENDPOINT") or os.getenv("OPENAI_BASE_URL")
 
         if not provider_key or not provider_url:
             return  # Already flagged in required variables check
@@ -443,35 +443,35 @@ class ConfigValidator:
     def _check_common_mistakes(self):
         """Check for common configuration mistakes"""
         # Check if API key looks valid
-        provider_key = os.getenv("PROVIDER_API_KEY") or os.getenv("OPENAI_API_KEY")
+        provider_key = os.getenv("BIG_API_KEY") or os.getenv("OPENAI_API_KEY")
         if provider_key:
             if len(provider_key) < 20:
                 self.warnings.append(
-                    f"PROVIDER_API_KEY is very short ({len(provider_key)} chars)\n"
+                    f"BIG_API_KEY is very short ({len(provider_key)} chars)\n"
                     f"  → Most API keys are 30+ characters\n"
                     f"  → Make sure you copied the full key"
                 )
 
             if provider_key.startswith("sk-ant-"):
                 self.warnings.append(
-                    "PROVIDER_API_KEY looks like an Anthropic key (sk-ant-...)\n"
+                    "BIG_API_KEY looks like an Anthropic key (sk-ant-...)\n"
                     "  → This proxy is for NON-Anthropic providers\n"
                     "  → Use OpenRouter, Gemini, OpenAI, or local models\n"
                     "  → See: README.md for provider setup"
                 )
 
         # Check URL format
-        provider_url = os.getenv("PROVIDER_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+        provider_url = os.getenv("BIG_ENDPOINT") or os.getenv("OPENAI_BASE_URL")
         if provider_url:
             if not provider_url.startswith(("http://", "https://")):
                 self.errors.append(
-                    f"PROVIDER_BASE_URL must start with http:// or https://\n"
+                    f"BIG_ENDPOINT must start with http:// or https://\n"
                     f"  → Current value: {provider_url}"
                 )
 
             if not provider_url.endswith("/v1"):
                 self.warnings.append(
-                    f"PROVIDER_BASE_URL should typically end with /v1\n"
+                    f"BIG_ENDPOINT should typically end with /v1\n"
                     f"  → Current value: {provider_url}\n"
                     f"  → Example: https://api.openai.com/v1"
                 )
@@ -482,9 +482,9 @@ class ConfigValidator:
                 server_port = os.getenv("PORT", "8082")
                 if f":{server_port}" in provider_url:
                     self.warnings.append(
-                        f"PROVIDER_BASE_URL appears to be pointing to THIS proxy ({provider_url})\n"
+                        f"BIG_ENDPOINT appears to be pointing to THIS proxy ({provider_url})\n"
                         f"  → This will cause an infinite loop!\n"
-                        f"  → PROVIDER_BASE_URL should point to the UPSTREAM provider (e.g. OpenAI, OpenRouter)\n"
+                        f"  → BIG_ENDPOINT should point to the UPSTREAM provider (e.g. OpenAI, OpenRouter)\n"
                         f"  → The 'localhost:{server_port}' address is for your Claude Code client, not this config."
                     )
 

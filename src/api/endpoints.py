@@ -21,10 +21,11 @@ from src.services.conversion.response_converter import (
     convert_openai_streaming_to_claude,
 )
 from src.core.model_manager import model_manager
-from src.services.logging.request_logger import request_logger, RequestLogger
-from src.services.logging.compact_logger import compact_logger
-from src.services.usage.usage_tracker import usage_tracker
+from src.services.models.provider_detector import validate_provider_configuration
+
+# usage_tracker logging moved to client for per-attempt metrics (T072, T073)
 from src.services.usage.model_limits import check_model_limits
+from src.services.usage.usage_tracker import usage_tracker
 from src.services.models.model_filter import filter_models
 from src.services.prompts.prompt_injection_middleware import inject_system_prompts
 from src.services.usage.model_limits import get_model_limits
@@ -40,6 +41,21 @@ from src.models.crosstalk import (
     CrosstalkDeleteResponse,
     CrosstalkError,
 )
+
+# Request snapshot dependency for in-flight config isolation (T056)
+from src.core.config_resolver import get_resolver, set_snapshot, reset_snapshot
+
+
+async def config_snapshot_dep():
+    """Capture a config snapshot at request entry and install it for the request context."""
+    resolver = get_resolver()
+    snap = resolver.snapshot()
+    token = set_snapshot(snap)
+    try:
+        yield
+    finally:
+        reset_snapshot(token)
+
 
 # Debug logging for traffic capture
 import logging
@@ -277,9 +293,8 @@ async def log_request_body(request: Request):
 
 router = APIRouter()
 
-# Choose logger based on environment variable
-USE_COMPACT_LOGGER = os.getenv("USE_COMPACT_LOGGER", "false").lower() == "true"
-active_logger = compact_logger if USE_COMPACT_LOGGER else request_logger
+# Unified proxy logger (replaces compact_logger + request_logger)
+from src.services.logging.proxy_logger import proxy_logger
 
 # Get custom headers from config
 custom_headers = config.get_custom_headers()
@@ -316,15 +331,15 @@ async def validate_and_extract_api_key(
     # Extract Anthropic API key from headers (for Claude client validation)
     if x_api_key:
         client_api_key = x_api_key
-        logger.debug(f"API key from x-api-key header: {client_api_key[:10]}...")
+        logger.debug(f"API key from x-api-key header: {client_api_key[:8]}...")
     elif authorization and authorization.startswith("Bearer "):
         client_api_key = authorization.replace("Bearer ", "")
-        logger.debug(f"API key from Authorization header: {client_api_key[:10]}...")
+        logger.debug(f"API key from Authorization header: {client_api_key[:8]}...")
 
     # Extract OpenAI API key from headers (for passthrough mode)
     if openai_api_key:
         openai_key = openai_api_key
-        logger.debug(f"OpenAI API key from header: {openai_key[:10]}...")
+        logger.debug(f"OpenAI API key from header: {openai_key[:8]}...")
 
     # Passthrough mode: Require OpenAI API key from user
     if config.passthrough_mode:
@@ -348,7 +363,7 @@ async def validate_and_extract_api_key(
     if config.anthropic_api_key:
         if not client_api_key or not config.validate_client_api_key(client_api_key):
             logger.warning(
-                f"Invalid API key provided by client. Expected: {config.anthropic_api_key}, Got: {client_api_key[:10] if client_api_key else 'None'}..."
+                f"Invalid API key provided by client. Expected: {config.anthropic_api_key}, Got: {client_api_key[:8] if client_api_key else 'None'}..."
             )
             raise HTTPException(
                 status_code=401,
@@ -364,6 +379,7 @@ async def create_message(
     request: ClaudeMessagesRequest,
     http_request: Request,
     openai_api_key: Optional[str] = Depends(validate_and_extract_api_key),
+    _snapshot: Any = Depends(config_snapshot_dep),
 ):
     # Log full request for debugging
     await log_request_body(http_request)
@@ -406,8 +422,16 @@ async def create_message(
 
         # Determine endpoint and provider FIRST (before conversion)
         client = openai_client.get_client_for_model(routed_model, config)
-        endpoint = str(client.base_url) if hasattr(client, 'base_url') else config.openai_base_url
-        provider = config.provider_for_endpoint(endpoint) if hasattr(config, 'provider_for_endpoint') else config.default_provider
+        endpoint = (
+            str(client.base_url)
+            if hasattr(client, "base_url")
+            else config.openai_base_url
+        )
+        provider = (
+            config.provider_for_endpoint(endpoint)
+            if hasattr(config, "provider_for_endpoint")
+            else config.default_provider
+        )
         original_tier = None  # Track for fallback logging
 
         # FALLBACK ROUTING: If selected endpoint uses VibeProxy and it's down, fallback to SMALL
@@ -450,26 +474,31 @@ async def create_message(
         # _original_model carries the raw Claude model name (e.g. "claude-haiku-...") so the
         # router can detect background/lightweight requests even after tier mapping.
         openai_request["_original_model"] = request.model
-        _use_case_tier: Optional[str] = None  # cascade tier for use-case-routed requests
+        _use_case_tier: Optional[str] = None
+        assignment_id: Optional[str] = None
+        incoming_identifier = request.model
+        original_model_id = request.model
         try:
             from src.core.model_router import get_router
+
             _use_case_route = get_router(config).route(openai_request)
             if _use_case_route:
                 openai_request["model"] = _use_case_route.model
-                
+                assignment_id = _use_case_route.assignment_id
+
                 # Check for custom endpoint wrapper
                 if _use_case_route.base_url:
                     endpoint = _use_case_route.base_url
-                    if hasattr(config, 'provider_for_endpoint'):
+                    if hasattr(config, "provider_for_endpoint"):
                         provider = config.provider_for_endpoint(endpoint)
-                    
+
                     active_api_key = _use_case_route.api_key or openai_api_key
                     custom_client = OpenAIClient(
-                        active_api_key, 
-                        endpoint, 
-                        config.request_timeout, 
+                        active_api_key,
+                        endpoint,
+                        config.request_timeout,
                         api_version=config.azure_api_version,
-                        custom_headers=custom_headers
+                        custom_headers=custom_headers,
                     )
                     custom_client.configure_per_model_clients(config)
 
@@ -478,11 +507,13 @@ async def create_message(
                 # image/web_search/think → big tier fallbacks (capability matters)
                 # long_context → big tier fallbacks (context window matters)
                 _orig = (openai_request.get("_original_model") or "").lower()
-                
+
                 # Check background model string handling safely against string or RouteTarget
                 bg_config = getattr(config, "router_background", "")
-                bg_model_str = bg_config.model if hasattr(bg_config, "model") else str(bg_config)
-                
+                bg_model_str = (
+                    bg_config.model if hasattr(bg_config, "model") else str(bg_config)
+                )
+
                 if "haiku" in _orig or _use_case_route.model == bg_model_str:
                     _use_case_tier = "middle"
                 else:
@@ -495,7 +526,12 @@ async def create_message(
 
         def infer_model_tier(model_name: str) -> Optional[str]:
             def norm(name):
-                return name.split("/", 1)[1].lower() if name and "/" in name else (name or "").lower()
+                return (
+                    name.split("/", 1)[1].lower()
+                    if name and "/" in name
+                    else (name or "").lower()
+                )
+
             req = norm(model_name)
             if req == norm(config.big_model):
                 return "big"
@@ -503,6 +539,9 @@ async def create_message(
                 return "middle"
             if req == norm(config.small_model):
                 return "small"
+            local_model = getattr(config, "local_model", None)
+            if local_model and req == norm(local_model):
+                return "local"
             return None
 
         # Log API configuration for debugging (helps diagnose 401 errors)
@@ -514,7 +553,7 @@ async def create_message(
             )
         else:
             api_key_preview = (
-                config.openai_api_key[:15] if config.openai_api_key else "None"
+                config.openai_api_key[:8] if config.openai_api_key else "None"
             )
             logger.debug(
                 f"Request {request_id}: Using proxy mode with server API key: {api_key_preview}..."
@@ -577,36 +616,161 @@ async def create_message(
                 logger.debug(f"Workspace name extraction failed: {e}")
                 return None
 
+        # Separate stable header (system + tools — identical every turn in a session)
+        # from variable body (messages — changes each turn).
+        # Counting them separately lets the token cache hit on the stable portion,
+        # which is 60-80% of input tokens in a typical Claude Code session.
+        stable_text = ""
         if request.system:
             if isinstance(request.system, str):
+                stable_text += request.system
                 input_text += request.system
                 workspace_name = extract_workspace_name(request.system)
             elif isinstance(request.system, list):
                 for block in request.system:
                     if hasattr(block, "text"):
+                        stable_text += block.text
                         input_text += block.text
                         if not workspace_name and block.text:
                             workspace_name = extract_workspace_name(block.text)
 
+        # Append tool schema text to stable portion (same every turn)
+        if request.tools:
+            import json as _json
+            stable_text += _json.dumps([
+                {"name": t.name, "desc": t.description or ""}
+                for t in request.tools if t.name
+            ], separators=(",", ":"))
+
+        variable_text = ""
         for msg in request.messages:
             if isinstance(msg.content, str):
+                variable_text += msg.content
                 input_text += msg.content
             elif isinstance(msg.content, list):
                 for block in msg.content:
                     if hasattr(block, "text") and block.text:
+                        variable_text += block.text
                         input_text += block.text
 
-        # Get model limits and token counts for logging
         # Get model limits and token counts for logging
         from src.services.usage.model_limits import get_model_limits
 
         context_limit, output_limit = get_model_limits(routed_model)
 
-        # Estimate input tokens
-        input_tokens = 0
-        if input_text:
-            # Rough estimate: ~4 characters per token
-            input_tokens = max(1, len(input_text) // 4)
+        # Count tokens: stable portion hits the LRU cache every turn after turn 1;
+        # variable portion (new messages) is always encoded fresh.
+        from src.services.token_cache import count_tokens
+        input_tokens = count_tokens(stable_text) + count_tokens(variable_text)
+
+        # ── Semantic dedup cache ──────────────────────────────────────────────
+        # Only for non-streaming requests — streaming responses are generators,
+        # not serializable for cache storage. Also skip tool-call requests since
+        # their responses include unique tool_use IDs that can't be replayed.
+        from src.services.semantic_cache import semantic_cache, _MIN_TOKENS
+        _sem_cache_key = input_text
+        _sem_cached = None
+        if (
+            not (request.stream)
+            and not request.tools
+            and input_tokens >= _MIN_TOKENS
+        ):
+            _sem_cached = semantic_cache.lookup(_sem_cache_key)
+            if _sem_cached is not None:
+                logger.info(
+                    f"[SEMANTIC CACHE] Hit for request {request_id} "
+                    f"(stats: {semantic_cache.stats()})"
+                )
+                from fastapi.responses import JSONResponse as _JSONResponse
+                return _JSONResponse(content=_sem_cached)
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── Token budget enforcement ──────────────────────────────────────────
+        # Gate at request boundary — cheaper than mid-stream cancellation.
+        # Disabled when budget = 0 (default).
+        _per_req_budget = getattr(config, "per_request_token_budget", 0) or 0
+        _daily_budget = getattr(config, "daily_token_budget", 0) or 0
+
+        if _per_req_budget > 0 and input_tokens > _per_req_budget:
+            logger.warning(
+                f"Request {request_id}: input tokens {input_tokens} exceeds "
+                f"per-request budget {_per_req_budget} — rejecting"
+            )
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "token_budget_exceeded",
+                    "message": f"Request input ({input_tokens} tokens) exceeds per-request budget ({_per_req_budget}). "
+                               "Reduce context or raise PER_REQUEST_TOKEN_BUDGET.",
+                    "input_tokens": input_tokens,
+                    "budget": _per_req_budget,
+                },
+            )
+
+        if _daily_budget > 0:
+            daily_used = usage_tracker.get_daily_total_tokens()
+            if daily_used >= _daily_budget:
+                logger.warning(
+                    f"Request {request_id}: daily token budget exhausted "
+                    f"({daily_used}/{_daily_budget}) — rejecting"
+                )
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "daily_budget_exhausted",
+                        "message": f"Daily token budget exhausted ({daily_used}/{_daily_budget}). "
+                                   "Resets at UTC midnight or raise DAILY_TOKEN_BUDGET.",
+                        "daily_used": daily_used,
+                        "daily_budget": _daily_budget,
+                    },
+                )
+        # ── Daily cost budget gate ────────────────────────────────────────────
+        _daily_cost_budget = getattr(config, "daily_cost_budget", 0.0) or 0.0
+        if _daily_cost_budget > 0.0:
+            daily_cost_used = usage_tracker.get_daily_total_cost()
+            if daily_cost_used >= _daily_cost_budget:
+                logger.warning(
+                    f"Request {request_id}: daily cost budget exhausted "
+                    f"(${daily_cost_used:.4f}/${_daily_cost_budget:.4f}) — rejecting"
+                )
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "daily_cost_budget_exhausted",
+                        "message": f"Daily cost budget exhausted (${daily_cost_used:.4f} / ${_daily_cost_budget:.4f}). "
+                                   "Resets at UTC midnight or raise DAILY_COST_BUDGET.",
+                        "daily_cost_used": round(daily_cost_used, 6),
+                        "daily_cost_budget": _daily_cost_budget,
+                    },
+                )
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── Headroom bypass for tiny requests ────────────────────────────────
+        # Compression overhead (~10-30ms + GPU warmup) isn't worth it for small
+        # requests. When input_tokens < threshold: skip headroom and send direct
+        # to the provider. HEADROOM_BYPASS_THRESHOLD=0 disables (default).
+        _bypass_threshold = getattr(config, "headroom_bypass_threshold", 0) or 0
+        if (
+            _bypass_threshold > 0
+            and input_tokens < _bypass_threshold
+            and "127.0.0.1:8787" in (endpoint or "")
+        ):
+            # Create a direct client pointing to the actual provider URL
+            from src.core.proxy_chain import get_chain
+            _chain = get_chain()
+            _direct_url = _chain.direct_provider_url() if hasattr(_chain, "direct_provider_url") else None
+            if _direct_url and _direct_url != endpoint:
+                from src.core.client import OpenAIClient as _OAIClient
+                custom_client = _OAIClient(
+                    config.openai_api_key or "",
+                    _direct_url,
+                    config.request_timeout,
+                )
+                logger.debug(
+                    f"Headroom bypass: {input_tokens} tks < threshold {_bypass_threshold} "
+                    f"→ direct to {_direct_url}"
+                )
+        # ─────────────────────────────────────────────────────────────────────
 
         # Detect images and tools
         has_images = False
@@ -619,23 +783,22 @@ async def create_message(
                         break
 
         # Log comprehensive request start
-        active_logger.log_request_start(
+        proxy_logger.log_start(
             request_id=request_id,
             original_model=request.model,
             routed_model=routed_model,
             endpoint=endpoint,
-            reasoning_config=reasoning_config,
             stream=request.stream if request.stream is not None else False,
-            input_text=input_text,
+            input_tokens=input_tokens,
             context_limit=context_limit,
             output_limit=output_limit,
-            input_tokens=input_tokens,
             message_count=message_count,
-            has_system=has_system,
             has_tools=has_tools,
+            has_reasoning=reasoning_config is not None,
             has_images=has_images,
-            client_info=client_ip,
-            workspace_name=workspace_name,
+            assignment_id=assignment_id or "",
+            client_ip=client_ip or "",
+            user_agent="",
         )
 
         # Dashboard hook: request start
@@ -657,13 +820,41 @@ async def create_message(
             )
             raise HTTPException(status_code=499, detail="Client disconnected")
 
+        # Extract a stable session fingerprint for grouping related requests.
+        # Reuses the deduplicator's extraction logic which reads metadata.user_id
+        # or system prompt markers — much better than request_id[:8] which makes
+        # every request its own "session".
+        session_fingerprint = request_deduplicator._extract_session_fingerprint(request)
+        session_id = hashlib.sha256(session_fingerprint.encode()).hexdigest()[:8]
+
+        # Inject session fingerprint into openai_request for mid-stream tier tracking
+        openai_request["_session_fingerprint"] = session_fingerprint
+
+        # Apply mid-stream tier override from previous turn (if budget was hit last turn)
+        from src.core.client import get_mid_stream_tier_override
+        _mid_tier_override = get_mid_stream_tier_override(session_fingerprint)
+        if _mid_tier_override:
+            logger.info(
+                f"[MID-STREAM] Session {session_id} continues on cheaper tier: {_mid_tier_override}"
+            )
+            # Apply the override by adjusting the tier inference for cascade
+            openai_request["_force_tier"] = _mid_tier_override
+
         if request.stream:
             # Streaming response - wrap in error handling
             logger.debug(f"Starting streaming response for request_id: {request_id}")
             try:
                 active_openai_client = custom_client if custom_client else openai_client
-                tier = infer_model_tier(openai_request.get("model", "")) or _use_case_tier
-                if config.model_cascade and tier:
+                tier = openai_request.pop("_force_tier", None) or (
+                    infer_model_tier(openai_request.get("model", "")) or _use_case_tier
+                )
+                # Skip cascade if the tier is disabled
+                tier_enabled = {
+                    "big": getattr(config, "big_enabled", True),
+                    "middle": getattr(config, "middle_enabled", True),
+                    "small": getattr(config, "small_enabled", True),
+                }.get(tier, True)
+                if config.model_cascade and tier and tier_enabled:
                     openai_stream = (
                         active_openai_client.create_chat_completion_stream_with_cascade(
                             openai_request,
@@ -675,9 +866,113 @@ async def create_message(
                     )
                 else:
                     openai_stream = active_openai_client.create_chat_completion_stream(
-                        openai_request, request_id, config, api_key=active_api_key
+                        openai_request,
+                        request_id=request_id,
+                        config=config,
+                        api_key=active_api_key,
+                        assignment_id=assignment_id,
+                        incoming_identifier=incoming_identifier,
                     )
                 logger.debug(f"OpenAI stream created for request_id: {request_id}")
+
+                # Callback fired when the streaming generator completes.
+                # This is the ONLY place to capture streaming usage data because the
+                # generator yields lazily — by the time create_message() returns the
+                # StreamingResponse, the stream hasn't started yet.
+                async def _on_stream_complete(
+                    stream_usage, stop_reason, duration_ms, error, actual_model=None
+                ):
+                    """Log streaming request completion to usage tracker and request logger."""
+                    try:
+                        # status computed for usage_tracker below
+                        # Many providers don't send usage in streaming chunks.
+                        # Fall back to captured/estimated values.
+                        stream_input = stream_usage.get("input_tokens", 0)
+                        if not stream_input:
+                            stream_input = input_tokens
+                        stream_output = stream_usage.get("output_tokens", 0)
+
+                        # Build a usage dict for the logger if empty
+                        if not stream_usage or not stream_usage.get("input_tokens"):
+                            stream_usage = {
+                                "input_tokens": stream_input,
+                                "output_tokens": stream_output,
+                            }
+
+                        # Log completion to terminal (shows 🟢)
+                        proxy_logger.log_complete(
+                            request_id=request_id,
+                            usage=stream_usage,
+                            duration_ms=duration_ms,
+                            status="OK" if not error else f"ERR: {error[:60]}",
+                            model_name=actual_model or routed_model,
+                            stream=True,
+                            original_model=original_model_id,
+                            assignment_id=assignment_id or "",
+                            client_ip=client_ip or "",
+                            cascade_chain="fallback: " + actual_model
+                            if actual_model and actual_model != routed_model
+                            else "",
+                        )
+
+                        # Structured event for reliability scoring + error feedback loop
+                        try:
+                            from src.services.logging.event_logger import event_logger
+                            from src.services.models.cost_lookup import estimate_cost
+                            _cascade_d = 1 if (actual_model and actual_model != routed_model) else 0
+                            _cost = estimate_cost(actual_model or routed_model,
+                                                  stream_usage.get("input_tokens", 0),
+                                                  stream_usage.get("output_tokens", 0)) or 0.0
+                            event_logger.record(
+                                request_id=request_id,
+                                model_attempted=routed_model,
+                                model_succeeded=actual_model or routed_model,
+                                cascade_depth=_cascade_d,
+                                error_type=str(error)[:50] if error else None,
+                                latency_ms=duration_ms,
+                                input_tokens=stream_usage.get("input_tokens", 0),
+                                output_tokens=stream_usage.get("output_tokens", 0),
+                                cost_usd=_cost,
+                                cache_hit=False,
+                                tier=infer_model_tier(routed_model) or "",
+                                stream=True,
+                            )
+                        except Exception:
+                            pass
+
+                        # Log to usage tracker
+                        try:
+                            usage_tracker.log_request(
+                                request_id=request_id,
+                                original_model=original_model_id,
+                                routed_model=routed_model,
+                                provider=routed_model.split("/")[0]
+                                if "/" in routed_model
+                                else "unknown",
+                                endpoint="chat/completions",
+                                input_tokens=stream_usage.get("input_tokens", 0),
+                                output_tokens=stream_usage.get("output_tokens", 0),
+                                duration_ms=duration_ms,
+                                status="error" if error else "success",
+                                error_message=str(error) if error else None,
+                            )
+                        except Exception as ut_e:
+                            logger.error(f"Failed to log to usage_tracker: {ut_e}")
+
+                        # Dashboard hook
+                        dashboard_hooks.on_request_complete(
+                            request_id,
+                            "completed" if not error else "error",
+                            {
+                                "model": routed_model,
+                                "duration_ms": int(duration_ms),
+                                "input_tokens": stream_input,
+                                "output_tokens": stream_output,
+                            },
+                        )
+                    except Exception as cb_err:
+                        logger.warning(f"Stream completion callback error: {cb_err}")
+
                 return StreamingResponse(
                     convert_openai_streaming_to_claude_with_cancellation(
                         openai_stream,
@@ -688,6 +983,7 @@ async def create_message(
                         request_id,
                         config,
                         provider,
+                        on_complete=_on_stream_complete,
                     ),
                     media_type="text/event-stream",
                     headers={
@@ -699,13 +995,30 @@ async def create_message(
                 )
             except HTTPException as e:
                 # Convert to proper error response for streaming
+                import traceback as _tb
+
+                _traceback_str = (
+                    _tb.format_exc() if config.log_tier == "debug" else None
+                )
                 logger.error(
                     f"Streaming HTTPException for request_id {request_id}: status={e.status_code}, detail={e.detail}"
                 )
-                import traceback
-
-                logger.error(f"Streaming traceback: {traceback.format_exc()}")
                 error_message = openai_client.classify_openai_error(e.detail)
+                proxy_logger.log_error(
+                    request_id=request_id,
+                    error=error_message,
+                    duration_ms=None,
+                    model_name=routed_model
+                    if "routed_model" in locals()
+                    else "unknown",
+                    original_model=original_model_id
+                    if "original_model_id" in locals()
+                    else "",
+                    provider=provider if "provider" in locals() else "",
+                    endpoint=endpoint if "endpoint" in locals() else "",
+                    traceback_str=_traceback_str or "",
+                    client_ip=client_ip if "client_ip" in locals() else "",
+                )
                 error_response = {
                     "type": "error",
                     "error": {"type": "api_error", "message": error_message},
@@ -722,13 +1035,30 @@ async def create_message(
                 }
                 return JSONResponse(status_code=503, content=error_response)
             except Exception as e:
+                import traceback as _tb
+
+                _traceback_str = (
+                    _tb.format_exc() if config.log_tier == "debug" else None
+                )
                 logger.error(
                     f"Unexpected streaming error for request_id {request_id}: {e}"
                 )
-                import traceback
-
-                logger.error(f"Streaming traceback: {traceback.format_exc()}")
                 error_message = openai_client.classify_openai_error(str(e))
+                proxy_logger.log_error(
+                    request_id=request_id,
+                    error=error_message,
+                    duration_ms=None,
+                    model_name=routed_model
+                    if "routed_model" in locals()
+                    else "unknown",
+                    original_model=original_model_id
+                    if "original_model_id" in locals()
+                    else "",
+                    provider=provider if "provider" in locals() else "",
+                    endpoint=endpoint if "endpoint" in locals() else "",
+                    traceback_str=_traceback_str or "",
+                    client_ip=client_ip if "client_ip" in locals() else "",
+                )
                 error_response = {
                     "type": "error",
                     "error": {"type": "api_error", "message": error_message},
@@ -751,21 +1081,39 @@ async def create_message(
 
             while True:
                 try:
-                    active_openai_client = custom_client if custom_client else openai_client
-                    tier = infer_model_tier(openai_request.get("model", "")) or _use_case_tier
-                    if config.model_cascade and tier:
-                        openai_response = (
-                            await active_openai_client.create_chat_completion_with_cascade(
-                                openai_request,
-                                tier=tier,
-                                config=config,
-                                request_id=request_id,
-                                api_key=active_api_key,
-                            )
+                    active_openai_client = (
+                        custom_client if custom_client else openai_client
+                    )
+                    tier = (
+                        infer_model_tier(openai_request.get("model", ""))
+                        or _use_case_tier
+                    )
+                    # Skip cascade if the tier is disabled
+                    tier_enabled = {
+                        "big": getattr(config, "big_enabled", True),
+                        "middle": getattr(config, "middle_enabled", True),
+                        "small": getattr(config, "small_enabled", True),
+                    }.get(tier, True)
+                    if config.model_cascade and tier and tier_enabled:
+                        openai_response = await active_openai_client.create_chat_completion_with_cascade(
+                            openai_request,
+                            tier=tier,
+                            config=config,
+                            request_id=request_id,
+                            api_key=active_api_key,
+                            assignment_id=assignment_id,
+                            incoming_identifier=incoming_identifier,
                         )
                     else:
-                        openai_response = await active_openai_client.create_chat_completion(
-                            openai_request, request_id, config, api_key=active_api_key
+                        openai_response = (
+                            await active_openai_client.create_chat_completion(
+                                openai_request,
+                                request_id=request_id,
+                                config=config,
+                                api_key=active_api_key,
+                                assignment_id=assignment_id,
+                                incoming_identifier=incoming_identifier,
+                            )
                         )
                     break  # Success!
 
@@ -789,16 +1137,16 @@ async def create_message(
                     ):  # Only retry for server-side keys (proxy mode)
                         if retry_count >= max_retries:
                             logger.error(
-                                f"Authentication failed. Timed out waiting for key update."
+                                "Authentication failed. Timed out waiting for key update."
                             )
                             raise e
 
                         if retry_count == 0:
                             logger.warning(
-                                f"Authentication failed (401). Waiting for key update in profile..."
+                                "Authentication failed (401). Waiting for key update in profile..."
                             )
                             logger.warning(
-                                f"Run 'cproxy-init' or the wizard to fix your key."
+                                "Run 'cproxy-init' or the wizard to fix your key."
                             )
 
                         # Wait and check for updates
@@ -827,7 +1175,7 @@ async def create_message(
             logger.debug("Request deduplication check passed")
             # Log comprehensive completion with all metadata
             duration_ms = (time.time() - request_start_time) * 1000
-            usage = openai_response.get("usage", {})
+            usage = openai_response.get("usage") or {}
 
             # Detect JSON for TOON analysis
             has_json_content = False
@@ -866,155 +1214,50 @@ async def create_message(
                 logger.warning(f"Failed to calculate cost: {e}")
                 estimated_cost = 0.0
 
-            # Log to active logger
-            active_logger.log_request_complete(
+            # Log to proxy logger
+            actual_model = openai_response.get("model", routed_model)
+            cascade_info = ""
+            if actual_model and actual_model != routed_model:
+                cascade_info = f"fallback: {actual_model}"
+            proxy_logger.log_complete(
                 request_id=request_id,
                 usage=usage,
                 duration_ms=duration_ms,
                 status="OK",
-                model_name=routed_model,
+                model_name=actual_model or routed_model,
                 stream=request.stream if request.stream is not None else False,
-                has_reasoning=bool(reasoning_config),
+                original_model=original_model_id,
+                assignment_id=assignment_id or "",
+                cascade_chain=cascade_info,
+                client_ip=client_ip or "",
             )
 
-            # Track usage if enabled
-            if usage_tracker.enabled:
-                # Capture content for full logging if enabled
-                import json as json_module
-
-                req_content = (
-                    json_module.dumps(request.model_dump())
-                    if hasattr(request, "model_dump")
-                    else str(request)
-                )
-                resp_content = (
-                    json_module.dumps(openai_response) if openai_response else None
-                )
-
-                # Extract detailed token breakdown if available (with None safety)
-                usage = usage or {}
-                completion_details = usage.get("completion_tokens_details", {}) or {}
-                prompt_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
-                completion_tokens = usage.get(
-                    "completion_tokens", usage.get("output_tokens", 0)
-                )
-                reasoning_tokens = usage.get("reasoning_tokens", 0) or (
-                    completion_details.get("reasoning_tokens", 0)
-                    if completion_details
-                    else 0
-                )
-                cached_tokens = (
-                    usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
-                    if isinstance(usage.get("prompt_tokens_details"), dict)
-                    else 0
-                )
-                audio_tokens = (
-                    usage.get("completion_tokens_details", {}).get("audio_tokens", 0)
-                    if isinstance(usage.get("completion_tokens_details"), dict)
-                    else 0
-                )
-
-                # Detect if this was a tool call request
-                tool_use_tokens = 0
-                # Try to detect from response or request
-                if openai_response and isinstance(openai_response, dict):
-                    choices = openai_response.get("choices", [])
-                    if choices and isinstance(choices[0], dict):
-                        message = choices[0].get("message", {})
-                        if message.get("tool_calls"):
-                            tool_use_tokens = completion_tokens * 0.3  # Estimate
-
-                # Calculate original cost (what it would have been without smart routing)
-                # This requires knowing what model we "should have" used
-                original_cost = None
-                original_model = request.model
-
-                # For savings calculation, we need to compare against what would have been used
-                # If this was a routing decision, the original_model tells us what was requested
-                try:
-                    from src.services.usage.cost_calculator import (
-                        calculate_cost,
-                        get_model_pricing,
-                    )
-
-                    if routed_model != original_model:
-                        original_pricing = get_model_pricing(original_model)
-                        if original_pricing:
-                            original_cost = calculate_cost(usage, original_model)
-                except Exception:
-                    get_model_pricing = lambda x: None  # Fallback if import fails
-
-                # Determine model tier for comparison stats
-                # Simple tier detection based on model names and pricing
-                model_tier = None
-                if (
-                    "free" in routed_model
-                    or "mini" in routed_model.lower()
-                    or "flash" in routed_model.lower()
-                ):
-                    model_tier = "small"
-                elif (
-                    "sonnet" in routed_model.lower()
-                    or "medium" in routed_model.lower()
-                    or "turbo" in routed_model.lower()
-                ):
-                    model_tier = "middle"
-                elif (
-                    "opus" in routed_model.lower()
-                    or "large" in routed_model.lower()
-                    or "4.5" in routed_model.lower()
-                ):
-                    model_tier = "big"
-                elif (
-                    "gpt-4o" in routed_model.lower()
-                    and "mini" not in routed_model.lower()
-                ):
-                    model_tier = "middle"
-
-                # Check if it's a free model
-                try:
-                    if get_model_pricing(routed_model) == (0.0, 0.0):
-                        model_tier = "free"
-                except Exception:
-                    pass  # Skip free model detection if pricing lookup fails
-
+            # Log to usage tracker
+            try:
                 usage_tracker.log_request(
                     request_id=request_id,
-                    original_model=request.model,
+                    original_model=original_model_id,
                     routed_model=routed_model,
-                    provider=provider,
-                    endpoint=endpoint,
-                    input_tokens=prompt_tokens,
-                    output_tokens=completion_tokens,
-                    thinking_tokens=reasoning_tokens,
+                    provider=provider
+                    if "provider" in locals()
+                    else (
+                        routed_model.split("/")[0] if "/" in routed_model else "unknown"
+                    ),
+                    endpoint="chat/completions",
+                    input_tokens=usage.get(
+                        "input_tokens", usage.get("prompt_tokens", 0)
+                    ),
+                    output_tokens=usage.get(
+                        "output_tokens", usage.get("completion_tokens", 0)
+                    ),
                     duration_ms=duration_ms,
-                    estimated_cost=estimated_cost,
-                    stream=request.stream if request.stream is not None else False,
-                    message_count=message_count,
-                    has_system=has_system,
-                    has_tools=has_tools,
-                    has_images=has_images,
+                    estimated_cost=estimated_cost
+                    if "estimated_cost" in locals()
+                    else 0.0,
                     status="success",
-                    session_id=request_id[:8],
-                    client_ip=client_ip,
-                    has_json_content=has_json_content,
-                    json_size_bytes=json_size_bytes,
-                    request_content=req_content,
-                    response_content=resp_content,
-                    # Extended parameters for detailed analytics
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    reasoning_tokens=reasoning_tokens,
-                    cached_tokens=cached_tokens,
-                    tool_use_tokens=tool_use_tokens,
-                    audio_tokens=audio_tokens,
-                    original_cost=original_cost,
-                    model_tier=model_tier,
                 )
-                daily_count = usage_tracker.get_daily_model_request_count(routed_model)
-                logger.info(
-                    f"Request {request_id}: {routed_model} UTC-day requests={daily_count}"
-                )
+            except Exception as ut_e:
+                logger.error(f"Failed to log to usage_tracker: {ut_e}")
 
             claude_response = convert_openai_to_claude_response(
                 openai_response, request, provider
@@ -1034,6 +1277,19 @@ async def create_message(
                     request_deduplicator.cache_response(request_hash, response_dict)
                 except Exception as cache_err:
                     logger.debug(f"Failed to cache response for dedup: {cache_err}")
+
+            # Store in semantic cache for near-duplicate future requests
+            if _sem_cache_key and not request.tools and input_tokens >= _MIN_TOKENS:
+                try:
+                    if hasattr(claude_response, "model_dump"):
+                        _cache_val = claude_response.model_dump()
+                    elif hasattr(claude_response, "dict"):
+                        _cache_val = claude_response.dict()
+                    else:
+                        _cache_val = claude_response
+                    semantic_cache.store(_sem_cache_key, _cache_val)
+                except Exception:
+                    pass
 
             # Dashboard hook: request complete
             dashboard_hooks.on_request_complete(
@@ -1066,62 +1322,88 @@ async def create_message(
             return claude_response
     except HTTPException as e:
         duration_ms = (time.time() - request_start_time) * 1000
+        import traceback as _tb
+
+        _traceback_str = _tb.format_exc() if config.log_tier == "debug" else None
         logger.error(
             f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}"
         )
 
-        # Log error
-        active_logger.log_request_error(
-            request_id=request_id, error=e.detail, duration_ms=duration_ms
+        # Log error with full context: actual model, provider, endpoint, timestamp
+        proxy_logger.log_error(
+            request_id=request_id,
+            error=e.detail,
+            duration_ms=duration_ms,
+            model_name=routed_model,
+            original_model=original_model_id,
+            provider=provider
+            if "provider" in locals()
+            else (routed_model.split("/")[0] if "/" in routed_model else ""),
+            endpoint=endpoint if "endpoint" in locals() else "",
+            traceback_str=_traceback_str or "",
+            client_ip=client_ip if "client_ip" in locals() else "",
         )
 
-        # Track error if enabled
-        if usage_tracker.enabled:
+        # Log to usage tracker
+        try:
             usage_tracker.log_request(
                 request_id=request_id,
-                original_model=request.model,
+                original_model=original_model_id,
                 routed_model=routed_model,
-                provider="unknown",
-                endpoint=endpoint,
+                provider=routed_model.split("/")[0]
+                if "/" in routed_model
+                else "unknown",
+                endpoint="chat/completions",
+                duration_ms=duration_ms,
                 status="error",
                 error_message=str(e.detail),
-                duration_ms=duration_ms,
-                session_id=request_id[:8],
-                client_ip=client_ip,
             )
-        logger.error(
-            f"HTTPException in create_message for request_id {request_id}: status={e.status_code}, detail={e.detail}"
-        )
+        except Exception as ut_e:
+            logger.error(f"Failed to log to usage_tracker: {ut_e}")
+
         raise
     except Exception as e:
         import traceback
 
         duration_ms = (time.time() - request_start_time) * 1000
         logger.error(f"Unexpected error processing request {request_id}: {e}")
-        logger.error(f"Full traceback: {traceback.format_exc()}")
         error_message = openai_client.classify_openai_error(str(e))
 
-        # Log error
-        active_logger.log_request_error(
-            request_id=request_id, error=error_message, duration_ms=duration_ms
+        _traceback_str = traceback.format_exc() if config.log_tier == "debug" else None
+
+        # Log error with full context
+        proxy_logger.log_error(
+            request_id=request_id,
+            error=error_message,
+            duration_ms=duration_ms,
+            model_name=routed_model,
+            original_model=original_model_id,
+            provider=provider
+            if "provider" in locals()
+            else (routed_model.split("/")[0] if "/" in routed_model else ""),
+            endpoint=endpoint if "endpoint" in locals() else "",
+            traceback_str=_traceback_str or "",
+            client_ip=client_ip if "client_ip" in locals() else "",
         )
 
-        # Track error if enabled
-        if usage_tracker.enabled:
+        # Log to usage tracker
+        try:
             usage_tracker.log_request(
                 request_id=request_id,
-                original_model=request.model,
-                routed_model="unknown",
-                provider="unknown",
-                endpoint="unknown",
-                status="error",
-                error_message=error_message,
+                original_model=original_model_id,
+                routed_model=routed_model,
+                provider=routed_model.split("/")[0]
+                if "/" in routed_model
+                else "unknown",
+                endpoint="chat/completions",
                 duration_ms=duration_ms,
-                session_id=request_id[:8],
-                client_ip="unknown",
+                status="error",
+                error_message=str(error_message),
             )
+        except Exception as ut_e:
+            logger.error(f"Failed to log to usage_tracker: {ut_e}")
 
-        # Dashboard hook: request error
+        # Dashboard hook
         dashboard_hooks.on_request_complete(
             request_id,
             "error",
@@ -1133,8 +1415,6 @@ async def create_message(
             },
         )
 
-        logger.error(f"Unexpected error processing request {request_id}: {e}")
-        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=error_message)
 
 
@@ -1177,6 +1457,114 @@ async def count_tokens(
     except Exception as e:
         logger.error(f"Error counting tokens: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/breakers")
+async def list_circuit_breakers():
+    """List all circuit breakers with current state, failure counts, and cooldown remaining."""
+    import time as _time
+    from src.core.client import _circuit_breakers, _get_circuit_breaker
+    from src.core.circuit_breaker import CircuitState
+
+    result = []
+    for model, cb in _circuit_breakers.items():
+        stats = cb.stats
+        cooldown_remaining = 0.0
+        if stats.state == CircuitState.OPEN and stats.last_failure_time:
+            elapsed = _time.time() - stats.last_failure_time
+            cooldown_remaining = max(0.0, cb.config.timeout - elapsed)
+
+        result.append({
+            "model": model,
+            "state": stats.state.value,
+            "failure_count": stats.failure_count,
+            "total_failures": stats.total_failures,
+            "total_successes": stats.total_successes,
+            "soft_failure_count": stats.soft_failure_count,
+            "cooldown_remaining_s": round(cooldown_remaining, 1),
+            "failure_threshold": cb.config.failure_threshold,
+            "timeout_s": cb.config.timeout,
+        })
+
+    result.sort(key=lambda x: (x["state"] != "open", x["model"]))
+    return {"breakers": result, "total": len(result)}
+
+
+@router.post("/api/breakers/{model_path:path}/reset")
+async def reset_circuit_breaker(model_path: str):
+    """Manually reset a circuit breaker to CLOSED state."""
+    from src.core.client import _circuit_breakers
+    # model_path may contain slashes (e.g., openrouter/qwen3)
+    model = model_path
+    if model not in _circuit_breakers:
+        raise HTTPException(status_code=404, detail=f"No circuit breaker found for model '{model}'")
+    _circuit_breakers[model].reset()
+    return {"model": model, "state": "closed", "message": "Circuit breaker manually reset"}
+
+
+@router.get("/api/reliability")
+async def reliability_score(hours: int = 24):
+    """
+    Compute the proxy reliability score R ∈ [0, 1] from structured event log.
+
+    R = success_rate×0.50 + cascade_efficiency×0.20 + latency_score×0.15 + cache_rate×0.15
+
+    Grade: S≥0.90 | A≥0.80 | B≥0.65 | C≥0.50 | F<0.50
+    Target: 0.85+ (grade A)
+    """
+    from src.services.logging.event_logger import event_logger
+    return event_logger.compute_reliability_score(hours=hours)
+
+
+@router.get("/api/semantic-cache/stats")
+async def semantic_cache_stats():
+    """Stats for the semantic dedup cache (hit rate, size, threshold)."""
+    from src.services.semantic_cache import semantic_cache
+    return semantic_cache.stats()
+
+
+@router.post("/api/semantic-cache/clear")
+async def semantic_cache_clear():
+    """Clear the semantic cache."""
+    from src.services.semantic_cache import semantic_cache
+    semantic_cache.clear()
+    return {"status": "cleared"}
+
+
+@router.get("/api/pipelines")
+async def list_pipelines():
+    """List configured API pipelines from proxy_chain.json."""
+    from src.core.pipeline import list_pipelines as _list
+    return {"pipelines": _list()}
+
+
+@router.post("/v1/pipeline/{pipeline_name}")
+async def run_pipeline(pipeline_name: str, http_request: Request):
+    """
+    Execute a named API pipeline defined in proxy_chain.json.
+
+    Body: { "input": <initial_value>, "context": { ...optional... } }
+    """
+    from src.core.pipeline import run_pipeline as _run
+    try:
+        body = await http_request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    initial_input = body.get("input")
+    context = body.get("context", {})
+
+    try:
+        result = await _run(pipeline_name, initial_input, context)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline error: {e}")
+
+    if not result.get("ok"):
+        raise HTTPException(status_code=502, detail=result)
+
+    return result
 
 
 @router.get("/health")

@@ -1,0 +1,455 @@
+openapi: 3.0.3
+info:
+  title: Claude Code Proxy — Configuration API
+  version: 1.0.0
+  description: |
+    HTTP surface for the Unified Configuration & Multi-Surface Control System.
+    All write endpoints require admin role via existing RBAC (FR-026).
+    Read endpoints require authenticated user (FR-027).
+
+servers:
+  - url: http://127.0.0.1:8082
+    description: Local proxy (default)
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Session or API token issued by the existing users_rbac system
+
+  schemas:
+    ConfigLayer:
+      type: string
+      enum: [cli, shell_env, dotenv, stored, default]
+
+    ResolvedValue:
+      type: object
+      required: [field_path, value, source_layer]
+      properties:
+        field_path:
+          type: string
+          example: "assignments.big.model"
+        value:
+          description: Post-expansion resolved value
+        raw_value:
+          description: Pre-expansion (shows ${VAR} literal if present)
+        source_layer:
+          $ref: "#/components/schemas/ConfigLayer"
+
+    Assignment:
+      type: object
+      required: [id, kind, enabled]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{0,63}$"
+          example: "background"
+        kind:
+          type: string
+          enum: [tier, slot]
+        model:
+          type: string
+          example: "nvidia/nemotron-nano-9b-v2:free"
+        provider:
+          type: string
+          example: "openrouter"
+        base_url:
+          type: string
+          format: uri
+        api_key:
+          type: string
+          description: "Use ${VAR_NAME} reference; literal values trigger a warning"
+          example: "${OPENROUTER_API_KEY}"
+        enabled:
+          type: boolean
+        cascade:
+          type: array
+          items:
+            type: string
+
+    IdentifierMapping:
+      type: object
+      required: [incoming_identifier, assignment_id, enabled]
+      properties:
+        incoming_identifier:
+          type: string
+          example: "claude-opus-4-7"
+        assignment_id:
+          type: string
+          example: "big"
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+          default: 0
+        notes:
+          type: string
+
+    ProxyEntry:
+      type: object
+      required: [id, name, enabled]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+        auth_key:
+          type: string
+        enabled:
+          type: boolean
+        order:
+          type: integer
+        service_cmd:
+          type: string
+        health_path:
+          type: string
+        port:
+          type: integer
+        timeout:
+          type: integer
+        type:
+          type: string
+          enum: [http, cli_wrapper]
+
+    AuditLogEntry:
+      type: object
+      required: [seq, timestamp, principal, endpoint, field_path]
+      properties:
+        seq:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        principal:
+          type: string
+        surface:
+          $ref: "#/components/schemas/ConfigLayer"
+        endpoint:
+          type: string
+        field_path:
+          type: string
+        before_value:
+          description: Secrets masked
+        after_value:
+          description: Secrets masked
+        client_ip:
+          type: string
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        detail:
+          type: string
+        field_path:
+          type: string
+
+paths:
+  /api/config:
+    get:
+      summary: Full resolved config tree with provenance
+      tags: [config]
+      responses:
+        "200":
+          description: Config snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Nested structure where every leaf is a ResolvedValue
+
+  /api/config/{field_path}:
+    get:
+      summary: Single field with provenance
+      tags: [config]
+      parameters:
+        - name: field_path
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Resolved value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedValue"
+        "404": { description: Unknown field_path }
+
+  /api/config/reload:
+    post:
+      summary: Force reload of stored config + .env from disk
+      description: Admin-only. Triggers migration if schema_version differs.
+      tags: [config]
+      responses:
+        "200": { description: Reloaded }
+        "403": { description: Admin role required }
+
+  /api/config/events:
+    get:
+      summary: SSE stream of change events
+      description: |
+        Server-Sent Events stream. Events are `config.change` with JSON payload containing
+        {field_path, after_value, source_layer, seq}.
+      tags: [config]
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/assignments:
+    get:
+      summary: List all assignments with resolved values
+      tags: [assignments]
+      responses:
+        "200":
+          description: Assignment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Assignment" }
+    post:
+      summary: Create a new slot assignment (tiers cannot be created)
+      tags: [assignments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Assignment" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Assignment" }
+        "400": { description: Validation error, see Error schema }
+        "403": { description: Admin role required }
+        "409": { description: Assignment with this id already exists }
+
+  /api/assignments/{id}:
+    get:
+      summary: Get a single assignment
+      tags: [assignments]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Assignment, content: { application/json: { schema: { $ref: "#/components/schemas/Assignment" } } } }
+        "404": { description: Unknown assignment }
+    patch:
+      summary: Edit an assignment
+      tags: [assignments]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Partial Assignment — only fields to change
+      responses:
+        "200": { description: Updated }
+        "400": { description: Validation error }
+        "403": { description: Admin role required }
+        "404": { description: Unknown assignment }
+    delete:
+      summary: Delete a slot assignment (tiers cannot be deleted)
+      tags: [assignments]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Deleted }
+        "403": { description: Admin role required }
+        "404": { description: Unknown assignment }
+        "409": { description: Tiers cannot be deleted }
+
+  /api/chain:
+    get:
+      summary: List chain entries in order
+      tags: [chain]
+      responses:
+        "200":
+          description: Ordered list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ProxyEntry" }
+    post:
+      summary: Add a chain entry
+      tags: [chain]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProxyEntry" }
+      responses:
+        "201": { description: Created }
+        "400": { description: Port conflict or invalid entry }
+        "403": { description: Admin role required }
+
+  /api/chain/reorder:
+    post:
+      summary: Reorder the chain
+      tags: [chain]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order]
+              properties:
+                order:
+                  type: array
+                  description: Chain entry ids in desired order
+                  items: { type: string }
+      responses:
+        "200": { description: Reordered }
+        "400": { description: Invalid order (missing or unknown ids) }
+        "403": { description: Admin role required }
+
+  /api/chain/{id}:
+    patch:
+      summary: Edit a chain entry
+      tags: [chain]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200": { description: Updated }
+        "403": { description: Admin role required }
+        "404": { description: Unknown entry }
+    delete:
+      summary: Remove a chain entry
+      tags: [chain]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Removed }
+        "403": { description: Admin role required }
+
+  /api/identifier-mappings:
+    get:
+      summary: List identifier mappings
+      tags: [identifier-mappings]
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/IdentifierMapping" }
+    post:
+      summary: Create a mapping
+      tags: [identifier-mappings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IdentifierMapping" }
+      responses:
+        "201": { description: Created }
+        "400": { description: Validation error (unknown assignment_id, duplicate mapping) }
+        "403": { description: Admin role required }
+
+  /api/identifier-mappings/{incoming_identifier}:
+    patch:
+      summary: Edit a mapping
+      tags: [identifier-mappings]
+      parameters:
+        - { name: incoming_identifier, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Updated }
+    delete:
+      summary: Remove a mapping
+      tags: [identifier-mappings]
+      parameters:
+        - { name: incoming_identifier, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Removed }
+
+  /api/audit:
+    get:
+      summary: Query the config audit log (admin-only)
+      tags: [audit]
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+        - { name: principal, in: query, schema: { type: string } }
+        - { name: field_path, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 1000 } }
+      responses:
+        "200":
+          description: Matching entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AuditLogEntry" }
+        "403": { description: Admin role required }
+
+  /api/metrics/by-assignment:
+    get:
+      summary: Success rate and tool-call stats per assignment
+      tags: [analytics]
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+        - { name: until, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: Per-assignment aggregates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    assignment_id: { type: string }
+                    primary_attempts: { type: integer }
+                    primary_successes: { type: integer }
+                    success_rate: { type: number }
+                    avg_latency_ms: { type: integer }
+                    cascade_rate: { type: number }
+
+  /api/metrics/by-model:
+    get:
+      summary: Success rate and tool-call stats per resolved model
+      tags: [analytics]
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+        - { name: until, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: Per-model aggregates (counts all attempts regardless of attempt_index)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    resolved_model: { type: string }
+                    total_attempts: { type: integer }
+                    successes: { type: integer }
+                    success_rate: { type: number }
+                    tool_calls_attempted: { type: integer }
+                    tool_calls_succeeded: { type: integer }

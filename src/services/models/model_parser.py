@@ -141,6 +141,9 @@ def parse_model_name(model_name: str) -> ParsedModel:
     Returns:
         ParsedModel with extracted components
     """
+    # Preserve the full input before any mutation (suffix parsing mutates model_name)
+    original_input = model_name
+
     # First, handle reasoning suffix (e.g., :4k, :high)
     suffix = None
     if ":" in model_name:
@@ -166,13 +169,13 @@ def parse_model_name(model_name: str) -> ParsedModel:
                 base_model=base_model,
                 reasoning_type=None,
                 reasoning_value=None,
-                original_model=model_name + (f":{suffix}" if suffix else ""),
+                original_model=original_input,
             )
         return ParsedModel(
             base_model=base_model,
             reasoning_type=None,
             reasoning_value=None,
-            original_model=model_name + (f":{suffix}" if suffix else ""),
+            original_model=original_input,
         )
 
     # Detect reasoning type based on model family and suffix
@@ -189,7 +192,7 @@ def parse_model_name(model_name: str) -> ParsedModel:
             base_model=base_model,  # Use base model (without suffix)
             reasoning_type=None,
             reasoning_value=None,
-            original_model=model_name + (f":{suffix}" if suffix else ""),
+            original_model=original_input,
         )
 
     # Parse suffix based on reasoning type
@@ -226,7 +229,7 @@ def parse_model_name(model_name: str) -> ParsedModel:
             base_model=base_model,
             reasoning_type=None,
             reasoning_value=None,
-            original_model=model_name,
+            original_model=original_input,
         )
 
     logger.debug(
@@ -238,7 +241,7 @@ def parse_model_name(model_name: str) -> ParsedModel:
         base_model=base_model,
         reasoning_type=reasoning_type,
         reasoning_value=reasoning_value,
-        original_model=model_name,
+        original_model=original_input,
     )
 
 
