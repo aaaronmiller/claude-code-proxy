@@ -229,7 +229,28 @@ class Config:
 
     # ── Compatibility aliases ───────────────────────────────────────────────────
     # Preserve old attribute names
-    openai_api_key = ConfigField("assignments.big.api_key")
+    _openai_api_key_field = ConfigField("assignments.big.api_key")
+
+    @property
+    def openai_api_key(self) -> Optional[str]:
+        """
+        The API key used to authenticate with the upstream provider (OpenRouter/OpenAI).
+
+        Priority (first non-empty wins):
+        1. assignments.big.api_key — from proxy_chain.json assignment or BIG_API_KEY env
+        2. OPENROUTER_API_KEY — direct env var (most common user setup)
+        3. OPENAI_API_KEY — fallback for OpenAI direct connections
+        """
+        # Try resolver path first (handles BIG_API_KEY, assignment config, etc.)
+        resolved = self._openai_api_key_field
+        if resolved:
+            return resolved
+        # Direct env fallbacks — handles shell env that the resolver may not have loaded
+        for var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
+            v = os.environ.get(var, "").strip()
+            if v:
+                return v
+        return None
     proxy_auth_key = ConfigField("proxy_auth_key")
     anthropic_api_key_legacy = ConfigField("anthropic_api_key_legacy")
     default_provider = ConfigField(

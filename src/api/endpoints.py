@@ -544,7 +544,7 @@ async def create_message(
                 return "local"
             return None
 
-        # Log API configuration for debugging (helps diagnose 401 errors)
+        # Log API configuration — DEBUG normally, WARN if key is missing (potential 401)
         logger.debug(f"Request {request_id}: Routing to endpoint: {endpoint}")
         logger.debug(f"Request {request_id}: Using model: {routed_model}")
         if openai_api_key:
@@ -552,12 +552,17 @@ async def create_message(
                 f"Request {request_id}: Using passthrough mode with user-provided API key"
             )
         else:
-            api_key_preview = (
-                config.openai_api_key[:8] if config.openai_api_key else "None"
-            )
-            logger.debug(
-                f"Request {request_id}: Using proxy mode with server API key: {api_key_preview}..."
-            )
+            _srv_key = config.openai_api_key or ""
+            if not _srv_key:
+                logger.warning(
+                    f"[{request_id}] No API key found for upstream provider! "
+                    f"Set OPENROUTER_API_KEY or BIG_API_KEY in .env or shell env. "
+                    f"Requests will fail with 401."
+                )
+            else:
+                logger.debug(
+                    f"Request {request_id}: proxy mode, key={_srv_key[:8]}..."
+                )
 
         # Extract request metadata for comprehensive logging
         message_count = len(request.messages)
@@ -1076,7 +1081,7 @@ async def create_message(
             from src.utils.key_reloader import key_reloader
             import asyncio
 
-            max_retries = 150  # Wait up to 300 seconds (5 minutes)
+            max_retries = 5   # Wait up to 10 seconds then fail with diagnostics
             retry_count = 0
 
             while True:
@@ -1135,39 +1140,45 @@ async def create_message(
                     if (
                         e.status_code == 401 and not openai_api_key
                     ):  # Only retry for server-side keys (proxy mode)
+                        # Build diagnostic context for every 401
+                        _key_in_use = config.openai_api_key or ""
+                        _key_display = (
+                            _key_in_use[:10] + "..." + _key_in_use[-4:]
+                            if len(_key_in_use) > 14
+                            else (_key_in_use[:4] + "..." if _key_in_use else "(NO KEY SET)")
+                        )
+                        _endpoint_url = getattr(config, "openai_base_url", None) or "unknown endpoint"
+                        _model_used = openai_request.get("model", "unknown")
+                        _err_detail = str(e.detail) if hasattr(e, "detail") else str(e)
+
+                        if retry_count == 0:
+                            logger.error(
+                                f"[401 Unauthorized] model={_model_used} "
+                                f"endpoint={_endpoint_url} key={_key_display}\n"
+                                f"  Provider error: {_err_detail}\n"
+                                f"  → Check OPENROUTER_API_KEY / BIG_API_KEY in .env or shell env\n"
+                                f"  → Run: python start_proxy.py --fix-keys"
+                            )
+
                         if retry_count >= max_retries:
                             logger.error(
-                                "Authentication failed. Timed out waiting for key update."
+                                f"[401] Auth still failing after {retry_count * 2}s. "
+                                f"No key update detected. model={_model_used} key={_key_display}"
                             )
                             raise e
 
-                        if retry_count == 0:
-                            logger.warning(
-                                "Authentication failed (401). Waiting for key update in profile..."
-                            )
-                            logger.warning(
-                                "Run 'cproxy-init' or the wizard to fix your key."
-                            )
-
-                        # Wait and check for updates
+                        # Wait briefly and check for a hot-reloaded key
                         await asyncio.sleep(2)
                         retry_count += 1
 
                         if key_reloader.check_for_updates():
                             logger.info("Key update detected! Retrying request...")
-                            # Re-configure active client with new key
                             if custom_client:
                                 custom_client.api_key = config.openai_api_key or ""
                                 active_api_key = custom_client.api_key
                             else:
                                 openai_client.api_key = config.openai_api_key or ""  # type: ignore
                             continue
-
-                        # Log progress every 10 seconds
-                        if retry_count % 5 == 0:
-                            logger.info(
-                                f"Still waiting for key update... ({retry_count * 2}s elapsed)"
-                            )
                     else:
                         raise e  # Re-raise other errors immediately
 

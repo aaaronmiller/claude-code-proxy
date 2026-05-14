@@ -253,15 +253,18 @@ class ConfigResolver:
         "BIG_ENDPOINT": "assignments.big.base_url",
         "MIDDLE_ENDPOINT": "assignments.middle.base_url",
         "SMALL_ENDPOINT": "assignments.small.base_url",
-        "BIG_API_KEY": "assignments.big.api_key",
         "MIDDLE_API_KEY": "assignments.middle.api_key",
         "SMALL_API_KEY": "assignments.small.api_key",
         "ENABLE_BIG_ENDPOINT": "assignments.big.enabled",
         "ENABLE_MIDDLE_ENDPOINT": "assignments.middle.enabled",
         "ENABLE_SMALL_ENDPOINT": "assignments.small.enabled",
         "PROXY_AUTH_KEY": "proxy_auth_key",
-        "OPENROUTER_API_KEY": "openai_api_key",
-        "OPENAI_API_KEY": "openai_api_key",
+        # Map provider API keys → assignments.big.api_key so config.openai_api_key
+        # (which reads "assignments.big.api_key") picks them up correctly.
+        # Previously mapped to "openai_api_key" which was an unregistered dead-end.
+        "OPENROUTER_API_KEY": "assignments.big.api_key",
+        "OPENAI_API_KEY": "assignments.big.api_key",
+        "BIG_API_KEY": "assignments.big.api_key",
         "ANTHROPIC_API_KEY": "anthropic_api_key_legacy",
         "OPENAI_BASE_URL": "openai_base_url",
     }
