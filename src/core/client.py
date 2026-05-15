@@ -1477,10 +1477,14 @@ class OpenAIClient:
                     model_idx += 1
                     continue
                 elif code in (500, 502, 503, 504):
+                    # Cap server-error retries at 2 (not MAX_RETRIES_BEFORE_CASCADE=5):
+                    # 5xx means the upstream is overloaded — retrying the same model 5
+                    # times wastes 8+ seconds before cascading. Cascade fast, fall back fast.
+                    _SERVER_ERR_RETRIES = 2
                     retry_counts[model] += 1
-                    logger.info(f"[CASCADE] {model} → {code} server error ({retry_counts[model]}/{MAX_RETRIES_BEFORE_CASCADE})")
+                    logger.info(f"[CASCADE] {model} → {code} server error ({retry_counts[model]}/{_SERVER_ERR_RETRIES})")
                     last_error = e
-                    if retry_counts[model] >= MAX_RETRIES_BEFORE_CASCADE:
+                    if retry_counts[model] >= _SERVER_ERR_RETRIES:
                         model_idx += 1
                     continue
                 else:

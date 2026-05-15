@@ -42,7 +42,11 @@ class ProxyEntry:
 
     id: str  # Unique slug, e.g. "headroom"
     name: str  # Display name, e.g. "Headroom Compression"
-    url: str  # Base URL, e.g. "http://127.0.0.1:8787/v1"
+    # Base URL is optional: service entries (claude_code_proxy, headroom) may only
+    # declare a port for the health-check / startup script and rely on the runtime
+    # to build the URL from host/port. Required positional `url` blew up every
+    # request when entries from disk omitted it.
+    url: str = ""  # Base URL, e.g. "http://127.0.0.1:8787/v1"
     auth_key: str = ""  # API key (leave blank to inherit from env)
     enabled: bool = True  # Whether this entry is active
     order: int = 0  # Sort index (auto-maintained by ProxyChain)

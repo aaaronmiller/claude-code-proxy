@@ -162,12 +162,17 @@ def _cascade_terminal(
         ts = _dt.now().strftime("%H:%M:%S")
         rid = (request_id or "")[:6]
 
-        # Error classification → short label + color
+        # Error classification → short label + color.
+        # Falls back to `reason` when no error string is provided (e.g. proactive
+        # fallback attempts that switch model before a failure occurs).
         _err_low = (error or "").lower()
+        _reason_low = (reason or "").lower()
         if "401" in _err_low or "unauthorized" in _err_low or "auth" in _err_low:
             err_tag, err_color = "401 UNAUTH", "bold red"
         elif "429" in _err_low or "rate" in _err_low or "limit" in _err_low:
             err_tag, err_color = "429 RATELIM", "bold yellow"
+        elif "503" in _err_low or "502" in _err_low or "500" in _err_low or "504" in _err_low or "server error" in _err_low or "overload" in _err_low:
+            err_tag, err_color = "5xx SERVER", "bold yellow"
         elif "timeout" in _err_low or "timed out" in _err_low:
             err_tag, err_color = "TIMEOUT", "bold yellow"
         elif "400" in _err_low or "bad request" in _err_low:
@@ -178,12 +183,19 @@ def _cascade_terminal(
             err_tag, err_color = "SSL ERROR", "bold red"
         elif "connect" in _err_low or "refused" in _err_low:
             err_tag, err_color = "CONN FAIL", "bold red"
-        elif "503" in _err_low or "502" in _err_low or "overload" in _err_low:
-            err_tag, err_color = "OVERLOADED", "bold yellow"
         elif error:
             err_tag, err_color = "FAIL", "red"
+        # No error → use the reason as the tag (e.g. "fallback_attempt", "alibaba_rampup")
+        elif "rate_limit" in _reason_low or "ratelim" in _reason_low:
+            err_tag, err_color = "RATELIM", "bold yellow"
+        elif "fallback" in _reason_low or "cascade" in _reason_low:
+            err_tag, err_color = "CASCADE", "dim cyan"
+        elif "context" in _reason_low or "ctx" in _reason_low:
+            err_tag, err_color = "CTX", "bold magenta"
+        elif reason:
+            err_tag, err_color = reason.upper()[:12], "dim yellow"
         else:
-            err_tag, err_color = "", "dim"
+            err_tag, err_color = "RETRY", "dim"
 
         # Short model names
         def _short(m: Optional[str]) -> str:

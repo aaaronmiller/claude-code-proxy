@@ -9,7 +9,8 @@
       "health_path": "/health",
       "enabled": true,
       "order": 0,
-      "service_cmd": "exec env -u ANTHROPIC_API_KEY .venv/bin/python start_proxy.py --skip-validation"
+      "service_cmd": "exec env -u ANTHROPIC_API_KEY .venv/bin/python start_proxy.py --skip-validation",
+      "url": "http://127.0.0.1:8082/v1"
     },
     {
       "id": "headroom",
@@ -19,7 +20,8 @@
       "health_path": "/health",
       "enabled": true,
       "order": 1,
-      "service_cmd": "headroom proxy --port 8787 --mode token_headroom --anthropic-api-url https://openrouter.ai/api/v1 --log-file ~/.headroom/logs/proxy.jsonl"
+      "service_cmd": "headroom proxy --port 8787 --mode token_headroom --anthropic-api-url https://openrouter.ai/api/v1 --log-file ~/.headroom/logs/proxy.jsonl",
+      "url": "http://127.0.0.1:8787/v1"
     }
   ],
   "router": {
@@ -68,7 +70,7 @@
     {
       "id": "big",
       "kind": "tier",
-      "model": "after-write",
+      "model": "baidu/cobuddy:free",
       "provider": "openrouter",
       "base_url": "https://openrouter.ai/api/v1",
       "api_key": "${OPENROUTER_API_KEY}",
@@ -91,14 +93,15 @@
     {
       "id": "small",
       "kind": "tier",
-      "model": "tencent/hy3-preview:free",
+      "model": "minimax/minimax-m2.5:free",
       "provider": "openrouter",
       "base_url": "https://openrouter.ai/api/v1",
       "api_key": "${OPENROUTER_API_KEY}",
       "enabled": true,
       "cascade": [
-        "minimax/minimax-m2.5:free",
-        "openai/gpt-oss-120b:free"
+        "minimax/minimax-m2.5-20260211:free",
+        "nvidia/nemotron-nano-9b-v2:free",
+        "qwen/qwen3-235b-a22b:free"
       ]
     },
     {
@@ -160,6 +163,48 @@
       "enabled": true,
       "priority": 0,
       "notes": ""
+    },
+    {
+      "incoming_identifier": "claude-haiku-4-5",
+      "assignment_id": "small",
+      "enabled": true,
+      "priority": 0,
+      "notes": "Auto-route Claude haiku models to SMALL tier"
+    },
+    {
+      "incoming_identifier": "claude-haiku-4-5-20251001",
+      "assignment_id": "small",
+      "enabled": true,
+      "priority": 0,
+      "notes": "Auto-route Claude haiku models to SMALL tier"
+    },
+    {
+      "incoming_identifier": "claude-3-5-haiku",
+      "assignment_id": "small",
+      "enabled": true,
+      "priority": 0,
+      "notes": "Auto-route Claude haiku models to SMALL tier"
+    },
+    {
+      "incoming_identifier": "claude-3-5-haiku-20241022",
+      "assignment_id": "small",
+      "enabled": true,
+      "priority": 0,
+      "notes": "Auto-route Claude haiku models to SMALL tier"
+    },
+    {
+      "incoming_identifier": "claude-3-haiku",
+      "assignment_id": "small",
+      "enabled": true,
+      "priority": 0,
+      "notes": "Auto-route Claude haiku models to SMALL tier"
+    },
+    {
+      "incoming_identifier": "haiku",
+      "assignment_id": "small",
+      "enabled": true,
+      "priority": 0,
+      "notes": "Auto-route Claude haiku models to SMALL tier"
     }
   ]
 }
