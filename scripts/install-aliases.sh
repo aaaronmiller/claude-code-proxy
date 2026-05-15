@@ -233,14 +233,14 @@ alias hsi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 O
 alias hsr='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk hermes --resume --dangerously-skip-permissions'
 
 # Pi: AI coding assistant. Routes through proxy → headroom + RTK.
-# Tool calls are auto-routed by the proxy to TOOLCALL_MODELS (set in .env).
-# Main model: claude-haiku-4-5 → maps to SMALL tier (minimax/minimax-m2.5:free).
-# Override the main model: psi --model openrouter/qwen3-next-80b "your prompt"
-alias psi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk pi --provider openai --model claude-haiku-4-5'
-alias psi-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk pi --provider openai --model claude-haiku-4-5 --continue'
-# Pi with a beefier main model (qwen3-next-80b-thinking — verified fast tool-caller)
-alias psi-pro='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk pi --provider openai --model qwen/qwen3-next-80b-a3b-thinking'
-alias psi-pro-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk pi --provider openai --model qwen/qwen3-next-80b-a3b-thinking --continue'
+# Main model: NOT pinned — pass --model at runtime to choose per-session.
+# Tool calls: auto-routed by the proxy to TOOLCALL_MODELS (.env) regardless of main.
+# Usage examples:
+#   psi --model qwen/qwen3-next-80b "build an http server"
+#   psi --model anthropic/claude-opus-4-20250514 "complex refactor"
+#   psi --tools read,grep -p "review the code in src/"
+alias psi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk pi --provider openai'
+alias psi-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk pi --provider openai --continue'
 
 # ─── Legacy muscle-memory ────────────────────────────────────────────────────
 alias car='cc'
@@ -312,8 +312,8 @@ cat <<'EOFQR'
   oc / oc-c            — OpenCode (rtk)
   ocl / ocl-c          — OpenClaw (rtk)
   hsi / hsr            — Hermes (rtk, proxy cascade for aux roles)
-  psi / psi-c          — pi (haiku main, qwen3-next toolcalls, rtk)
-  psi-pro / psi-pro-c  — pi (qwen3-next-80b main, rtk)
+  psi / psi-c          — pi (no main pinned, toolcalls via TOOLCALL_MODELS, rtk)
+                         use: psi --model X "prompt"  to pick main per session
 
   ── Legacy muscle-memory ──────────────────────────────────────────
   car / carc           → cc / ccc
