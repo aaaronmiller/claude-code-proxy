@@ -107,23 +107,72 @@ wait_for_port() {
     return 1
 }
 
+# ── Kill any process listening on a TCP port, blocking until it's free ──
+# Uvicorn workers and headroom's python processes commonly survive their parent
+# tmux pane being killed because they're double-forked. Pattern-matching pkill
+# misses these — they show up as "python" with no obvious chain identifier.
+# Killing by listening port is foolproof.
+_kill_port() {
+    local port=$1
+    local pids
+    # Try ss first (most reliable on modern Linux), fall back to lsof
+    if command -v ss &>/dev/null; then
+        pids=$(ss -tlnp 2>/dev/null | awk -v p=":$port" '$4 ~ p {print $NF}' | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u)
+    fi
+    if [ -z "$pids" ] && command -v lsof &>/dev/null; then
+        pids=$(lsof -ti tcp:"$port" 2>/dev/null | sort -u)
+    fi
+    if [ -n "$pids" ]; then
+        # SIGTERM first, then SIGKILL after 1s if still alive
+        echo "$pids" | xargs -r kill -TERM 2>/dev/null || true
+        sleep 1
+        local stragglers
+        stragglers=$(echo "$pids" | xargs -r -I{} sh -c "kill -0 {} 2>/dev/null && echo {}" 2>/dev/null)
+        if [ -n "$stragglers" ]; then
+            echo "$stragglers" | xargs -r kill -KILL 2>/dev/null || true
+        fi
+    fi
+    # Wait up to 3s for the port to actually close
+    for _ in 1 2 3 4 5 6; do
+        if command -v ss &>/dev/null; then
+            ss -tln 2>/dev/null | awk -v p=":$port" '$4 ~ p {f=1} END{exit !f}' || return 0
+        else
+            (echo >/dev/tcp/127.0.0.1/"$port") 2>/dev/null || return 0
+        fi
+        sleep 0.5
+    done
+    return 1  # port still in use after 3s
+}
+
 # ── Kill all managed processes ──
 cmd_stop() {
     echo -e "\n${CYAN}Stopping proxies${NC}"
-    # Kill the tmux session first; child processes launched inside panes die with it.
-    tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
 
-    # Clean up any orphaned service processes matching chain commands.
+    # 1. Kill the tmux session — child processes *usually* die with their panes.
+    tmux kill-session -t "$TMUX_SESSION" 2>/dev/null && echo "  Tmux session killed" || true
+
+    # 2. Pattern-based pkill for known service binaries (catches detached processes).
+    local killed_any=false
     while IFS='|' read -r id name cmd port health type; do
-        [ -z "$cmd" ] && continue  # skip cli_wrappers with no service_cmd
+        [ -z "$cmd" ] && continue
         local pattern
         pattern=$(_service_stop_pattern "$cmd")
-        pkill -f "$pattern" 2>/dev/null && echo "  Stopped: $name" || true
+        pkill -f "$pattern" 2>/dev/null && { echo "  Stopped: $name"; killed_any=true; }
     done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
-    # Legacy cleanup
-    pkill -f "start_proxy.py" 2>/dev/null || true
-    pkill -f "headroom proxy" 2>/dev/null || true
-    pkill -f "cli-proxy-api-plus" 2>/dev/null || true
+    pkill -f "start_proxy.py" 2>/dev/null && killed_any=true
+    pkill -f "headroom proxy" 2>/dev/null && killed_any=true
+    pkill -f "cli-proxy-api-plus" 2>/dev/null && killed_any=true
+
+    # 3. The reliable hammer: anything still holding our ports gets SIGTERM → SIGKILL.
+    # This catches uvicorn workers and orphaned interpreters that pattern-matching missed.
+    while IFS='|' read -r id name cmd port health type; do
+        [ "$port" -gt 0 ] || continue
+        if ! _kill_port "$port"; then
+            echo -e "  ${RED}✗${NC} Port $port ($name) still in use after 3s — manual intervention needed:"
+            echo -e "      ${CYAN}lsof -i :$port${NC}  or  ${CYAN}ss -tlnp sport = :$port${NC}"
+        fi
+    done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
+
     echo ""
 }
 
@@ -248,6 +297,19 @@ _launch_chain_tmux() {
     tmux select-layout -t "$TMUX_SESSION" even-vertical
     tmux rename-window -t "$TMUX_SESSION" "chain"
 
+    # ── Easy-exit key bindings ───────────────────────────────────────────────
+    # Without these you'd Ctrl+C each pane separately, then exit each shell.
+    # Now (after Ctrl+B prefix to enter command mode):
+    #   Ctrl+B Q              — quit entire session, killing all services
+    #   Ctrl+B X              — same (alternate, in case Q is muscle-memory bound elsewhere)
+    #   Ctrl+B d              — detach (default tmux, leave session running)
+    # NOTE: avoiding root-level bindings — they would intercept normal typing
+    # inside the panes' shells, breaking interactive use of the running services.
+    tmux set-option -t "$TMUX_SESSION" -g prefix C-b
+    tmux bind-key -T prefix Q kill-session
+    tmux bind-key -T prefix X kill-session
+    tmux set-option -t "$TMUX_SESSION" -g status-justify centre
+
     # ── Pane status bars ──
     # Show a per-pane status line at the bottom of each pane, refreshed every 5s.
     # Uses pane-border-status for a compact per-pane label at the top border.
@@ -295,8 +357,14 @@ cmd_start() {
         return 1
     fi
 
-    # ── Per-service health check ──
-    # Build two lists: healthy (already up) and dead (need restart).
+    # ── Detect current state ──
+    # The truth signal is BOTH (tmux session alive) AND (all ports healthy).
+    # If ports answer but tmux is dead, those are orphans — must be killed.
+    # If tmux is alive but ports don't answer, services crashed inside tmux —
+    # the session is "stale" and needs a clean restart.
+    local tmux_alive=false
+    tmux has-session -t "$TMUX_SESSION" 2>/dev/null && tmux_alive=true
+
     local -a dead_services=()
     local -a healthy_services=()
     while IFS='|' read -r id name cmd port health type; do
@@ -308,17 +376,16 @@ cmd_start() {
         fi
     done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
 
-    local need_full_restart=false
-
-    if [ ${#dead_services[@]} -eq 0 ]; then
-        # Everything already healthy
+    # ── Fully-up path: tmux alive AND every service healthy ──
+    if [ "$tmux_alive" = true ] && [ ${#dead_services[@]} -eq 0 ]; then
         ok "All services already running"
         while IFS='|' read -r id name cmd port health type; do
             [ "$port" -gt 0 ] && ok "$name :$port"
         done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
         echo ""
         echo -e "  ${CYAN}View live output:${NC} tmux attach -t $TMUX_SESSION"
-        echo -e "  ${CYAN}Detach:${NC}          Ctrl+B, then D"
+        echo -e "  ${CYAN}Detach:${NC}          Ctrl+B, then D  (leaves services running)"
+        echo -e "  ${CYAN}Quit all:${NC}        Ctrl+B, then Q  (kills proxy + headroom)"
         echo ""
         if [ -t 1 ] && [ "$NO_ATTACH" != "1" ]; then
             tmux attach -t "$TMUX_SESSION" 2>/dev/null || true
@@ -326,25 +393,31 @@ cmd_start() {
         return 0
     fi
 
-    # Print what's healthy vs what needs restart
+    # ── Orphan detection: ports answer but tmux is dead ──
+    # Common cause: user hit Ctrl+B Q (now kills tmux cleanly) but uvicorn
+    # workers / python interpreters survived. They'd answer health checks but
+    # not be controllable by our tmux session.
+    if [ "$tmux_alive" = false ] && [ ${#healthy_services[@]} -gt 0 ]; then
+        warn "Found orphaned services running outside tmux — killing them first:"
+        for svc in "${healthy_services[@]}"; do
+            warn "  orphan: $svc"
+        done
+    fi
+
+    # Print final plan
     for svc in "${healthy_services[@]}"; do
-        ok "$svc (already up)"
+        [ "$tmux_alive" = true ] && ok "$svc (already up)"
     done
     for id in "${dead_services[@]}"; do
         warn "Down: $id — will restart"
     done
     echo ""
 
-    # If tmux session exists but some services are dead: kill and rebuild cleanly.
-    # Partial-restart inside an existing session is fragile (pane layout breaks).
-    if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-        warn "Killing stale tmux session and restarting all services..."
-        tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
-        sleep 0.5
-    fi
-
-    # Kill any orphaned processes that survived outside tmux
-    cmd_stop 2>/dev/null || true
+    # ── Always perform a full clean stop before restart ──
+    # cmd_stop is now port-aware and blocks until ports are free. This single
+    # invocation handles all three cases: stale tmux session, dead session +
+    # orphan processes, partial failure.
+    cmd_stop 2>&1 | grep -v "^$" | head -10
     sleep 0.3
 
     info "Launching chain in tmux..."
@@ -363,7 +436,8 @@ cmd_start() {
     echo ""
     if [ "$all_ok" = true ]; then
         echo -e "  ${CYAN}View live output:${NC} tmux attach -t $TMUX_SESSION"
-        echo -e "  ${CYAN}Detach:${NC}          Ctrl+B, then D"
+        echo -e "  ${CYAN}Detach:${NC}          Ctrl+B, then D  (leaves services running)"
+        echo -e "  ${CYAN}Quit all:${NC}        Ctrl+B, then Q  (kills proxy + headroom)"
         echo ""
         if [ -t 1 ] && [ "$NO_ATTACH" != "1" ]; then
             info "Attaching to tmux session..."
