@@ -1,0 +1,32 @@
+{
+  "default": {
+    "notes": "Cascade-first conservative defaults. Activated by /v1/* (no profile prefix) or /p/default/v1/*.",
+    "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking", "minimax/minimax-m2.5:free", "nvidia/nemotron-3-super-120b-a12b:free"],
+    "web_search": "nvidia/nemotron-nano-9b-v2:free",
+    "web_search_pattern": "^(web_search|search_web|brave_search|exa_search|google_search|fetch_url)$",
+    "web_search_intercept": true
+  },
+  "pi": {
+    "notes": "pi agent — main model passes through, tool calls forced to fast tool-capable model, web search has its own model.",
+    "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"],
+    "web_search": "nvidia/nemotron-nano-9b-v2:free",
+    "subagent_model": "openai/gpt-oss-120b:free"
+  },
+  "opencode": {
+    "notes": "opencode CLI — minimax-m2.7 as main, fast cascade.",
+    "force_main": "opencode_go/minimax-m2.7",
+    "toolcall_models": ["openai/gpt-oss-120b:free", "qwen/qwen3-next-80b-a3b-thinking"]
+  },
+  "hermes": {
+    "notes": "hermes — qwen3-next as main for aux roles.",
+    "force_main": "qwen/qwen3-next-80b-a3b-thinking",
+    "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"]
+  },
+  "claude": {
+    "notes": "Claude Code passthrough — Anthropic Pro OAuth handles main, only proxy logging matters.",
+    "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"]
+  },
+  "codex": {
+    "notes": "codex CLI — inherits default entirely. Customize as needed."
+  }
+}

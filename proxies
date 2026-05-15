@@ -1724,12 +1724,87 @@ case "${1:-status}" in
         ;;
 esac
 
+cmd_profile() {
+    local action="${1:-list}"
+    local profiles_file="$PROXY_DIR/profiles/profiles.json"
+    if [ ! -f "$profiles_file" ]; then
+        fail "profiles.json not found at $profiles_file"
+        return 1
+    fi
+    case "$action" in
+        list|ls)
+            echo -e "\n${CYAN}Profiles${NC} ${profiles_file/#$HOME/~}\n"
+            _python - <<PYEOF
+import json
+data = json.loads(open("$profiles_file").read())
+for name in sorted(data.keys()):
+    p = data[name]
+    notes = p.get("notes", "")
+    overlays = [k for k in p if k != "notes"]
+    print(f"  \033[36m{name:12}\033[0m  {len(overlays)} overlay key(s)")
+    if notes: print(f"               \033[90m{notes}\033[0m")
+PYEOF
+            echo ""
+            ;;
+        show|view)
+            local name="${2:-}"
+            if [ -z "$name" ]; then
+                fail "Usage: proxies profile show <name>"
+                return 1
+            fi
+            echo -e "\n${CYAN}Profile '$name' (resolved overlay on 'default')${NC}\n"
+            _python - <<PYEOF
+import json, sys
+data = json.loads(open("$profiles_file").read())
+if "$name" not in data:
+    print(f"  \033[31m✗\033[0m Unknown profile '$name'")
+    print(f"  Known: {sorted(data.keys())}")
+    sys.exit(1)
+merged = {**data.get("default", {}), **data["$name"]}
+import json as _j
+print(_j.dumps(merged, indent=2))
+PYEOF
+            echo ""
+            ;;
+        validate|check)
+            echo -e "\n${CYAN}Validating profiles${NC}\n"
+            _python - <<PYEOF
+import json
+data = json.loads(open("$profiles_file").read())
+if "default" not in data:
+    print("  \033[31m✗\033[0m REQUIRED profile 'default' is missing")
+    exit(1)
+for name, p in data.items():
+    issues = []
+    for k in ("toolcall_models",):
+        v = p.get(k)
+        if v is not None and not isinstance(v, list):
+            issues.append(f"{k} must be a list")
+    for k in ("web_search", "force_main", "subagent_model"):
+        v = p.get(k)
+        if v is not None and not isinstance(v, str):
+            issues.append(f"{k} must be a string")
+    if issues:
+        print(f"  \033[31m✗\033[0m {name}: {', '.join(issues)}")
+    else:
+        print(f"  \033[32m✓\033[0m {name}")
+PYEOF
+            echo ""
+            ;;
+        *)
+            echo "Usage: proxies profile {list|show <name>|validate}"
+            return 1
+            ;;
+    esac
+}
+
 case "${1:-status}" in
     up|start)       cmd_start ;;
     down|stop)      cmd_stop ;;
     status|st)      cmd_status ;;
     stats)          cmd_stats ;;
     config|cfg)     shift; cmd_config "$@" ;;
+    profile|prof)   shift; cmd_profile "$@" ;;
     router|route)   shift; cmd_router "$@" ;;
     metrics|met)    shift; cmd_metrics "$@" ;;
     logs|log|tail)  cmd_logs ;;

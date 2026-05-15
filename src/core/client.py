@@ -947,9 +947,15 @@ class OpenAIClient:
         is_tool_request = bool(request.get("tools")) or bool(request.get("tool_choice"))
         toolcall_models = []
         toolcall_max_retries = 2
-        if is_tool_request and config:
-            toolcall_models = getattr(config, "toolcall_models", []) or []
-            toolcall_max_retries = getattr(config, "toolcall_max_retries", 2) or 2
+        if is_tool_request:
+            # Profile overlay wins over global config (Option C-slim per-request override).
+            _profile_tc = request.get("_profile_toolcall_models")
+            if _profile_tc:
+                toolcall_models = list(_profile_tc)
+            elif config:
+                toolcall_models = getattr(config, "toolcall_models", []) or []
+            if config:
+                toolcall_max_retries = getattr(config, "toolcall_max_retries", 2) or 2
             if toolcall_models:
                 logger.debug(
                     f"[CASCADE] Tool-call request — prepending {len(toolcall_models)} tool-capable models"
@@ -1565,9 +1571,15 @@ class OpenAIClient:
         is_tool_request = bool(request.get("tools")) or bool(request.get("tool_choice"))
         toolcall_models = []
         toolcall_max_retries = 2
-        if is_tool_request and config:
-            toolcall_models = getattr(config, "toolcall_models", []) or []
-            toolcall_max_retries = getattr(config, "toolcall_max_retries", 2) or 2
+        if is_tool_request:
+            # Profile overlay wins over global config (Option C-slim per-request override).
+            _profile_tc = request.get("_profile_toolcall_models")
+            if _profile_tc:
+                toolcall_models = list(_profile_tc)
+            elif config:
+                toolcall_models = getattr(config, "toolcall_models", []) or []
+            if config:
+                toolcall_max_retries = getattr(config, "toolcall_max_retries", 2) or 2
             if toolcall_models:
                 logger.debug(
                     f"[CASCADE] Tool-call streaming request — prepending {len(toolcall_models)} tool-capable models"

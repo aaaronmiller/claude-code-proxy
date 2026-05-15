@@ -324,6 +324,38 @@ def _emit_terminal_complete(
 # ═══════════════════════════════════════════════════════════════
 
 
+@router.post("/p/{profile}/v1/chat/completions")
+async def openai_chat_completions_with_profile(
+    profile: str, request: Request, body: OpenAIChatRequest
+):
+    """Profile-scoped variant of /v1/chat/completions.
+
+    Activates the named profile for this single request via a contextvar,
+    then delegates to the standard handler. See src/core/profiles.py.
+    """
+    from src.core.profiles import (
+        ACTIVE_PROFILE,
+        has_profile,
+        resolve_profile,
+    )
+    if not has_profile(profile):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "message": f"Unknown profile '{profile}'. Check profiles/profiles.json.",
+                    "type": "configuration_error",
+                    "code": "unknown_profile",
+                }
+            },
+        )
+    token = ACTIVE_PROFILE.set(resolve_profile(profile))
+    try:
+        return await openai_chat_completions(request, body)
+    finally:
+        ACTIVE_PROFILE.reset(token)
+
+
 @router.post("/v1/chat/completions")
 async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
     """
@@ -418,6 +450,38 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
             openai_request["tools"] = normalize_openai_tools_for_provider(
                 openai_request["tools"], provider, source_ide
             )
+
+        # ── Profile overrides (Option C-slim) ────────────────────────────────
+        # Applied AFTER tool normalization so the web-search detector sees the
+        # final tool shape, but BEFORE tier inference + cascade dispatch.
+        try:
+            from src.core.profiles import ACTIVE_PROFILE, is_web_search_request
+            _profile = ACTIVE_PROFILE.get()
+            if _profile is not None:
+                if is_web_search_request(openai_request, _profile):
+                    _ws_model = _profile.get("web_search")
+                    _original = openai_request.get("model")
+                    if _ws_model and _original != _ws_model:
+                        logger.info(
+                            f"[profile={_profile.name}] web-search intercept: "
+                            f"{_original} → {_ws_model}"
+                        )
+                        openai_request["model"] = _ws_model
+                elif _profile.has("force_main"):
+                    _fm = _profile.get("force_main")
+                    _original = openai_request.get("model")
+                    if _original != _fm:
+                        logger.info(
+                            f"[profile={_profile.name}] force_main: {_original} → {_fm}"
+                        )
+                        openai_request["model"] = _fm
+                if _profile.has("toolcall_models"):
+                    openai_request["_profile_toolcall_models"] = _profile.get(
+                        "toolcall_models"
+                    )
+        except Exception as _profile_err:
+            logger.warning(f"Profile overlay error (non-fatal): {_profile_err}")
+
         tier = infer_model_tier(openai_request.get("model", ""))
 
         # Check if passthrough mode is active (disables cascade + routing)

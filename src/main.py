@@ -537,6 +537,19 @@ def main(env_updates: dict = None, skip_validation: bool = False):
 
     print_startup_banner(config)
 
+    # Validate profile system — fail fast if profiles.json is malformed.
+    # Missing profiles.json is acceptable (profile routing becomes a no-op).
+    try:
+        from src.core.profiles import validate_startup as _validate_profiles
+        _profile_err = _validate_profiles()
+        if _profile_err:
+            print(f"\n⚠ Profile system: {_profile_err}")
+            if not skip_validation:
+                print("  → Set --skip-validation to bypass, or fix profiles/profiles.json")
+                sys.exit(1)
+    except ImportError:
+        pass  # profiles module not yet present during partial install
+
     # Validate configuration
     if not skip_validation:
         from src.core.validator import validate_config_on_startup

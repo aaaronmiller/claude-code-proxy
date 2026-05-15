@@ -204,8 +204,8 @@ alias ccc='_proxy_stack_auto_start && ANTHROPIC_BASE_URL=http://127.0.0.1:8082 A
 
 # ANTHROPIC PRO: proxy passthrough with OAuth → Anthropic API + headroom + RTK
 # Small/toolcall requests still cascade to free OR via proxy routing
-alias cldo='_proxy_stack_auto_start && CLAUDE_CODE_OAUTH_TOKEN=\$CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL=http://127.0.0.1:8082 rtk claude --dangerously-skip-permissions'
-alias cldo-c='_proxy_stack_auto_start && CLAUDE_CODE_OAUTH_TOKEN=\$CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL=http://127.0.0.1:8082 rtk claude --continue --dangerously-skip-permissions'
+alias cldo='_proxy_stack_auto_start && CLAUDE_CODE_OAUTH_TOKEN=\$CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --dangerously-skip-permissions'
+alias cldo-c='_proxy_stack_auto_start && CLAUDE_CODE_OAUTH_TOKEN=\$CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --continue --dangerously-skip-permissions'
 
 # OPENCODE GO: proxy routes BIG tier to opencode_go/minimax-m2.7, small→free OR + headroom + RTK
 alias cc-mini='_proxy_stack_auto_start && BIG_MODEL=opencode_go/minimax-m2.7 ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass rtk claude --dangerously-skip-permissions'
@@ -215,22 +215,22 @@ alias cc-mini-c='_proxy_stack_auto_start && BIG_MODEL=opencode_go/minimax-m2.7 A
 # All route through proxy:8082 (which chains to headroom for compression).
 # RTK wraps where it helps (Claude Code tool output); for other CLIs it's a no-op pass-through.
 
-alias qw='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk qwen --auth-type openai'
-alias qw-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk qwen --auth-type openai --continue'
+alias qw='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/codex/v1 OPENAI_API_KEY=pass rtk qwen --auth-type openai'
+alias qw-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/codex/v1 OPENAI_API_KEY=pass rtk qwen --auth-type openai --continue'
 
-alias codex-run='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk codex --dangerously-bypass-approvals-and-sandbox'
-alias codex-res='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk codex resume'
+alias codex-run='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/codex/v1 OPENAI_API_KEY=pass rtk codex --dangerously-bypass-approvals-and-sandbox'
+alias codex-res='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/codex/v1 OPENAI_API_KEY=pass rtk codex resume'
 
-alias oc='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk opencode'
-alias oc-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk opencode --resume'
+alias oc='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/opencode/v1 OPENAI_API_KEY=pass rtk opencode'
+alias oc-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/opencode/v1 OPENAI_API_KEY=pass rtk opencode --resume'
 
-alias ocl='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk openclaw'
-alias ocl-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk openclaw --resume'
+alias ocl='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/opencode/v1 OPENAI_API_KEY=pass rtk openclaw'
+alias ocl-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/opencode/v1 OPENAI_API_KEY=pass rtk openclaw --resume'
 
 # Hermes: routes through proxy → headroom for context compression.
 # RTK wraps the launch so hermes output is also compressed if used inside Claude Code.
-alias hsi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk hermes --dangerously-skip-permissions'
-alias hsr='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk hermes --resume --dangerously-skip-permissions'
+alias hsi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/hermes/v1 OPENAI_API_KEY=pass rtk hermes --dangerously-skip-permissions'
+alias hsr='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/hermes/v1 OPENAI_API_KEY=pass rtk hermes --resume --dangerously-skip-permissions'
 
 # Pi: AI coding assistant. Routes through proxy → headroom + RTK.
 # Main model: NOT pinned — pass --model at runtime to choose per-session.
@@ -239,8 +239,8 @@ alias hsr='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 O
 #   psi --model qwen/qwen3-next-80b "build an http server"
 #   psi --model anthropic/claude-opus-4-20250514 "complex refactor"
 #   psi --tools read,grep -p "review the code in src/"
-alias psi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk pi --provider openai'
-alias psi-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/v1 OPENAI_API_KEY=pass rtk pi --provider openai --continue'
+alias psi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi/v1 OPENAI_API_KEY=pass rtk pi --provider openai'
+alias psi-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi/v1 OPENAI_API_KEY=pass rtk pi --provider openai --continue'
 
 # ─── Legacy muscle-memory ────────────────────────────────────────────────────
 alias car='cc'

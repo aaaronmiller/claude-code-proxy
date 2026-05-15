@@ -374,6 +374,33 @@ async def validate_and_extract_api_key(
     return None  # Proxy mode: use server-configured API key
 
 
+@router.post("/p/{profile}/v1/messages")
+async def create_message_with_profile(
+    profile: str,
+    request: ClaudeMessagesRequest,
+    http_request: Request,
+    openai_api_key: Optional[str] = Depends(validate_and_extract_api_key),
+    _snapshot: Any = Depends(config_snapshot_dep),
+):
+    """Profile-scoped variant of /v1/messages. See src/core/profiles.py."""
+    from src.core.profiles import ACTIVE_PROFILE, has_profile, resolve_profile
+    if not has_profile(profile):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "type": "configuration_error",
+                    "message": f"Unknown profile '{profile}'. Check profiles/profiles.json.",
+                }
+            },
+        )
+    token = ACTIVE_PROFILE.set(resolve_profile(profile))
+    try:
+        return await create_message(request, http_request, openai_api_key, _snapshot)
+    finally:
+        ACTIVE_PROFILE.reset(token)
+
+
 @router.post("/v1/messages")
 async def create_message(
     request: ClaudeMessagesRequest,
@@ -520,6 +547,45 @@ async def create_message(
                     _use_case_tier = "big"
         except Exception as _router_err:
             logger.warning(f"ModelRouter error (non-fatal): {_router_err}")
+
+        # ── Profile overrides (Option C-slim) ────────────────────────────────
+        # If a profile is active on this request (via /p/{name}/v1/* path),
+        # apply its overrides. Profiles are pure overlays — they fire AFTER
+        # the use-case router has run, so they win over tier and slot defaults.
+        try:
+            from src.core.profiles import ACTIVE_PROFILE, is_web_search_request
+            _profile = ACTIVE_PROFILE.get()
+            if _profile is not None:
+                # 1. Web-search tool-call interception (highest priority — fires first
+                #    so the cascade and CB run against the swap target, not the main).
+                if is_web_search_request(openai_request, _profile):
+                    _ws_model = _profile.get("web_search")
+                    _original = openai_request.get("model")
+                    if _ws_model and _original != _ws_model:
+                        logger.info(
+                            f"[profile={_profile.name}] web-search intercept: "
+                            f"{_original} → {_ws_model}"
+                        )
+                        openai_request["model"] = _ws_model
+                # 2. force_main: profile mandates a specific main model for non-tool turns
+                elif _profile.has("force_main"):
+                    _fm = _profile.get("force_main")
+                    _original = openai_request.get("model")
+                    if _original != _fm:
+                        logger.info(
+                            f"[profile={_profile.name}] force_main: {_original} → {_fm}"
+                        )
+                        openai_request["model"] = _fm
+                # 3. toolcall_models: prepend to cascade (handled in client.py
+                #    via TOOLCALL_MODELS reading — we stash on the request so
+                #    the cascade picks it up).
+                if _profile.has("toolcall_models"):
+                    openai_request["_profile_toolcall_models"] = _profile.get(
+                        "toolcall_models"
+                    )
+        except Exception as _profile_err:
+            logger.warning(f"Profile overlay error (non-fatal): {_profile_err}")
+
         # Strip proxy-internal keys before forwarding upstream
         openai_request.pop("_original_model", None)
         openai_request.pop("_is_background", None)
