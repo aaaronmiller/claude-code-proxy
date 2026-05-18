@@ -503,6 +503,49 @@
         </div>
       </section>
 
+      <!-- ── ROUTING PROFILES (Option C-slim, read-only) ──────── -->
+      <section id="section-routing_profiles">
+        <div class="sec-head">
+          <span class="sec-head-label">Routing Profiles</span>
+          <span style="font-size:9px;color:var(--muted);margin-left:auto;" x-text="routingProfiles.profiles_file ? routingProfiles.profiles_file.replace(/.*\//, 'profiles/') : 'profiles.json'"></span>
+        </div>
+        <div class="card fi-in">
+          <div x-show="!routingProfiles.loaded" style="padding:14px;font-size:10px;color:var(--muted);">awaiting data...</div>
+          <div x-show="routingProfiles.loaded && !routingProfiles.profiles.length" style="padding:14px;font-size:10px;color:var(--muted);">── no profiles configured ──</div>
+          <div x-show="routingProfiles.profiles.length > 0">
+            <!-- Unprefixed (legacy /v1/* path) traffic summary -->
+            <div x-show="routingProfiles.unprefixed_count > 0" style="padding:8px 14px;border-bottom:1px solid var(--line);font-size:10px;color:var(--muted);">
+              <span style="color:var(--cyan);">/v1/*</span> (unprefixed)
+              <span style="margin-left:8px;" x-text="routingProfiles.unprefixed_count + ' req / 24h'"></span>
+              <span style="margin-left:8px;color:var(--faint);">uses default profile</span>
+            </div>
+            <template x-for="(prof, idx) in routingProfiles.profiles" :key="prof.name">
+              <div style="padding:10px 14px;border-bottom:1px solid var(--line);" :style="idx === routingProfiles.profiles.length - 1 ? 'border-bottom:none' : ''">
+                <!-- Header row -->
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <span style="font-size:11px;font-weight:600;color:var(--cyan);min-width:90px;" x-text="prof.name"></span>
+                  <span style="flex:1;font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="prof.notes || '(no notes)'"></span>
+                  <span style="font-size:10px;color:var(--text);" x-text="prof.request_count + ' req / 24h'"></span>
+                </div>
+                <!-- Resolved overlay (compact) -->
+                <div style="margin-top:6px;font-size:10px;color:var(--text);display:flex;flex-wrap:wrap;gap:8px;">
+                  <template x-for="(value, key) in prof.resolved" :key="key">
+                    <span x-show="key !== 'notes'" style="border:1px solid var(--faint);padding:2px 6px;font-size:9px;">
+                      <span style="color:var(--muted);" x-text="key + ':'"></span>
+                      <span style="color:var(--text);margin-left:4px;" x-text="Array.isArray(value) ? value.length + ' items' : (typeof value === 'string' ? (value.length > 35 ? value.slice(0,35) + '…' : value) : value)"></span>
+                    </span>
+                  </template>
+                </div>
+                <!-- Path hint -->
+                <div style="margin-top:6px;font-size:9px;color:var(--faint);font-family:var(--font);">
+                  POST <span style="color:var(--muted);">/p/<span x-text="prof.name"></span>/v1/{chat/completions,messages}</span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </section>
+
       <!-- ── DYNAMIC SETTINGS GROUPS ──────────────────────────── -->
       <template x-for="groupId in displayGroups" :key="groupId">
         <section :id="'section-' + groupId" class="fi-in">
@@ -607,8 +650,11 @@ function proxySettings() {
     // Sections shown in settings groups (excluding reliability/breakers, shown separately)
     displayGroups: ['models', 'reasoning', 'budget', 'router_slots', 'compression', 'local_gpu', 'circuit_breaker', 'toolcalls', 'server', 'auth', 'logging', 'usage_tracking', 'watchdog'],
 
+    routingProfiles: { loaded: false, profiles: [], unprefixed_count: 0 },
+
     navSections: [
       { id: 'reliability', label: 'Reliability', icon: '📊' },
+      { id: 'routing_profiles', label: 'Routing Profiles', icon: '🛤️' },
       { id: 'breakers', label: 'Breakers', icon: '⚡' },
       { id: 'models', label: 'Models', icon: '🤖' },
       { id: 'reasoning', label: 'Reasoning', icon: '🧠' },
@@ -634,10 +680,11 @@ function proxySettings() {
     async loadAll() {
       this.loading = true;
       try {
-        const [settingsRes, relRes, breakersRes] = await Promise.allSettled([
+        const [settingsRes, relRes, breakersRes, profilesRes] = await Promise.allSettled([
           fetch('/api/settings'),
           fetch('/api/reliability?hours=24'),
           fetch('/api/breakers'),
+          fetch('/api/routing-profiles?hours=24'),
         ]);
 
         if (settingsRes.status === 'fulfilled' && settingsRes.value.ok) {
@@ -654,6 +701,16 @@ function proxySettings() {
         if (breakersRes.status === 'fulfilled' && breakersRes.value.ok) {
           const br = await breakersRes.value.json();
           this.breakers = br.breakers || [];
+        }
+
+        if (profilesRes.status === 'fulfilled' && profilesRes.value.ok) {
+          const pf = await profilesRes.value.json();
+          this.routingProfiles = {
+            loaded: true,
+            profiles: pf.profiles || [],
+            unprefixed_count: pf.unprefixed_count || 0,
+            profiles_file: pf.profiles_file || '',
+          };
         }
       } catch (e) {
         this.showToast('Failed to load settings: ' + e.message, 'error');

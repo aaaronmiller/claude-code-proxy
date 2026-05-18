@@ -18,7 +18,10 @@ Profile schema (flat dict; unknown keys ignored for forward compat):
   - web_search_pattern:     str  — regex matching tool names (default below)
   - web_search_intercept:   bool — disable interception if False
   - subagent_model:         str  — reserved for future subagent routing
-  - provider_override:      str  — Phase 4: force a specific provider entry
+  - provider_override:      str  — force a specific provider entry from the
+                                    PROVIDERS_* env registry (e.g. "openrouter",
+                                    "anthropic"). Resolved via
+                                    config.get_provider_endpoint/api_key.
 
 The reserved profile name 'default' must exist; startup fails otherwise.
 """
@@ -77,6 +80,16 @@ class ProfileContext:
 ACTIVE_PROFILE: contextvars.ContextVar[Optional[ProfileContext]] = contextvars.ContextVar(
     "active_profile", default=None
 )
+
+
+def current_profile_name() -> Optional[str]:
+    """Return the active profile name for this request, or None if unprefixed.
+
+    Convenience helper for callers (usage_tracker, dashboards) that just need
+    the name string and don't want to import ProfileContext.
+    """
+    p = ACTIVE_PROFILE.get()
+    return p.name if p else None
 
 
 # ── File cache (mtime-invalidated) ────────────────────────────────────────────

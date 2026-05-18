@@ -583,6 +583,35 @@ async def create_message(
                     openai_request["_profile_toolcall_models"] = _profile.get(
                         "toolcall_models"
                     )
+                # 4. provider_override (Phase 4): force a specific provider entry
+                #    from the PROVIDERS_* registry. Wins over the use_case_route's
+                #    base_url/api_key. Used for per-profile OAuth account selection,
+                #    region selection, etc.
+                if _profile.has("provider_override"):
+                    _po = _profile.get("provider_override")
+                    _po_url = config.get_provider_endpoint(_po)
+                    _po_key = config.get_provider_api_key(_po)
+                    if _po_url:
+                        endpoint = _po_url
+                        provider = _po
+                        if _po_key:
+                            active_api_key = _po_key
+                        custom_client = OpenAIClient(
+                            active_api_key,
+                            endpoint,
+                            config.request_timeout,
+                            api_version=config.azure_api_version,
+                            custom_headers=custom_headers,
+                        )
+                        custom_client.configure_per_model_clients(config)
+                        logger.info(
+                            f"[profile={_profile.name}] provider_override: {_po} → {_po_url}"
+                        )
+                    else:
+                        logger.warning(
+                            f"[profile={_profile.name}] provider_override='{_po}' "
+                            f"not in PROVIDERS_* registry — ignored"
+                        )
         except Exception as _profile_err:
             logger.warning(f"Profile overlay error (non-fatal): {_profile_err}")
 
@@ -1013,6 +1042,7 @@ async def create_message(
 
                         # Log to usage tracker
                         try:
+                            from src.core.profiles import current_profile_name as _cpn
                             usage_tracker.log_request(
                                 request_id=request_id,
                                 original_model=original_model_id,
@@ -1026,6 +1056,7 @@ async def create_message(
                                 duration_ms=duration_ms,
                                 status="error" if error else "success",
                                 error_message=str(error) if error else None,
+                                profile=_cpn(),
                             )
                         except Exception as ut_e:
                             logger.error(f"Failed to log to usage_tracker: {ut_e}")
@@ -1341,6 +1372,9 @@ async def create_message(
                     if "estimated_cost" in locals()
                     else 0.0,
                     status="success",
+                    profile=__import__(
+                        "src.core.profiles", fromlist=["current_profile_name"]
+                    ).current_profile_name(),
                 )
             except Exception as ut_e:
                 logger.error(f"Failed to log to usage_tracker: {ut_e}")
@@ -1432,6 +1466,7 @@ async def create_message(
 
         # Log to usage tracker
         try:
+            from src.core.profiles import current_profile_name as _cpn
             usage_tracker.log_request(
                 request_id=request_id,
                 original_model=original_model_id,
@@ -1443,6 +1478,7 @@ async def create_message(
                 duration_ms=duration_ms,
                 status="error",
                 error_message=str(e.detail),
+                profile=_cpn(),
             )
         except Exception as ut_e:
             logger.error(f"Failed to log to usage_tracker: {ut_e}")
@@ -1474,6 +1510,7 @@ async def create_message(
 
         # Log to usage tracker
         try:
+            from src.core.profiles import current_profile_name as _cpn
             usage_tracker.log_request(
                 request_id=request_id,
                 original_model=original_model_id,
@@ -1485,6 +1522,7 @@ async def create_message(
                 duration_ms=duration_ms,
                 status="error",
                 error_message=str(error_message),
+                profile=_cpn(),
             )
         except Exception as ut_e:
             logger.error(f"Failed to log to usage_tracker: {ut_e}")

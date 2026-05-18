@@ -152,6 +152,7 @@ class UsageTracker:
                 json_size_bytes INTEGER DEFAULT 0,
                 request_content TEXT,
                 response_content TEXT,
+                profile TEXT,
                 UNIQUE (request_id, attempt_index)
             )
         """)
@@ -266,9 +267,16 @@ class UsageTracker:
                 json_size_bytes INTEGER DEFAULT 0,
                 request_content TEXT,
                 response_content TEXT,
+                profile TEXT,
                 UNIQUE (request_id, attempt_index)
             )
         """)
+        # Migration: add `profile` column to pre-existing DBs created before
+        # this column was introduced (Phase 3 of Option C-slim). No-op if present.
+        try:
+            cursor.execute("ALTER TABLE api_requests ADD COLUMN profile TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists, expected on fresh DBs
 
         # Model usage summary (aggregated view)
         cursor.execute("""
@@ -474,6 +482,8 @@ class UsageTracker:
         resolved_assignment_id: Optional[str] = None,
         incoming_identifier: Optional[str] = None,
         resolved_model: Optional[str] = None,
+        # Profile routing (Option C-slim Phase 3)
+        profile: Optional[str] = None,
     ) -> bool:
         """
         Log an API request.
@@ -527,8 +537,9 @@ class UsageTracker:
                         status, error_message,
                         session_id, client_ip,
                         has_json_content, json_size_bytes,
-                        request_content, response_content
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        request_content, response_content,
+                        profile
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         request_id,
@@ -561,6 +572,7 @@ class UsageTracker:
                         json_size_bytes,
                         req_content,
                         resp_content,
+                        profile,
                     ),
                 )
             except sqlite3.IntegrityError:

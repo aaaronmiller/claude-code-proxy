@@ -479,6 +479,32 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                     openai_request["_profile_toolcall_models"] = _profile.get(
                         "toolcall_models"
                     )
+                # provider_override (Phase 4): force a specific provider from
+                # PROVIDERS_* registry. The openai_endpoints path builds its own
+                # client inline via base_url+api_key, so we just overwrite both
+                # before the cascade dispatches.
+                if _profile.has("provider_override"):
+                    _po = _profile.get("provider_override")
+                    _po_url = config.get_provider_endpoint(_po)
+                    _po_key = config.get_provider_api_key(_po)
+                    if _po_url:
+                        base_url = _po_url
+                        endpoint = _po_url
+                        provider = _po
+                        if _po_key:
+                            api_key = _po_key
+                        # Rebuild the openai client with the new credentials.
+                        # The local `client` variable is what dispatches downstream.
+                        from openai import AsyncOpenAI as _AsyncOpenAI
+                        client = _AsyncOpenAI(api_key=api_key, base_url=base_url)
+                        logger.info(
+                            f"[profile={_profile.name}] provider_override: {_po} → {_po_url}"
+                        )
+                    else:
+                        logger.warning(
+                            f"[profile={_profile.name}] provider_override='{_po}' "
+                            f"not in PROVIDERS_* registry — ignored"
+                        )
         except Exception as _profile_err:
             logger.warning(f"Profile overlay error (non-fatal): {_profile_err}")
 
