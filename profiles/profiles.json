@@ -43,8 +43,11 @@
     "web_search": "nvidia/nemotron-nano-9b-v2:free"
   },
   "claude": {
-    "notes": "Claude Code passthrough — Anthropic Pro OAuth handles main, only proxy logging matters.",
-    "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"]
+    "notes": "Claude Code via Anthropic Pro OAuth. Opus/Sonnet pass through to Anthropic. Haiku (small tier) silently swapped to openrouter/owl-alpha so the user's Pro quota is saved on menial tasks invisible to Claude Code.",
+    "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"],
+    "tier_overrides": {
+      "small": "openrouter/owl-alpha"
+    }
   },
   "codex": {
     "notes": "codex CLI — inherits default entirely. Customize as needed."

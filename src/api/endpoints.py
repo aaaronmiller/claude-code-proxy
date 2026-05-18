@@ -57,10 +57,26 @@ async def config_snapshot_dep():
         reset_snapshot(token)
 
 
-# Debug logging for traffic capture
+# Debug logging for traffic capture.
+#
+# Inverted semantics (per user spec): when LOG_LEVEL=debug, full traffic
+# logging is ON by default. The legacy DEBUG_TRAFFIC_LOG flag still works
+# (forces it on regardless of log level), and a new DEBUG_TRAFFIC_QUIET flag
+# can suppress it even at LOG_LEVEL=debug for cases where the user wants
+# debug-level Python logs without the huge debug_traffic.log file growth.
+#
+# Resolution order:
+#   1. DEBUG_TRAFFIC_QUIET=true → OFF (explicit suppress wins)
+#   2. LOG_LEVEL=debug          → ON  (maximum verbosity by default)
+#   3. DEBUG_TRAFFIC_LOG=true   → ON  (legacy explicit enable)
+#   4. otherwise                → OFF
 import logging
 
-DEBUG_TRAFFIC_LOG = os.environ.get("DEBUG_TRAFFIC_LOG", "false").lower() == "true"
+_log_level_env = os.environ.get("LOG_LEVEL", "info").lower()
+_debug_quiet = os.environ.get("DEBUG_TRAFFIC_QUIET", "false").lower() == "true"
+_legacy_traffic = os.environ.get("DEBUG_TRAFFIC_LOG", "false").lower() == "true"
+DEBUG_TRAFFIC_LOG = (not _debug_quiet) and (_log_level_env == "debug" or _legacy_traffic)
+
 traffic_logger = logging.getLogger("traffic_debugger")
 traffic_logger.setLevel(logging.DEBUG)
 
@@ -583,6 +599,22 @@ async def create_message(
                     openai_request["_profile_toolcall_models"] = _profile.get(
                         "toolcall_models"
                     )
+                # 3.5. tier_overrides: when the use-case router resolved this
+                #      request to a tier (big/middle/small), swap the model to
+                #      the profile's per-tier override. This lets a profile say
+                #      "haiku-class requests go to owl-alpha" while still passing
+                #      opus/sonnet through with their original model name.
+                if _profile.has("tier_overrides") and assignment_id:
+                    _to = _profile.get("tier_overrides") or {}
+                    if isinstance(_to, dict) and assignment_id in _to:
+                        _new = _to[assignment_id]
+                        _orig_model = openai_request.get("model")
+                        if _new and _orig_model != _new:
+                            logger.info(
+                                f"[profile={_profile.name}] tier_override "
+                                f"({assignment_id}): {_orig_model} → {_new}"
+                            )
+                            openai_request["model"] = _new
                 # 4. provider_override (Phase 4): force a specific provider entry
                 #    from the PROVIDERS_* registry. Wins over the use_case_route's
                 #    base_url/api_key. Used for per-profile OAuth account selection,

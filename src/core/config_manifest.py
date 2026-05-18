@@ -267,8 +267,13 @@ SETTINGS: List[Setting] = [
             cli_flag="--log-retention", tui_widget="number", web_component="number",
             units="days"),
     Setting("DEBUG_TRAFFIC_LOG", bool, False,
-            "Dump full HTTP request/response headers to logs/ (verbose)", "logging",
+            "Force full traffic logging (logs/debug_traffic.log). Automatic when LOG_LEVEL=debug — use DEBUG_TRAFFIC_QUIET=true to suppress at debug level.",
+            "logging",
             cli_flag="--debug-traffic", tui_widget="toggle", web_component="switch"),
+    Setting("DEBUG_TRAFFIC_QUIET", bool, False,
+            "Suppress full traffic logging even at LOG_LEVEL=debug. For debug Python logs WITHOUT the heavy traffic dump.",
+            "logging",
+            cli_flag="--debug-traffic-quiet", tui_widget="toggle", web_component="switch"),
 
     # ════════════════════════════════════════════════════════════════════════
     # GROUP: watchdog

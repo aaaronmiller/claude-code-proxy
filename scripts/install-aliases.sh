@@ -204,22 +204,42 @@ alias ccc='_proxy_stack_auto_start && ANTHROPIC_BASE_URL=http://127.0.0.1:8082 A
 
 # ANTHROPIC PRO: proxy passthrough with OAuth → Anthropic API + headroom + RTK
 # Small/toolcall requests still cascade to free OR via proxy routing
-# cldo guards against the silent-empty-OAuth-token failure mode:
-# if \$CLAUDE_CODE_OAUTH_TOKEN is unset/empty, warn the user explicitly
-# instead of passing an empty string to the proxy (which would silently
-# fall back to a server key and produce confusing 401s).
-_cldo_guard() {
-  if [ -z "\${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
-    echo "  \033[33m⚠  CLAUDE_CODE_OAUTH_TOKEN is not set in your shell.\033[0m" >&2
-    echo "  Get a token from claude.ai/code (Settings → Developer → OAuth Token)," >&2
-    echo "  then export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-... in ~/.zshrc" >&2
-    echo "  Falling back to proxy's PROVIDERS_anthropic_API_KEY (server-side key)." >&2
-    return 0
+# Claude OAuth auto-discovery: extracts the accessToken from
+# ~/.claude/.credentials.json (where Claude Code stores it after login).
+# This eliminates the need for the user to manually export
+# CLAUDE_CODE_OAUTH_TOKEN. Stdout = token, stderr = warnings, exit 1 = missing.
+# Caches the token in a shell-local var per session to avoid re-parsing.
+_claude_oauth_token() {
+  local cred="\$HOME/.claude/.credentials.json"
+  if [ ! -r "\$cred" ]; then
+    echo "  \033[33m⚠  ~/.claude/.credentials.json not found.\033[0m" >&2
+    echo "  Run 'claude login' first to authenticate with your Anthropic Pro subscription." >&2
+    echo "  (Falling back to proxy's PROVIDERS_anthropic_API_KEY if available.)" >&2
+    return 1
   fi
-  return 0
+  python3 -c "
+import json, sys, time
+try:
+    d = json.load(open('\$cred'))
+    o = d.get('claudeAiOauth', {})
+    tok = o.get('accessToken', '')
+    exp = o.get('expiresAt', 0)
+    if not tok: sys.exit(1)
+    # expiresAt is a millisecond unix timestamp; warn if expired
+    if exp and exp/1000 < time.time():
+        sys.stderr.write('  \033[33m⚠  OAuth token expired (claude CLI may auto-refresh).\033[0m\n')
+    print(tok)
+except Exception as e:
+    sys.stderr.write(f'  failed to read OAuth token: {e}\n')
+    sys.exit(1)
+" 2>&1 >&1 || return 1
 }
-alias cldo='_proxy_stack_auto_start && _cldo_guard && CLAUDE_CODE_OAUTH_TOKEN=\$CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --dangerously-skip-permissions'
-alias cldo-c='_proxy_stack_auto_start && _cldo_guard && CLAUDE_CODE_OAUTH_TOKEN=\$CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --continue --dangerously-skip-permissions'
+
+# cldo: always routes through proxy /p/claude/v1. The 'claude' profile
+# (profiles.json) maps haiku/small-tier requests to openrouter/owl-alpha
+# transparently — opus/sonnet pass through with the user's OAuth token.
+alias cldo='_proxy_stack_auto_start && _OAUTH=\$(_claude_oauth_token) && CLAUDE_CODE_OAUTH_TOKEN="\$_OAUTH" ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --dangerously-skip-permissions'
+alias cldo-c='_proxy_stack_auto_start && _OAUTH=\$(_claude_oauth_token) && CLAUDE_CODE_OAUTH_TOKEN="\$_OAUTH" ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --continue --dangerously-skip-permissions'
 
 # OPENCODE GO: proxy routes BIG tier to opencode_go/minimax-m2.7, small→free OR + headroom + RTK
 alias cc-mini='_proxy_stack_auto_start && BIG_MODEL=opencode_go/minimax-m2.7 ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass rtk claude --dangerously-skip-permissions'

@@ -510,6 +510,26 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
 
         tier = infer_model_tier(openai_request.get("model", ""))
 
+        # Profile tier_overrides (Option C-slim addition): after tier is known,
+        # swap the model if the active profile defines a per-tier override.
+        # Used e.g. by the 'claude' profile to send haiku→owl-alpha silently.
+        try:
+            from src.core.profiles import ACTIVE_PROFILE
+            _profile = ACTIVE_PROFILE.get()
+            if _profile is not None and tier and _profile.has("tier_overrides"):
+                _to = _profile.get("tier_overrides") or {}
+                if isinstance(_to, dict) and tier in _to:
+                    _new = _to[tier]
+                    _orig = openai_request.get("model")
+                    if _new and _orig != _new:
+                        logger.info(
+                            f"[profile={_profile.name}] tier_override "
+                            f"({tier}): {_orig} → {_new}"
+                        )
+                        openai_request["model"] = _new
+        except Exception as _to_err:
+            logger.warning(f"tier_override error (non-fatal): {_to_err}")
+
         # Check if passthrough mode is active (disables cascade + routing)
         from src.core.proxy_chain import get_chain
         _chain = get_chain()

@@ -680,9 +680,16 @@ def main(env_updates: dict = None, skip_validation: bool = False):
     # Suppress raw httpx/openai SDK HTTP lines — they show "POST .../chat/completions 401"
     # with zero context (no model, no why, no fix). Our cascade logger emits richer
     # contextual lines instead. Errors still surface through proxy_logger.log_error().
+    # At default LOG_LEVEL (info/warn/error), suppress httpx/openai SDK noise.
+    # At LOG_LEVEL=debug, the user explicitly opted into maximum verbosity, so
+    # we let these emit their full INFO-level HTTP traces. DEBUG_TRAFFIC_QUIET
+    # overrides if the user wants debug-level Python logs WITHOUT the HTTP noise.
+    _ll = config.log_level.split()[0].lower() if config.log_level else "info"
+    _quiet = os.environ.get("DEBUG_TRAFFIC_QUIET", "false").lower() == "true"
+    _suppress_http = (_ll != "debug") or _quiet
     for _noisy_logger in ("httpx", "openai._base_client", "openai.http_client"):
         _l = _logging.getLogger(_noisy_logger)
-        _l.setLevel(_logging.WARNING)
+        _l.setLevel(_logging.WARNING if _suppress_http else _logging.DEBUG)
 
     # Prune reasoning logs older than 7 days. The Option C heartbeat path
     # tees unrequested reasoning to disk per-message; without pruning, this

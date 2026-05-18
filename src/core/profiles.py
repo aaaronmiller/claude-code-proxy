@@ -14,6 +14,11 @@ Profile schema (flat dict; unknown keys ignored for forward compat):
   - notes:                  str  — human bookkeeping, ignored by router
   - toolcall_models:        list — override TOOLCALL_MODELS for this request
   - force_main:             str  — replace request.model BEFORE cascade
+  - tier_overrides:         dict — per-tier model swap applied AFTER tier
+                                    resolution. Format: {"small": "owl-alpha",
+                                    "middle": "...", "big": "..."}. Lets a
+                                    profile route haiku→cheap-model invisibly
+                                    while preserving opus/sonnet routing.
   - web_search:             str  — model to dispatch web-search tool calls to
   - web_search_pattern:     str  — regex matching tool names (default below)
   - web_search_intercept:   bool — disable interception if False
