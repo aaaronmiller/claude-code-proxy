@@ -22,6 +22,26 @@
     "force_main": "qwen/qwen3-next-80b-a3b-thinking",
     "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"]
   },
+  "hermes-bypass": {
+    "notes": "hermes-bp — main model unchanged (caller decides), tool calls forced to owl-alpha (agentic) with multi-provider cascade.",
+    "toolcall_models": [
+      "openrouter/owl-alpha",
+      "minimax/minimax-m2.5:free",
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "qwen/qwen3-next-80b-a3b-thinking"
+    ],
+    "web_search": "nvidia/nemotron-nano-9b-v2:free"
+  },
+  "pi-bypass": {
+    "notes": "pi-bp — main model unchanged (caller decides), tool calls forced to owl-alpha (agentic) with multi-provider cascade.",
+    "toolcall_models": [
+      "openrouter/owl-alpha",
+      "minimax/minimax-m2.5:free",
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "qwen/qwen3-next-80b-a3b-thinking"
+    ],
+    "web_search": "nvidia/nemotron-nano-9b-v2:free"
+  },
   "claude": {
     "notes": "Claude Code passthrough — Anthropic Pro OAuth handles main, only proxy logging matters.",
     "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"]

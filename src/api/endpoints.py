@@ -639,13 +639,28 @@ async def create_message(
                 return "local"
             return None
 
-        # Log API configuration — DEBUG normally, WARN if key is missing (potential 401)
+        # Log API configuration — INFO emits a single line per request showing
+        # the auth method used. This is the line you want when diagnosing 401s
+        # like the cldo-OAuth-missing failure mode (was silent before).
         logger.debug(f"Request {request_id}: Routing to endpoint: {endpoint}")
         logger.debug(f"Request {request_id}: Using model: {routed_model}")
+
+        # Determine and log auth method (visible at INFO level)
+        _auth_method = "NO KEY"
+        _key_preview = ""
         if openai_api_key:
-            logger.debug(
-                f"Request {request_id}: Using passthrough mode with user-provided API key"
-            )
+            # Client sent a key in the request (passthrough mode). Anthropic
+            # OAuth tokens start with sk-ant-oat01-...; non-OAuth keys start
+            # with cp-, sk-or-, sk-proj-, etc.
+            if openai_api_key.startswith("sk-ant-oat"):
+                _auth_method = "passthrough Anthropic-OAuth"
+            elif openai_api_key in ("pass", "dummy"):
+                # Client sent "pass" — proxy uses its own server key instead
+                _srv_key = config.openai_api_key or ""
+                _key_preview = _srv_key[:10] + "…" + _srv_key[-4:] if len(_srv_key) > 14 else ""
+                _auth_method = f"server-key (proxy mode, {_key_preview or 'EMPTY'})"
+            else:
+                _auth_method = f"passthrough client-key ({openai_api_key[:8]}…)"
         else:
             _srv_key = config.openai_api_key or ""
             if not _srv_key:
@@ -654,10 +669,12 @@ async def create_message(
                     f"Set OPENROUTER_API_KEY or BIG_API_KEY in .env or shell env. "
                     f"Requests will fail with 401."
                 )
+                _auth_method = "NO KEY (will 401)"
             else:
-                logger.debug(
-                    f"Request {request_id}: proxy mode, key={_srv_key[:8]}..."
-                )
+                _key_preview = _srv_key[:10] + "…" + _srv_key[-4:] if len(_srv_key) > 14 else ""
+                _auth_method = f"server-key ({_key_preview})"
+
+        logger.info(f"[{request_id}] auth: {_auth_method}  →  {routed_model}")
 
         # Extract request metadata for comprehensive logging
         message_count = len(request.messages)

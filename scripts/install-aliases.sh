@@ -204,8 +204,22 @@ alias ccc='_proxy_stack_auto_start && ANTHROPIC_BASE_URL=http://127.0.0.1:8082 A
 
 # ANTHROPIC PRO: proxy passthrough with OAuth → Anthropic API + headroom + RTK
 # Small/toolcall requests still cascade to free OR via proxy routing
-alias cldo='_proxy_stack_auto_start && CLAUDE_CODE_OAUTH_TOKEN=\$CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --dangerously-skip-permissions'
-alias cldo-c='_proxy_stack_auto_start && CLAUDE_CODE_OAUTH_TOKEN=\$CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --continue --dangerously-skip-permissions'
+# cldo guards against the silent-empty-OAuth-token failure mode:
+# if \$CLAUDE_CODE_OAUTH_TOKEN is unset/empty, warn the user explicitly
+# instead of passing an empty string to the proxy (which would silently
+# fall back to a server key and produce confusing 401s).
+_cldo_guard() {
+  if [ -z "\${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+    echo "  \033[33m⚠  CLAUDE_CODE_OAUTH_TOKEN is not set in your shell.\033[0m" >&2
+    echo "  Get a token from claude.ai/code (Settings → Developer → OAuth Token)," >&2
+    echo "  then export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-... in ~/.zshrc" >&2
+    echo "  Falling back to proxy's PROVIDERS_anthropic_API_KEY (server-side key)." >&2
+    return 0
+  fi
+  return 0
+}
+alias cldo='_proxy_stack_auto_start && _cldo_guard && CLAUDE_CODE_OAUTH_TOKEN=\$CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --dangerously-skip-permissions'
+alias cldo-c='_proxy_stack_auto_start && _cldo_guard && CLAUDE_CODE_OAUTH_TOKEN=\$CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --continue --dangerously-skip-permissions'
 
 # OPENCODE GO: proxy routes BIG tier to opencode_go/minimax-m2.7, small→free OR + headroom + RTK
 alias cc-mini='_proxy_stack_auto_start && BIG_MODEL=opencode_go/minimax-m2.7 ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass rtk claude --dangerously-skip-permissions'
@@ -232,6 +246,12 @@ alias ocl-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/
 alias hsi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/hermes/v1 OPENAI_API_KEY=pass rtk hermes --dangerously-skip-permissions'
 alias hsr='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/hermes/v1 OPENAI_API_KEY=pass rtk hermes --resume --dangerously-skip-permissions'
 
+# Hermes bypass: main model unchanged (caller decides), tool calls → owl-alpha cascade.
+# Use when you want hermes to keep its own model choice but still benefit from the
+# proxy's tool-call routing + headroom compression + RTK output filtering.
+alias hsi-bp='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/hermes-bypass/v1 OPENAI_API_KEY=pass rtk hermes --dangerously-skip-permissions'
+alias hsr-bp='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/hermes-bypass/v1 OPENAI_API_KEY=pass rtk hermes --resume --dangerously-skip-permissions'
+
 # Pi: AI coding assistant. Routes through proxy → headroom + RTK.
 # Main model: NOT pinned — pass --model at runtime to choose per-session.
 # Tool calls: auto-routed by the proxy to TOOLCALL_MODELS (.env) regardless of main.
@@ -241,6 +261,12 @@ alias hsr='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/he
 #   psi --tools read,grep -p "review the code in src/"
 alias psi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi/v1 OPENAI_API_KEY=pass rtk pi --provider openai'
 alias psi-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi/v1 OPENAI_API_KEY=pass rtk pi --provider openai --continue'
+
+# Pi bypass: main model unchanged (pi/agent decides), tool calls → owl-alpha cascade.
+# Use when you want pi to keep its default model choice but still benefit from the
+# proxy's tool-call routing + headroom compression + RTK output filtering.
+alias psi-bp='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi-bypass/v1 OPENAI_API_KEY=pass rtk pi --provider openai'
+alias psi-bp-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi-bypass/v1 OPENAI_API_KEY=pass rtk pi --provider openai --continue'
 
 # ─── Legacy muscle-memory ────────────────────────────────────────────────────
 alias car='cc'
