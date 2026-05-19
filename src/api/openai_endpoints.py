@@ -510,6 +510,14 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
 
         tier = infer_model_tier(openai_request.get("model", ""))
 
+        # Track the client's REQUESTED model before any profile-driven swap.
+        # If the active profile has spoof_response_model != False (default True),
+        # we rewrite the upstream response's `model` field back to this value
+        # so the client (Claude Code, codex, etc.) never sees the swap target.
+        # Default-True invisibility matches the user's intent for tier_overrides.
+        _client_requested_model = openai_request.get("model")
+        _spoof_response_to: Optional[str] = None
+
         # Profile tier_overrides (Option C-slim addition): after tier is known,
         # swap the model if the active profile defines a per-tier override.
         # Used e.g. by the 'claude' profile to send haiku→owl-alpha silently.
@@ -527,6 +535,10 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                             f"({tier}): {_orig} → {_new}"
                         )
                         openai_request["model"] = _new
+                        # Profile gate: default True = swap invisible to client.
+                        # Set spoof_response_model: false to surface the real model.
+                        if _profile.get("spoof_response_model") is not False:
+                            _spoof_response_to = _orig
         except Exception as _to_err:
             logger.warning(f"tier_override error (non-fatal): {_to_err}")
 
@@ -543,6 +555,12 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                     saw_done = False
 
                     def transform_chunk_dict(chunk_dict: Dict[str, Any]) -> List[str]:
+                        # Response-model spoof: rewrite chunk.model back to the
+                        # client's requested model when tier_override swapped it.
+                        # Every SSE chunk carries the model field; rewrite all.
+                        if _spoof_response_to and chunk_dict.get("model") != _spoof_response_to:
+                            chunk_dict["model"] = _spoof_response_to
+
                         # Normalize tool calls in streaming response
                         for choice in chunk_dict.get("choices", []):
                             delta = choice.get("delta", {})
@@ -671,6 +689,11 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
             else:
                 response = await client.chat.completions.create(**openai_request)
                 response_dict = response.model_dump()
+
+            # Response-model spoof: rewrite back to client's requested model
+            # so tier_override swaps stay invisible to the client.
+            if _spoof_response_to and response_dict.get("model") != _spoof_response_to:
+                response_dict["model"] = _spoof_response_to
 
             # Normalize tool calls in response
             for choice in response_dict.get("choices", []):

@@ -19,6 +19,16 @@ Profile schema (flat dict; unknown keys ignored for forward compat):
                                     "middle": "...", "big": "..."}. Lets a
                                     profile route haiku→cheap-model invisibly
                                     while preserving opus/sonnet routing.
+  - spoof_response_model:   bool — when tier_overrides (or future force_main)
+                                    swaps the model, rewrite the upstream
+                                    response's `model` field back to what the
+                                    client requested. Default True = invisible.
+                                    Set False to surface the real upstream
+                                    model in responses (e.g. for debugging).
+                                    Anthropic /v1/messages path is already
+                                    invisible by construction (response
+                                    converter uses request.model). This flag
+                                    only affects OpenAI /v1/chat/completions.
   - web_search:             str  — model to dispatch web-search tool calls to
   - web_search_pattern:     str  — regex matching tool names (default below)
   - web_search_intercept:   bool — disable interception if False
