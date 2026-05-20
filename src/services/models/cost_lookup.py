@@ -88,6 +88,102 @@ def estimate_cost(
     return cost
 
 
+def paid_equivalent_cost(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    baseline: str = "auto",
+) -> tuple[Optional[float], str]:
+    """
+    Compute what the request WOULD have cost at paid rates.
+
+    Args:
+        model: the model actually used (often a :free variant)
+        baseline: which paid model to compare to:
+            'auto'   — same model with :free stripped (default)
+            'tier'   — class-matched paid model (haiku/sonnet/opus by size)
+            '<id>'   — explicit paid model ID
+
+    Returns:
+        (cost_usd, baseline_name) — cost is None if no paid equivalent found.
+    """
+    if not model or (not input_tokens and not output_tokens):
+        return None, ""
+
+    index = _load_pricing_index()
+    baseline_id: Optional[str] = None
+
+    if baseline == "auto" or baseline == "same":
+        # Strip :free / :nitro tags from the model and look up its paid version
+        base = model.split(":")[0]
+        baseline_id = base if index.get(base) else _normalize_model_id(base)
+        if baseline_id not in index:
+            baseline_id = None
+    elif baseline == "tier":
+        # Heuristic tier matching by model name keywords
+        m = model.lower()
+        if "haiku" in m or "nano" in m or "mini" in m or "small" in m or "8b" in m:
+            for cand in ("anthropic/claude-haiku-4-5", "anthropic/claude-3-5-haiku-20241022", "openai/gpt-4o-mini"):
+                if cand in index:
+                    baseline_id = cand
+                    break
+        elif "opus" in m or "300b" in m or "405b" in m or "ultra" in m or "premium" in m:
+            for cand in ("anthropic/claude-opus-4", "anthropic/claude-opus-4-20250514"):
+                if cand in index:
+                    baseline_id = cand
+                    break
+        else:
+            # middle/sonnet-class default
+            for cand in ("anthropic/claude-sonnet-4-5", "anthropic/claude-sonnet-4-20250514"):
+                if cand in index:
+                    baseline_id = cand
+                    break
+    else:
+        # Explicit model id requested
+        baseline_id = baseline if baseline in index else None
+
+    if not baseline_id:
+        return None, ""
+
+    p = index[baseline_id]
+    cost = (p["prompt"] * input_tokens) + (p["completion"] * output_tokens)
+    return cost, baseline_id
+
+
+def list_paid_models_by_tier() -> dict:
+    """
+    Group paid models from the pricing index by tier for UI baseline dropdown.
+
+    Returns:
+        {
+          "premium":  [{"id": "anthropic/claude-opus-4", "prompt": 1.5e-5, ...}, ...],
+          "mid":      [...],
+          "budget":   [...],
+        }
+    Tiers determined by completion price: premium >$1e-5, mid $1e-6..$1e-5, budget <$1e-6.
+    """
+    index = _load_pricing_index()
+    premium, mid, budget = [], [], []
+    for mid_id, p in index.items():
+        comp = p.get("completion", 0) or 0
+        entry = {
+            "id": mid_id,
+            "prompt": p.get("prompt", 0) or 0,
+            "completion": comp,
+        }
+        if comp >= 1e-5:
+            premium.append(entry)
+        elif comp >= 1e-6:
+            mid.append(entry)
+        else:
+            budget.append(entry)
+    # Sort each tier by completion price descending (most-expensive first = "best")
+    premium.sort(key=lambda x: -x["completion"])
+    mid.sort(key=lambda x: -x["completion"])
+    budget.sort(key=lambda x: -x["completion"])
+    return {"premium": premium, "mid": mid, "budget": budget}
+
+
 def fmt_cost(cost: Optional[float]) -> str:
     """Format cost for terminal display."""
     if cost is None:

@@ -795,6 +795,27 @@ class UsageTracker:
 
             conn.commit()
             conn.close()
+
+            # Mirror to Prometheus metrics. Wrapped in try so a metrics import
+            # failure (or library issue) NEVER breaks the usage logging path.
+            # Only fires on the canonical request (attempt_index=0) so cascade
+            # retries don't double-count requests_total.
+            if attempt_index == 0:
+                try:
+                    from src.api.metrics_api import record_request
+                    record_request(
+                        profile=profile or "",
+                        model=routed_model or original_model or "",
+                        status=status,
+                        duration_seconds=(duration_ms or 0) / 1000.0,
+                        input_tokens=input_tokens or 0,
+                        output_tokens=output_tokens or 0,
+                        thinking_tokens=thinking_tokens or 0,
+                        cost_usd=estimated_cost or 0.0,
+                        cascade_depth=0,  # cascade depth lives in events.jsonl
+                    )
+                except Exception:
+                    pass
             return True
 
         except Exception as e:

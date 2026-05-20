@@ -14,6 +14,7 @@ from src.api.benchmarks import router as benchmarks_router
 from src.api.users import router as users_router
 from src.api.openai_endpoints import router as openai_router
 from src.api.routing_profiles_api import router as routing_profiles_router
+from src.api.metrics_api import router as metrics_router
 from src.api.docs_routes import router as docs_router
 
 # NEW: System monitoring and live metrics
@@ -276,6 +277,7 @@ app = FastAPI(title="The Ultimate Proxy", version="2.1.0", lifespan=lifespan)
 app.include_router(api_router)
 app.include_router(openai_router)  # OpenAI-compatible endpoint for cross-IDE support
 app.include_router(routing_profiles_router)  # /api/routing-profiles (Option C-slim)
+app.include_router(metrics_router)  # /metrics (Prometheus exposition)
 app.include_router(web_ui_router)
 app.include_router(
     config_api_router

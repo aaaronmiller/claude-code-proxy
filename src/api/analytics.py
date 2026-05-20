@@ -337,3 +337,110 @@ async def delete_query(query_id: str):
 @router.get("/api/analytics/health")
 async def analytics_health():
     return {"status": "healthy", "enabled": usage_tracker.enabled, "database": usage_tracker.db_path if usage_tracker.enabled else None}
+
+
+@router.get("/api/analytics/savings-vs-paid")
+async def get_savings_vs_paid(
+    hours: int = Query(24, ge=1, le=720),
+    baseline: str = Query("auto", description="auto | same | tier | <explicit model id>"),
+):
+    """Compute USD savings from running free models vs paid baselines.
+
+    Baseline modes:
+      - auto / same → compare each model to its non-:free paid version
+      - tier       → class-match (small→haiku, middle→sonnet, big→opus)
+      - <model_id> → compare ALL traffic to a single user-chosen paid model
+
+    Returns total savings + per-model breakdown for the time window. Useful
+    for dashboards quantifying "what would this have cost on paid rates".
+    """
+    if not usage_tracker.enabled:
+        return {"enabled": False, "models": [], "total_saved_usd": 0.0, "baseline": baseline}
+
+    try:
+        from src.services.models.cost_lookup import paid_equivalent_cost
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"cost_lookup unavailable: {e}")
+
+    cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+    rows = []
+    try:
+        conn = sqlite3.connect(usage_tracker.db_path)
+        rows = conn.execute(
+            """SELECT routed_model,
+                      SUM(input_tokens)  AS in_tok,
+                      SUM(output_tokens) AS out_tok,
+                      SUM(estimated_cost) AS actual_cost,
+                      COUNT(*)           AS n
+               FROM api_requests
+               WHERE timestamp >= ? AND status = 'success'
+               GROUP BY routed_model""",
+            (cutoff,),
+        ).fetchall()
+        conn.close()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"db read failed: {e}")
+
+    models_out = []
+    total_saved = 0.0
+    for routed_model, in_tok, out_tok, actual_cost, n in rows:
+        in_tok = in_tok or 0
+        out_tok = out_tok or 0
+        actual_cost = actual_cost or 0.0
+        paid_cost, baseline_id = paid_equivalent_cost(
+            routed_model or "", in_tok, out_tok, baseline=baseline
+        )
+        if paid_cost is None:
+            # No pricing data → skip from total but still surface for visibility
+            models_out.append({
+                "model": routed_model,
+                "requests": n,
+                "input_tokens": in_tok,
+                "output_tokens": out_tok,
+                "actual_cost_usd": actual_cost,
+                "baseline": None,
+                "would_have_cost_usd": None,
+                "saved_usd": None,
+            })
+            continue
+        saved = max(0.0, paid_cost - actual_cost)
+        total_saved += saved
+        models_out.append({
+            "model": routed_model,
+            "requests": n,
+            "input_tokens": in_tok,
+            "output_tokens": out_tok,
+            "actual_cost_usd": actual_cost,
+            "baseline": baseline_id,
+            "would_have_cost_usd": paid_cost,
+            "saved_usd": saved,
+        })
+    # Sort by saved_usd desc
+    models_out.sort(key=lambda m: -(m.get("saved_usd") or 0.0))
+    return {
+        "enabled": True,
+        "window_hours": hours,
+        "baseline_mode": baseline,
+        "total_saved_usd": total_saved,
+        "models": models_out,
+    }
+
+
+@router.get("/api/analytics/baselines")
+async def list_baseline_models():
+    """Return tier-organized list of paid models for the baseline dropdown."""
+    try:
+        from src.services.models.cost_lookup import list_paid_models_by_tier
+        tiers = list_paid_models_by_tier()
+        return {
+            "enabled": True,
+            "tiers": tiers,
+            "tier_order": ["premium", "mid", "budget"],
+            "tier_labels": {
+                "premium": "Premium (≥ $10/M tok output)",
+                "mid": "Mid-tier ($1–$10/M tok output)",
+                "budget": "Budget (< $1/M tok output)",
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
