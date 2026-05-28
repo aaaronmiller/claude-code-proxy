@@ -2,7 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — Performance & Reliability Improvements
+## [Unreleased] — Performance & Reliability Improvements + Profile Routing Spec
+
+### Added
+- **Spec-kit documentation: Profile Routing feature** (`specs/002-profile-routing/`) — 7 files generated from requirements.md and design.md via spec-kit templates: spec.md, plan.md, research.md, data-model.md, tasks.md, quickstart.md, contracts/api-contracts.md. Referenced project constitution (`.specify/memory/constitution.md`) and global agent constitution (`~/code/agents/constitution.md`).
 
 ### Fixed (Deliberative Refinement audit — 8 issues resolved)
 - **CRITICAL: Cascade fallbacks all empty** (`src/core/config.py`) — `get_cascade_for_tier()` only read the new `assignments.{tier}.cascade` format but `.env` uses legacy `MIDDLE_CASCADE=` vars. Added legacy env var fallback path so `BIG_CASCADE`, `MIDDLE_CASCADE`, `SMALL_CASCADE` are now read correctly. All three tiers now have fallback models. Estimated reliability score improvement: +0.30.
