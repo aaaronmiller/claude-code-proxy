@@ -687,7 +687,12 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                 # Keep response API stable by reusing dict directly.
                 response_dict = response_dict if isinstance(response_dict, dict) else response_dict.model_dump()
             else:
+                # Pop the internal stash key before forwarding to OpenAI client
+                _ptm = openai_request.pop("_profile_toolcall_models", None)
                 response = await client.chat.completions.create(**openai_request)
+                # Restore so caller/retry can re-read
+                if _ptm is not None:
+                    openai_request["_profile_toolcall_models"] = _ptm
                 response_dict = response.model_dump()
 
             # Response-model spoof: rewrite back to client's requested model
