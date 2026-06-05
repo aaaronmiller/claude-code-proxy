@@ -3,9 +3,11 @@
 # tmux_status.sh — Generate status bar content for proxy tmux panes
 #
 # Usage:
+#   tmux_status.sh project [dir] → GitHub/project + branch status
 #   tmux_status.sh proxy     → Claude Code Proxy status line
 #   tmux_status.sh headroom  → Headroom compression status line
 #   tmux_status.sh rtk       → RTK terminal compression status line
+#   tmux_status.sh codex_right [dir] → Codex session stats status line
 #
 # Called by tmux pane-border-status or set-option status-right.
 # Output is a single line with tmux color codes.
@@ -13,6 +15,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROXY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROXY_URL="http://127.0.0.1:8082"
 HEADROOM_URL="http://127.0.0.1:8787"
 
@@ -24,6 +28,56 @@ _python() {
     else
         python3 "$@"
     fi
+}
+
+# ── Project / GitHub status line ──
+status_project() {
+    local dir="${1:-$PWD}"
+    local root
+    root=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || {
+        echo "#[fg=yellow]● NO GIT#[default]"
+        return
+    }
+
+    local repo branch remote remote_short porcelain dirty staged unstaged untracked
+    repo=$(basename "$root")
+    branch=$(git -C "$root" symbolic-ref --quiet --short HEAD 2>/dev/null || git -C "$root" rev-parse --short HEAD 2>/dev/null || echo "detached")
+    remote=$(git -C "$root" remote get-url origin 2>/dev/null || true)
+    remote_short="$repo"
+    if [ -n "$remote" ]; then
+        remote_short=$(printf "%s" "$remote" | sed -E \
+            -e 's#^git@github.com:##' \
+            -e 's#^https://github.com/##' \
+            -e 's#\.git$##')
+    fi
+
+    porcelain=$(git -C "$root" status --porcelain=v1 2>/dev/null || true)
+    dirty=$(printf "%s\n" "$porcelain" | sed '/^$/d' | wc -l | tr -d ' ')
+    staged=$(printf "%s\n" "$porcelain" | awk '$1 !~ /^\\?/ && substr($0,1,1) != " " {c++} END {print c+0}')
+    unstaged=$(printf "%s\n" "$porcelain" | awk 'substr($0,2,1) != " " && $1 !~ /^\\?/ {c++} END {print c+0}')
+    untracked=$(printf "%s\n" "$porcelain" | awk '$1 == "??" {c++} END {print c+0}')
+
+    local upstream_counts ahead behind sync_part dirty_part
+    upstream_counts=$(git -C "$root" rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null || true)
+    sync_part=""
+    if [ -n "$upstream_counts" ]; then
+        behind="${upstream_counts%%[[:space:]]*}"
+        ahead="${upstream_counts##*[[:space:]]}"
+        if [ "${ahead:-0}" != "0" ] || [ "${behind:-0}" != "0" ]; then
+            sync_part=" #[fg=yellow]↑${ahead:-0}↓${behind:-0}#[default]"
+        fi
+    fi
+
+    dirty_part=""
+    if [ "${dirty:-0}" != "0" ]; then
+        dirty_part=" #[fg=yellow]±${dirty}#[default]"
+        [ "${staged:-0}" != "0" ] && dirty_part="${dirty_part} +${staged}"
+        [ "${unstaged:-0}" != "0" ] && dirty_part="${dirty_part} ~${unstaged}"
+        [ "${untracked:-0}" != "0" ] && dirty_part="${dirty_part} ?${untracked}"
+    fi
+
+    printf "#[fg=magenta]● %s#[default] #[fg=cyan]%s#[default] │ #[fg=green]%s#[default]%s%s" \
+        "$repo" "$remote_short" "$branch" "$sync_part" "$dirty_part"
 }
 
 # ── Proxy status line ──
@@ -144,52 +198,41 @@ except Exception as e:
 
 # ── RTK status line ──
 status_rtk() {
+    local dir="${1:-$PWD}"
     if ! command -v rtk &>/dev/null; then
         echo "#[fg=yellow]● RTK NOT INSTALLED#[default]"
         return
     fi
 
-    local gain
-    gain=$(rtk gain --format json 2>/dev/null) || {
+    _python "$PROXY_DIR/scripts/status/rtk_status.py" \
+        --scope project \
+        --format tmux \
+        --cwd "$dir" \
+        --ttl 10 \
+        --timeout 1.5 2>/dev/null || {
         echo "#[fg=green]● RTK#[default] │ #[fg=yellow](no data)#[default]"
-        return
     }
+}
 
-    _python -c "
-import json, sys
-try:
-    d = json.loads(sys.stdin.read())
-    s = d.get('summary', d)   # RTK nests under 'summary'
-    saved = s.get('total_saved', 0) or 0
-    pct = s.get('avg_savings_pct', 0) or 0
-    cmds = s.get('total_commands', 0) or 0
-
-    if saved >= 1_000_000:
-        saved_str = f'{saved/1_000_000:.1f}M'
-    elif saved >= 1_000:
-        saved_str = f'{saved/1_000:.1f}K'
-    else:
-        saved_str = str(saved)
-
-    parts = [
-        '#[fg=green]● RTK#[default]',
-        f'#[fg=cyan]{pct:.0f}%#[default] avg',
-        f'{saved_str}tok saved',
-        f'{cmds} cmds',
-    ]
-    print(' │ '.join(parts))
-except Exception as e:
-    print(f'#[fg=green]● RTK#[default] │ #[fg=yellow]parse error: {e}#[default]')
-" <<< "$gain"
+# ── Codex session status line ──
+status_codex_right() {
+    local dir="${1:-$PWD}"
+    _python "$PROXY_DIR/scripts/status/codex_status.py" \
+        --side right \
+        --cwd "$dir" 2>/dev/null || {
+        echo "#[fg=yellow]codex:no-session#[default]"
+    }
 }
 
 # ── Dispatch ──
 case "${1:-proxy}" in
+    project)  shift; status_project "$@" ;;
     proxy)    status_proxy ;;
     headroom) status_headroom ;;
-    rtk)      status_rtk ;;
+    rtk)      shift; status_rtk "$@" ;;
+    codex_right) shift; status_codex_right "$@" ;;
     *)
-        echo "Usage: tmux_status.sh {proxy|headroom|rtk}"
+        echo "Usage: tmux_status.sh {project [dir]|proxy|headroom|rtk|codex_right [dir]}"
         exit 1
         ;;
 esac

@@ -27,6 +27,7 @@ claude
 | [Setup](setup.md) | Install, start, and choose local/remote Headroom |
 | [Headroom Acceleration](headroom-acceleration.md) | GPU, CPU, and LAN compression setup |
 | [Configuration](configuration.md) | Settings surfaces and env reference |
+| [Feature Parity](feature-parity.md) | CLI, TUI, WebUX, and env coverage matrix |
 | [Model Scan Integration](MODEL_SCAN_INTEGRATION.md) | measured routing snapshot binding |
 | [Status Bars](STATUS_BARS.md) | tmux, RTK, and Codex status segments |
 | [Crosstalk](crosstalk.md) | Multi-model conversation orchestration |

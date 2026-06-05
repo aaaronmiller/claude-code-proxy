@@ -32,6 +32,7 @@ warn() { echo -e "  ${YELLOW}⚠${NC} $*"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROXY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROXIES_BIN="$PROXY_DIR/proxies"
+CCP_BIN="$PROXY_DIR/scripts/ccp-launch.sh"
 LOCAL_BIN="$HOME/.local/bin"
 
 # Marker wrapping alias block (for idempotent install/uninstall)
@@ -131,6 +132,10 @@ PYEOF
         rm -f "$LOCAL_BIN/proxies"
         ok "removed $LOCAL_BIN/proxies symlink"
     fi
+    if [ -L "$LOCAL_BIN/ccp" ]; then
+        rm -f "$LOCAL_BIN/ccp"
+        ok "removed $LOCAL_BIN/ccp symlink"
+    fi
 
     ok "Uninstalled. Reload your shell: source $RC_FILE"
     exit 0
@@ -144,6 +149,13 @@ fi
 if [ ! -x "$PROXIES_BIN" ]; then
     fail "proxies script not executable at $PROXIES_BIN"
     exit 1
+fi
+
+if [ "$DRY_RUN" = true ]; then
+    info "would symlink $CCP_BIN → $LOCAL_BIN/ccp"
+else
+    ln -sf "$CCP_BIN" "$LOCAL_BIN/ccp"
+    ok "created/updated ccp symlink at $LOCAL_BIN/ccp"
 fi
 
 mkdir -p "$LOCAL_BIN"
@@ -288,6 +300,12 @@ alias psi-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/
 alias psi-bp='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi-bypass/v1 OPENAI_API_KEY=pass rtk pi --provider openai'
 alias psi-bp-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi-bypass/v1 OPENAI_API_KEY=pass rtk pi --provider openai --continue'
 
+# ccp launcher presets: create per-session profiles and clean them up on exit.
+alias ante='ccp ante --preset ante'
+alias ante-c='ccp ante --preset ante --continue'
+alias antigravity='ccp antigravity --preset antigravity'
+alias antigravity-c='ccp antigravity --preset antigravity --continue'
+
 # ─── Legacy muscle-memory ────────────────────────────────────────────────────
 alias car='cc'
 alias carc='ccc'
@@ -344,6 +362,7 @@ echo ""
 echo -e "${BOLD}Quick reference:${NC}"
 cat <<'EOFQR'
   proxies up / down / status   — proxy chain lifecycle (starts headroom+proxy in tmux)
+  ccp <tool> [--policy P]      — temporary-profile launcher
 
   ALL aliases: proxy:8082 (routing+logs) → headroom:8787 (compression) → provider + RTK
 
@@ -359,6 +378,7 @@ cat <<'EOFQR'
   ocl / ocl-c          — OpenClaw (rtk)
   hsi / hsr            — Hermes (rtk, proxy cascade for aux roles)
   psi / psi-c          — pi (no main pinned, toolcalls via TOOLCALL_MODELS, rtk)
+  ante / antigravity   — ccp launcher presets
                          use: psi --model X "prompt"  to pick main per session
 
   ── Legacy muscle-memory ──────────────────────────────────────────

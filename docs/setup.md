@@ -100,6 +100,31 @@ curl -sf http://127.0.0.1:8082/health
 ./proxies status
 ```
 
+## Observability
+
+Gateway Prometheus metrics are exposed at:
+
+```bash
+curl -sf http://127.0.0.1:8082/metrics
+```
+
+Start the optional local Prometheus and Grafana stack:
+
+```bash
+docker compose -f deploy/observability/docker-compose.yml up -d
+```
+
+Then open:
+
+```text
+Prometheus: http://127.0.0.1:9090
+Grafana:    http://127.0.0.1:3000
+```
+
+The bundled Grafana dashboard tracks gateway request rate, tokens, latency,
+cascade switches, and active profiles. RTK stats are available from
+`/api/rtk/stats`; Headroom metrics are scraped from `:8787/metrics`.
+
 ## Common Failures
 
 ### Headroom starts on CPU when a GPU exists

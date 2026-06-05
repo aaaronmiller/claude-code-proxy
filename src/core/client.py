@@ -177,6 +177,19 @@ class OpenAIClient:
         self._vibeproxy_error = None
 
         self.active_requests: Dict[str, asyncio.Event] = {}
+        self._provider_key_index: Dict[str, int] = {}
+
+    def _next_provider_key(self, model: str, config=None) -> Optional[str]:
+        """Return the next key from a provider pool, or None when no pool exists."""
+        if not config or "/" not in model or not hasattr(config, "get_provider_api_keys"):
+            return None
+        provider = model.split("/", 1)[0].lower()
+        keys = config.get_provider_api_keys(provider)
+        if len(keys) < 2:
+            return None
+        idx = (self._provider_key_index.get(provider, 0) + 1) % len(keys)
+        self._provider_key_index[provider] = idx
+        return keys[idx]
 
     def _create_client(
         self,
@@ -501,6 +514,15 @@ class OpenAIClient:
             )
         else:
             client = self.get_client_for_model(request.get("model", ""), config)
+            override_key = request.get("_provider_api_key")
+            if override_key and hasattr(client, "base_url"):
+                client = self._create_client(
+                    override_key,
+                    str(client.base_url),
+                    config.azure_api_version if config else self.default_api_version,
+                    self.custom_headers,
+                    check_health=False,
+                )
 
             model = request.get("model", "")
 
@@ -940,7 +962,7 @@ class OpenAIClient:
 
         # Build models to try: primary → static cascade → dynamic rankings (tool-capable free models)
         primary_model = request.get("model", "")
-        cascade_models = config.get_cascade_for_tier(tier)
+        cascade_models = request.get("_model_scan_cascade") or config.get_cascade_for_tier(tier)
         dynamic_models = _get_dynamic_fallback_models(limit=8)
 
         # Tool-call-aware cascade: prepend TOOLCALL_MODELS when request has tools
@@ -1471,6 +1493,12 @@ class OpenAIClient:
                 # still try fallback models rather than propagating the error immediately.
                 code = e.status_code
                 if code == 429:
+                    rotated_key = self._next_provider_key(model, config)
+                    if rotated_key and not current_request.get("_provider_api_key"):
+                        logger.info(f"[CASCADE] {model} → 429, rotating provider key once")
+                        current_request["_provider_api_key"] = rotated_key
+                        retry_counts[model] += 1
+                        continue
                     retry_counts[model] += 1
                     logger.info(f"[CASCADE] {model} → 429 rate-limit, cascading to next")
                     last_error = e
@@ -1516,7 +1544,15 @@ class OpenAIClient:
         )
         if last_error:
             raise last_error
-        raise APIError("All cascade models failed")
+        # No last_error means every model was skipped before an attempt (e.g. all circuit
+        # breakers open). The OpenAI SDK's APIError requires an httpx.Request, so constructing
+        # it with only a message raised TypeError and masked the real cause as a generic 500.
+        # Surface a clear 503 instead (the file's established HTTPException pattern).
+        raise HTTPException(
+            status_code=503,
+            detail="All cascade models are currently unavailable (every model was skipped, "
+            "likely due to open circuit breakers from recent failures). Try again shortly.",
+        )
 
     async def create_chat_completion_stream_with_cascade(
         self,
@@ -1555,7 +1591,7 @@ class OpenAIClient:
             return
 
         primary_model = request.get("model", "")
-        cascade_models = config.get_cascade_for_tier(tier)
+        cascade_models = request.get("_model_scan_cascade") or config.get_cascade_for_tier(tier)
         dynamic_models = _get_dynamic_fallback_models(limit=8)
 
         # LOCAL tier: append ollama/llamafile as the final fallback when LOCAL_ENABLED=true.
@@ -1887,6 +1923,12 @@ class OpenAIClient:
                     continue
 
                 if status_code == 429:
+                    rotated_key = self._next_provider_key(model, config)
+                    if rotated_key and not current_request.get("_provider_api_key"):
+                        logger.info(f"[CASCADE] {model} → 429 stream, rotating provider key once")
+                        current_request["_provider_api_key"] = rotated_key
+                        retry_counts[model] += 1
+                        continue
                     error_str = str(e.detail).lower()
                     # Alibaba's burst ramp-up detector fires on velocity spikes from cold starts.
                     # Retrying the same provider doesn't help — skip straight to next provider.
@@ -2058,4 +2100,10 @@ class OpenAIClient:
         )
         if last_error:
             raise last_error
-        raise APIError("All stream cascade models failed")
+        # See the non-stream cascade: APIError(message) raises TypeError (missing request) and
+        # masks the real cause as a 500. Surface a clear 503 for "all models skipped" instead.
+        raise HTTPException(
+            status_code=503,
+            detail="All stream cascade models are currently unavailable (every model was skipped, "
+            "likely due to open circuit breakers from recent failures). Try again shortly.",
+        )

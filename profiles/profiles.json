@@ -4,26 +4,53 @@
     "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking", "minimax/minimax-m2.5:free", "nvidia/nemotron-3-super-120b-a12b:free"],
     "web_search": "nvidia/nemotron-nano-9b-v2:free",
     "web_search_pattern": "^(web_search|search_web|brave_search|exa_search|google_search|fetch_url)$",
-    "web_search_intercept": true
+    "web_search_intercept": true,
+    "lane": "interactive",
+    "slot_bindings": {
+      "big": "R1_primary",
+      "middle": "R2_fast",
+      "small": "R3_free"
+    }
   },
   "pi": {
     "notes": "pi agent — main model passes through, tool calls forced to fast tool-capable model, web search has its own model.",
+    "lane": "interactive",
     "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"],
     "web_search": "nvidia/nemotron-nano-9b-v2:free",
     "subagent_model": "openai/gpt-oss-120b:free"
   },
   "opencode": {
     "notes": "opencode CLI — minimax-m2.7 as main, fast cascade.",
+    "lane": "interactive",
     "force_main": "opencode_go/minimax-m2.7",
     "toolcall_models": ["openai/gpt-oss-120b:free", "qwen/qwen3-next-80b-a3b-thinking"]
   },
   "hermes": {
     "notes": "hermes — qwen3-next as main for aux roles.",
+    "lane": "standby",
     "force_main": "qwen/qwen3-next-80b-a3b-thinking",
-    "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"]
+    "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"],
+    "slot_bindings": {
+      "primary": "R1_primary",
+      "compression": "R6_compression",
+      "vision": "R7_vision",
+      "web_extract": "R8_web_extract",
+      "session_search": "R9_session_search",
+      "approval": "R10_approval",
+      "flush_memories": "R11_flush_memories",
+      "delegation": "R12_delegation",
+      "mcp": "R_mcp",
+      "skills_hub": "R_skills_hub",
+      "title_generation": "R_title_gen",
+      "triage": "R_triage",
+      "kanban": "R_kanban",
+      "profile_description": "R_profile_desc",
+      "curator": "R_curator"
+    }
   },
   "hermes-bypass": {
     "notes": "hermes-bp — main model unchanged (caller decides), tool calls forced to owl-alpha (agentic) with multi-provider cascade.",
+    "lane": "standby",
     "toolcall_models": [
       "openrouter/owl-alpha",
       "minimax/minimax-m2.5:free",
@@ -34,6 +61,7 @@
   },
   "pi-bypass": {
     "notes": "pi-bp — main model unchanged (caller decides), tool calls forced to owl-alpha (agentic) with multi-provider cascade.",
+    "lane": "standby",
     "toolcall_models": [
       "openrouter/owl-alpha",
       "minimax/minimax-m2.5:free",
@@ -44,12 +72,37 @@
   },
   "claude": {
     "notes": "Claude Code via Anthropic Pro OAuth. Opus/Sonnet pass through to Anthropic. Haiku (small tier) silently swapped to openrouter/owl-alpha so the user's Pro quota is saved on menial tasks invisible to Claude Code.",
+    "lane": "interactive",
     "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"],
     "tier_overrides": {
       "small": "openrouter/owl-alpha"
     }
   },
   "codex": {
-    "notes": "codex CLI — inherits default entirely. Customize as needed."
+    "notes": "codex CLI — measured model-scan bindings when model_scan.enabled is true.",
+    "lane": "interactive",
+    "slot_bindings": {
+      "big": "R1_primary",
+      "middle": "R8_web_extract",
+      "small": "R8_web_extract"
+    }
+  },
+  "ante": {
+    "notes": "Ante low-RAM agent — standby lane, inherits measured free/cheap role bindings.",
+    "lane": "standby",
+    "slot_bindings": {
+      "big": "R8_web_extract",
+      "middle": "R6_compression",
+      "small": "R10_approval"
+    }
+  },
+  "antigravity": {
+    "notes": "Antigravity OAuth-hosted agent — interactive lane with measured primary and delegation roles.",
+    "lane": "interactive",
+    "slot_bindings": {
+      "big": "R1_primary",
+      "middle": "R12_delegation",
+      "small": "R8_web_extract"
+    }
   }
 }

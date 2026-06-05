@@ -320,11 +320,11 @@ _launch_chain_tmux() {
         tmux set-option -t "$TMUX_SESSION" -g pane-border-status top
         tmux set-option -t "$TMUX_SESSION" -g pane-border-format "#{pane_title}"
         tmux set-option -t "$TMUX_SESSION" -g status-interval 5
-        tmux set-option -t "$TMUX_SESSION" -g status-left-length 200
+        tmux set-option -t "$TMUX_SESSION" -g status-left-length 300
         tmux set-option -t "$TMUX_SESSION" -g status-right-length 200
         # Bottom status bar: proxy summary + headroom summary + rtk summary
-        tmux set-option -t "$TMUX_SESSION" -g status-left "#(${status_script} proxy) "
-        tmux set-option -t "$TMUX_SESSION" -g status-right "#(${status_script} headroom) │ #(${status_script} rtk)"
+        tmux set-option -t "$TMUX_SESSION" -g status-left "#(${status_script} project #{pane_current_path}) │ #(${status_script} proxy) "
+        tmux set-option -t "$TMUX_SESSION" -g status-right "#(${status_script} headroom) │ #(${status_script} rtk #{pane_current_path})"
         tmux set-option -t "$TMUX_SESSION" -g status-bg "colour235"
         tmux set-option -t "$TMUX_SESSION" -g status-fg "white"
     fi

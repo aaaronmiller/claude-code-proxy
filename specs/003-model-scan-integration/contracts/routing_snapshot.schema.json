@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ice-ninja.local/contracts/routing_snapshot.schema.json",
+  "title": "RoutingSnapshot",
+  "description": "Shared contract between model-scan (producer) and claude-code-proxy (consumer). The only coupling surface between the two projects. Contains no credentials.",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "scan_id", "slots", "blocklist"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version. The consumer accepts a matching major version and refuses a newer major."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of snapshot generation."
+    },
+    "scan_id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "provider_health": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["ok", "degraded", "down"]
+      },
+      "default": {}
+    },
+    "blocklist": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Model identifiers excluded from every selection and cascade."
+    },
+    "provider_quota": {
+      "type": "object",
+      "description": "Optional per-provider quota state used by the rotation policy. Keyed by provider name. Carries no credentials.",
+      "additionalProperties": { "$ref": "#/$defs/quotaState" },
+      "default": {}
+    },
+    "slots": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Keyed by role id, e.g. R1_primary.",
+      "additionalProperties": { "$ref": "#/$defs/roleSelection" }
+    }
+  },
+  "$defs": {
+    "quotaState": {
+      "type": "object",
+      "required": ["remaining_fraction"],
+      "additionalProperties": false,
+      "properties": {
+        "remaining_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fraction of the provider's quota window still available, 0 to 1."
+        },
+        "reset_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the quota window resets (ISO 8601 UTC)."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Quota unit, e.g. requests, tokens, credits, messages."
+        },
+        "best_tier_available": {
+          "type": "string",
+          "description": "Quality tier of the best model still reachable on this provider, e.g. S."
+        },
+        "source": {
+          "type": "string",
+          "enum": ["ccusage", "model-scan", "live", "merged"],
+          "description": "Where this quota figure came from."
+        }
+      }
+    },
+    "roleSelection": {
+      "type": "object",
+      "required": ["label", "eval_mode", "best", "candidates"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string" },
+        "eval_mode": { "type": "string", "enum": ["cost_basis", "free"] },
+        "best": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/candidate" }
+          ],
+          "description": "Null when no candidate qualified for this role."
+        },
+        "candidates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/candidate" },
+          "description": "Ranked best-first; includes the best entry."
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["model_id", "provider", "api_model", "fitness", "price_blended", "has_tools", "has_vision"],
+      "additionalProperties": false,
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1, "description": "Provider-native id." },
+        "provider": { "type": "string", "minLength": 1 },
+        "api_model": { "type": "string", "minLength": 1, "description": "Router-ready provider/model id." },
+        "base_url": { "type": "string", "default": "", "description": "May be empty; the router fills from its provider registry." },
+        "fitness": { "type": "number", "minimum": 0, "maximum": 100 },
+        "price_blended": {
+          "oneOf": [
+            { "type": "number", "minimum": 0 },
+            { "type": "null" }
+          ],
+          "description": "Per-million-token blended price; null means unknown (ineligible for budget policies)."
+        },
+        "tier": { "type": "string", "default": "unknown" },
+        "has_tools": { "type": "boolean" },
+        "has_vision": { "type": "boolean" }
+      }
+    }
+  }
+}

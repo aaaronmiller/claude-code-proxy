@@ -280,13 +280,16 @@ SETTINGS: List[Setting] = [
     # ════════════════════════════════════════════════════════════════════════
     Setting("PROXY_WATCHDOG", bool, False,
             "Start auto-recovery watchdog pane (checks health, restarts dead services)",
-            "watchdog", tui_widget="toggle", web_component="switch"),
+            "watchdog", cli_flag="--proxy-watchdog",
+            tui_widget="toggle", web_component="switch"),
     Setting("WATCHDOG_INTERVAL", int, 30,
             "Watchdog health check frequency", "watchdog",
+            cli_flag="--watchdog-interval",
             tui_widget="number", web_component="number", units="seconds",
             min_val=5, max_val=300),
     Setting("WATCHDOG_GRACE", int, 5,
             "Seconds to wait before restarting after first failure", "watchdog",
+            cli_flag="--watchdog-grace",
             tui_widget="number", web_component="number", units="seconds",
             min_val=1, max_val=60),
 
@@ -301,6 +304,7 @@ SETTINGS: List[Setting] = [
             cli_flag="--usage-db", tui_widget="input", web_component="input"),
     Setting("SILENCE_DEPRECATION_WARNINGS", bool, False,
             "Suppress deprecated env-var warnings on startup", "usage_tracking",
+            cli_flag="--silence-deprecation-warnings",
             tui_widget="toggle", web_component="switch"),
 ]
 

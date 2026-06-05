@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ice-ninja.local/contracts/session_config.schema.json",
+  "title": "SessionConfig",
+  "description": "Per-session routing overlay passed to the launcher with --config. Composes over a preset and under inline arguments. Maps onto existing profile overlay keys plus a policy and compression toggle. Contains no credentials.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "preset": {
+      "type": "string",
+      "description": "Base preset (named profile) to layer this file over, e.g. claude, codex, hermes, pi, ante, opencode."
+    },
+    "policy": {
+      "type": "string",
+      "pattern": "^(static|free|quality|roles|budget:[0-9]+(\\.[0-9]+)?)$",
+      "description": "Selection policy. budget carries a numeric ceiling, e.g. budget:0.50."
+    },
+    "compress": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether to route through the compression stage for this session."
+    },
+    "provider_override": {
+      "type": "string",
+      "description": "Provider registry name to force for the main model, e.g. anthropic."
+    },
+    "roles": {
+      "type": "object",
+      "description": "Per-tier and per-use-case overrides. Keys are tiers (big/middle/small) or use cases (toolcall/web_search/image/background) or named roles.",
+      "additionalProperties": { "$ref": "#/$defs/roleOverride" }
+    }
+  },
+  "$defs": {
+    "roleOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Exactly one selection mode should be set: passthrough, an explicit model, or a snapshot slot.",
+      "properties": {
+        "passthrough": {
+          "type": "boolean",
+          "description": "Leave the caller's model intact for this role (suppresses force_main and overrides)."
+        },
+        "model": {
+          "type": "string",
+          "description": "Explicit router-ready provider/model id for this role."
+        },
+        "provider": {
+          "type": "string",
+          "description": "Provider registry name accompanying an explicit model."
+        },
+        "slot": {
+          "type": "string",
+          "description": "Bind this role from the snapshot via the named role/slot, e.g. R8_web_extract."
+        }
+      }
+    }
+  }
+}

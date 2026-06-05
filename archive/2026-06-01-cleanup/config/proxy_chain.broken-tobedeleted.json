@@ -1,0 +1,96 @@
+{
+  "schema_version": "2.0.0",
+  "entries": [
+    {
+      "id": "tobedeleted",
+      "name": "Delete Me",
+      "url": "http://127.0.0.1:8001/v1",
+      "auth_key": "",
+      "enabled": true,
+      "order": 0,
+      "service_cmd": "",
+      "service_stop_cmd": "",
+      "health_path": "/health",
+      "port": 8001,
+      "timeout": 90,
+      "extra_headers": {},
+      "type": "http",
+      "model_prefixes": []
+    }
+  ],
+  "router": {
+    "default": {
+      "model": "",
+      "base_url": "",
+      "api_key": "",
+      "assignment_id": ""
+    },
+    "background": {
+      "model": "nvidia/nemotron-nano-9b-v2:free",
+      "base_url": "",
+      "api_key": "",
+      "assignment_id": ""
+    },
+    "think": {
+      "model": "",
+      "base_url": "",
+      "api_key": "",
+      "assignment_id": ""
+    },
+    "long_context": {
+      "model": "minimax/minimax-m2.5:free",
+      "base_url": "",
+      "api_key": "",
+      "assignment_id": ""
+    },
+    "long_context_threshold": 60000,
+    "web_search": {
+      "model": "",
+      "base_url": "",
+      "api_key": "",
+      "assignment_id": ""
+    },
+    "image": {
+      "model": "qwen/qwen2.5-vl-72b-instruct",
+      "base_url": "",
+      "api_key": "",
+      "assignment_id": ""
+    },
+    "custom_router_path": "",
+    "disabled": false,
+    "passthrough": false
+  },
+  "assignments": [
+    {
+      "id": "big",
+      "kind": "tier",
+      "model": "nvidia/nemotron-nano-9b-v2:free",
+      "provider": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "${OPENROUTER_API_KEY}",
+      "enabled": true,
+      "cascade": []
+    },
+    {
+      "id": "middle",
+      "kind": "tier",
+      "model": "nvidia/nemotron-nano-9b-v2:free",
+      "provider": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "${OPENROUTER_API_KEY}",
+      "enabled": true,
+      "cascade": []
+    },
+    {
+      "id": "small",
+      "kind": "tier",
+      "model": "nvidia/nemotron-nano-9b-v2:free",
+      "provider": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "${OPENROUTER_API_KEY}",
+      "enabled": true,
+      "cascade": []
+    }
+  ],
+  "identifier_mappings": []
+}

@@ -422,6 +422,13 @@ class ProxyLogger:
         """Log request error."""
         fp = _fingerprint_request({"client_ip": client_ip, "user_agent": user_agent})
         session = _get_session_id(fp)
+        profile_session = ""
+        try:
+            from src.core.profiles import current_profile_name
+
+            profile_session = current_profile_name() or ""
+        except Exception:
+            pass
 
         ts = datetime.now().strftime("%H:%M:%S")
         rid = request_id[:6]
@@ -468,6 +475,24 @@ class ProxyLogger:
             cascade_chain,
             traceback_str,
         )
+        try:
+            from src.services.observability.error_sink import emit_error
+
+            emit_error(
+                error,
+                provider=provider,
+                session_id=profile_session or session,
+                model=model_name,
+                request_id=request_id,
+                component="proxy",
+                extra={
+                    "original_model": original_model,
+                    "endpoint": endpoint,
+                    "cascade_chain": cascade_chain,
+                },
+            )
+        except Exception:
+            pass
 
     # ── Terminal: Normal mode ─────────────────────────────────────────────
 

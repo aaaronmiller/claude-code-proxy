@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-05-31T18:42:00Z",
+  "scan_id": 1487,
+  "provider_health": {
+    "anthropic": "ok",
+    "openrouter": "degraded",
+    "ollama_cloud": "ok"
+  },
+  "blocklist": [
+    "openrouter/meta-llama/llama-3.3-70b-instruct",
+    "groq/gpt-oss-120b"
+  ],
+  "provider_quota": {
+    "anthropic": {
+      "remaining_fraction": 0.62,
+      "reset_at": "2026-06-02T00:00:00Z",
+      "unit": "messages",
+      "best_tier_available": "S",
+      "source": "merged"
+    },
+    "openrouter": {
+      "remaining_fraction": 1.0,
+      "source": "model-scan"
+    }
+  },
+  "slots": {
+    "R1_primary": {
+      "label": "Interactive primary",
+      "eval_mode": "cost_basis",
+      "best": {
+        "model_id": "claude-opus-4-8",
+        "provider": "anthropic",
+        "api_model": "anthropic/claude-opus-4-8",
+        "base_url": "",
+        "fitness": 96.4,
+        "price_blended": 18.0,
+        "tier": "S",
+        "has_tools": true,
+        "has_vision": true
+      },
+      "candidates": [
+        {
+          "model_id": "claude-opus-4-8",
+          "provider": "anthropic",
+          "api_model": "anthropic/claude-opus-4-8",
+          "base_url": "",
+          "fitness": 96.4,
+          "price_blended": 18.0,
+          "tier": "S",
+          "has_tools": true,
+          "has_vision": true
+        },
+        {
+          "model_id": "deepseek-v4-flash",
+          "provider": "openrouter",
+          "api_model": "openrouter/deepseek/deepseek-v4-flash:free",
+          "fitness": 81.2,
+          "price_blended": 0.0,
+          "tier": "A",
+          "has_tools": true,
+          "has_vision": false
+        }
+      ]
+    },
+    "R8_web_extract": {
+      "label": "Web extraction (free lane)",
+      "eval_mode": "free",
+      "best": {
+        "model_id": "qwen3-coder-next",
+        "provider": "ollama_cloud",
+        "api_model": "ollama_cloud/qwen3-coder-next:cloud",
+        "fitness": 74.9,
+        "price_blended": 0.0,
+        "has_tools": true,
+        "has_vision": false
+      },
+      "candidates": [
+        {
+          "model_id": "qwen3-coder-next",
+          "provider": "ollama_cloud",
+          "api_model": "ollama_cloud/qwen3-coder-next:cloud",
+          "fitness": 74.9,
+          "price_blended": 0.0,
+          "has_tools": true,
+          "has_vision": false
+        }
+      ]
+    },
+    "R_curator": {
+      "label": "Knowledge curator (no qualifying candidate)",
+      "eval_mode": "cost_basis",
+      "best": null,
+      "candidates": []
+    }
+  }
+}

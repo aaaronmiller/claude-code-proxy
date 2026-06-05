@@ -87,6 +87,19 @@ disallow_untyped_defs = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+norecursedirs = [
+    "archive",
+    ".git",
+    ".venv",
+    ".hypothesis",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+    "node_modules",
+    "model-scraper/.venv",
+    "compression/headroom/.venv",
+]
 markers = [
     "integration: marks tests as integration tests (require running server)",
 ]
