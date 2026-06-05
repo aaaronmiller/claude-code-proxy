@@ -1,123 +1,55 @@
-# ⚡ The Ultimate Proxy - Documentation
+# Clutch Gateway Documentation
 
-> **Complete reference for The Ultimate Proxy**
+Local AI gateway for coding agents: routing, compression, fallback, and telemetry.
 
 ---
 
-## 🚀 Quick Start (New Users)
-
-**Fastest way to get started:**
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/holegots/claude-code-proxy.git
+git clone https://github.com/aaaronmiller/claude-code-proxy.git
 cd claude-code-proxy
-
-# Run automated setup (handles everything!)
-python quickstart.py
-```
-
-This single command will:
-- ✅ Check Python version (3.9+ required)
-- ✅ Create virtual environment
-- ✅ Install all dependencies
-- ✅ Configure environment variables
-- ✅ Initialize the database
-- ✅ Launch the proxy
-
-📖 **See [QUICKSTART.md](../QUICKSTART.md) for the complete guide**
-
----
-
-## 📚 Documentation
-
-| Guide | Description |
-|-------|-------------|
-| [Setup Guide](setup.md) | Installation, configuration, and first run |
-| [Crosstalk](crosstalk.md) | Multi-model conversation orchestration |
-
-### Guides
-
-| Topic | Description |
-|-------|-------------|
-| [Configuration](guides/configuration.md) | All environment variables and options |
-| [Model Selection](guides/model-selection.md) | Choosing and configuring models |
-| [Free Cascade](guides/free-cascade.md) | Ranked free models, fallback chains, and history |
-| [Reasoning](guides/reasoning.md) | Extended thinking and reasoning tokens |
-| [Prompt Injection](guides/prompt-injection.md) | Custom system prompts |
-
-### API Reference
-
-| Endpoint | Description |
-|----------|-------------|
-| [API Overview](api/api-reference.md) | REST API endpoints |
-
-### Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| [Common Issues](troubleshooting/common-issues.md) | Fixes for frequent problems |
-| [Error Codes](troubleshooting/error-codes.md) | API error reference |
-
----
-
-## 🚀 Quick Start
-
-```bash
-# Clone & install
-git clone https://github.com/aaaronmiller/the-ultimate-proxy.git
-cd the-ultimate-proxy
 uv sync
-
-# Interactive setup wizard
-python start_proxy.py --setup
-
-# Start the proxy
-python start_proxy.py
+cp .env.example .env
+./proxies up
 ```
 
-Then in another terminal:
 ```bash
-export ANTHROPIC_BASE_URL=http://localhost:8082
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+export ANTHROPIC_API_KEY=pass
 claude
 ```
 
----
+## Primary Guides
 
-## 🛠️ CLI Commands
+| Guide | Description |
+|-------|-------------|
+| [Setup](setup.md) | Install, start, and choose local/remote Headroom |
+| [Headroom Acceleration](headroom-acceleration.md) | GPU, CPU, and LAN compression setup |
+| [Configuration](configuration.md) | Settings surfaces and env reference |
+| [Model Scan Integration](MODEL_SCAN_INTEGRATION.md) | measured routing snapshot binding |
+| [Status Bars](STATUS_BARS.md) | tmux, RTK, and Codex status segments |
+| [Crosstalk](crosstalk.md) | Multi-model conversation orchestration |
 
-### Configuration
+## API and Operations
+
+| Guide | Description |
+|-------|-------------|
+| [API Reference](api/api-reference.md) | REST endpoints |
+| [Production](guides/production.md) | deployment notes |
+| [Free Cascade](guides/free-cascade.md) | free model fallback chains |
+| [Common Issues](troubleshooting/common-issues.md) | frequent runtime failures |
+| [401 Errors](troubleshooting/401-errors.md) | credential and upstream auth failures |
+
+## Commands
+
 ```bash
-python start_proxy.py --setup           # First-time wizard
-python start_proxy.py --settings        # Unified settings TUI
-python start_proxy.py --doctor          # Health check + auto-fix
+./proxies up
+./proxies down
+./proxies restart headroom
+./proxies status
+./proxies router show
 ```
-
-### Model Management
-```bash
-python start_proxy.py --select-models   # Interactive model selector
-python start_proxy.py --set-big MODEL   # Quick set BIG model
-python start_proxy.py --show-models     # List available models
-```
-
-### Crosstalk
-```bash
-python start_proxy.py --crosstalk-studio  # Visual TUI
-python start_proxy.py --crosstalk-init    # Setup wizard
-```
-
-### Diagnostics
-```bash
-python start_proxy.py --config          # Show configuration
-python start_proxy.py --dry-run         # Validate without starting
-python start_proxy.py --analytics       # View usage stats
-```
-
----
-
-## 🌐 Web Dashboard
-
-Access at `http://localhost:8082` when running.
 
 Features:
 - Real-time request monitoring

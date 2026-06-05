@@ -1,361 +1,162 @@
-<div align="center">
+# Clutch Gateway
 
-<img src="web-ui/static/logo.png" alt="The Ultimate Proxy" width="120">
+Local AI gateway for coding agents that need cheaper context, better model routing, and reliable fallback.
 
-# ⚡ The Ultimate Proxy
+Working name: **Clutch Gateway**. The old repo name says "proxy", but the product is now a local agent gateway: it accepts Claude/OpenAI-compatible traffic, compresses context through Headroom, routes work by role, and falls back across providers when models fail.
 
-**The only proxy you need for Claude Code CLI**
-
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![2026 Ready](https://img.shields.io/badge/2026-Ready-06ffd4.svg)](#)
-
-[Quick Start](#-quick-start) • [Features](#-features) • [Web Dashboard](#-web-dashboard) • [Crosstalk](docs/crosstalk.md) • [Compression Stack](#-compression-stack) • [Roadmap](ROADMAP.md) • [Changelog](CHANGELOG.md)
-
-<br>
-
-<img src="web-ui/static/hero-banner.png" alt="The Ultimate Proxy Dashboard" width="800">
-
-**Route Claude Code to any provider. Save 90% on API costs. Run locally for free.**
-
-</div>
-
----
-
-## 🌟 What Is It?
-
-The Ultimate Proxy sits between Claude Code CLI and your chosen API provider. It translates Anthropic's API format to OpenAI-compatible format, letting you use **any model** with Claude Code:
+## What It Does
 
 ```
-Claude Code CLI  →  RTK (terminal compression)
-                       →  The Ultimate Proxy (:8082)
-                            ├─ Model Router (per-use-case routing)
-                            ├─ Cascade fallback (circuit breaker + retry)
-                            ├─ OpenRouter native fallback (inject models array)
-                            └─ Response conversion (OpenAI SSE → Claude SSE)
-                               →  Headroom (:8787, context compression)
-                                    →  OpenRouter API (free models)
+Claude Code / Codex / Qwen / OpenCode
+        |
+        v
+RTK terminal compression
+        |
+        v
+Headroom context compression (:8787)
+        |
+        v
+Clutch Gateway router (:8082)
+        |
+        +-- model tiers: big / middle / small
+        +-- role slots: background / think / long_context / web_search / image
+        +-- cascade fallback + circuit breakers
+        +-- usage, reliability, and model-scan telemetry
+        |
+        v
+OpenRouter / OpenAI / Gemini / Anthropic / Ollama / local gateways
 ```
 
----
+## Why It Exists
 
-## 🚀 Quick Start
+Coding agents burn tokens differently from chat apps. They replay files, tool logs, terminal output, and long histories. A generic LLM gateway helps with provider access, but it does not optimize the agent loop.
 
-### Option 1: Unified Installation (Recommended)
+Clutch is built for that loop:
 
-**Single command installs everything with automatic GPU detection:**
+- **Context compression first**: Headroom compresses prompt payloads before provider billing.
+- **Terminal compression before context**: RTK keeps shell output from poisoning future turns.
+- **Role-aware routing**: background, long-context, web-search, image, and reasoning work can use different models.
+- **Failure-aware cascades**: circuit breakers and fallbacks keep sessions moving when free or hosted endpoints fail.
+- **Local-first operation**: run on a laptop, a workstation with the best GPU, or a LAN gateway shared by multiple machines.
+
+## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aaaronmiller/claude-code-proxy/main/install-all.sh | bash
+git clone https://github.com/aaaronmiller/claude-code-proxy.git
+cd claude-code-proxy
+uv sync
+cp .env.example .env
+./proxies up
 ```
 
-The installer will:
-- 🔍 **Auto-detect your GPU** (NVIDIA CUDA, Intel Arc/iGPU, AMD ROCm, or CPU-only)
-- 💬 **Prompt you to confirm or override** the detected GPU backend
-- ✅ Clone claude-code-proxy
-- ✅ Install Headroom (compression layer)
-- ✅ Install RTK (command compression)
-- ✅ Install GPU compute stack (Level Zero for Intel, CUDA for NVIDIA, ROCm for AMD)
-- ✅ Configure environment variables
-- ✅ Add compression aliases (`cc`, `qw`, `qw-resume`)
-- ✅ Start all services
-- ✅ Show health status
-
-**Supported GPU backends:**
-
-| Backend | Hardware | Env Vars Set |
-|---------|----------|-------------|
-| **NVIDIA CUDA** | RTX 30/40/50 series, datacenter GPUs | `CUDA_VISIBLE_DEVICES=0` |
-| **Intel Arc / iGPU** | Arc A370M/A580/A770, Iris Xe, UHD | `ONEAPI_DEVICE_SELECTOR=level_zero:0`, `LIBVA_DRIVER_NAME=iHD` |
-| **AMD ROCm** | RX 6000/7000, Instinct MI series | `HSA_OVERRIDE_GFX_VERSION=10.3.0` |
-| **CPU-only** | No GPU available | `HEADROOM_DEVICE=cpu` |
-
-**Manual installation:**
+Use the compression entrypoint:
 
 ```bash
-# Clone & install
-git clone https://github.com/aaaronmiller/claude-code-proxy.git ~/code/claude-code-proxy
-cd ~/code/claude-code-proxy
-./install-all.sh
-```
-
-### Using with Claude Code
-
-In a **new terminal**, run:
-
-```bash
-export ANTHROPIC_BASE_URL=http://localhost:8082
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
 export ANTHROPIC_API_KEY=pass
 claude
 ```
 
-If you want the proxy itself to require a client key, set `PROXY_AUTH_KEY`.
-`ANTHROPIC_API_KEY` is for the Claude Code client side and no longer enables proxy auth by default.
-
-> 💡 **Pro Tip**: Add aliases to your `~/.zshrc` for easier access (see [Setup Guide](docs/setup.md))
-
----
-
-## 🌌 VibeProxy + Antigravity (Free Premium Models)
-
-The easiest way to use Claude Code with premium models for **free**:
-
-1. **Install VibeProxy**: [Download](https://github.com/automazeio/vibeproxy/releases)
-2. **Authenticate**: Sign in with Google (Antigravity OAuth)
-3. **Setup**: `python start_proxy.py --setup` → Select "VibeProxy/Antigravity"
-
-**What you get:**
-- 🧠 Claude Opus 4.5 with 128k thinking tokens
-- ⚡ Gemini 3 Pro/Flash
-- 📊 BIG/MIDDLE/SMALL model routing
-- 📈 Usage tracking & analytics
-- 💸 No API keys or billing required
-
----
-
-## ✨ Features
-
-| Feature | Description |
-|---------|-------------|
-| **Multi-Provider** | OpenRouter, Gemini, OpenAI, Azure, Ollama, LM Studio |
-| **Model Routing** | BIG/MIDDLE/SMALL tiers + per-use-case routing (background, think, long_context, image, web_search) |
-| **Model Cascade** | Automatic fallback with circuit breakers, exponential backoff, and dynamic model list |
-| **OpenRouter Native Fallback** | Inject `models` array for OR endpoint selection — zero extra latency |
-| **Session Tracking** | Conversation-level request grouping via stable fingerprint |
-| **Streaming Usage Tracking** | Full token/cost/duration tracking for both streaming and non-streaming requests |
-| **Web Dashboard** | Real-time monitoring with glassmorphism UI |
-| **Proxy Chain** | Configurable ordered list of upstream services (proxy → headroom → provider) |
-| **Crosstalk** | Model-to-model conversations (up to 8 models) |
-| **Usage Tracking** | Cost analytics, token metrics, per-model breakdowns in SQLite |
-| **Extended Thinking** | Up to 128k thinking tokens for reasoning models |
-| **Prompt Injection** | Add custom prompts showing routing info |
-| **Compression Stack** | Headroom (context compression) + RTK (CLI output compression) for 95-99% savings |
-
----
-
-## 🎨 Web Dashboard
-
-Access at `http://localhost:8082` when running.
-
-- **Glassmorphism UI** with aurora gradients
-- Real-time request monitoring
-- Provider configuration
-- Proxy chain management (`/chain`)
-- Model selection with hybrid routing
-- WebSocket live log streaming
-- Profile management
-
----
-
-## 🛠️ CLI Commands
-
-### `proxies` CLI (recommended)
+Use the router directly when you want routing without Headroom:
 
 ```bash
-# Lifecycle
-proxies up                  # Start proxy chain in tmux
-proxies down                # Stop all services
-proxies restart             # Restart proxy
-proxies status              # Show health for all chain entries
-
-# Configuration
-proxies chain               # Open Textual TUI for chain management
-proxies config show         # Show proxy chain config
-proxies config toggle <id>  # Enable/disable a chain entry
-proxies router show         # Show model routing config
-proxies router set <slot> <model>  # Set per-use-case model
-
-# Monitoring
-proxies stats               # Usage summary (requests, tokens, cost)
-proxies metrics summary     # Detailed token/cost/latency metrics
-proxies metrics models      # Per-model token breakdown
-proxies metrics tools       # 24h tool call analytics
-proxies metrics daily       # 7-day usage history
-proxies watch               # Rich-based live watch dashboard
-
-# Status line
-proxies statusline          # TUI for building CC status line segments
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8082
+export ANTHROPIC_API_KEY=pass
+claude
 ```
 
-### `start_proxy.py` CLI
+## Headroom Acceleration
+
+The Headroom launcher detects acceleration automatically:
+
+| Mode | Detection | Behavior |
+|------|-----------|----------|
+| Intel Arc / Intel iGPU | `clinfo`, `lspci`, or WSL `/dev/dxg` | OpenVINO Kompress on `GPU.0` by default |
+| NVIDIA | `nvidia-smi` | CUDA/PyTorch path, OpenVINO disabled |
+| No GPU | none | CPU/ONNX fallback |
+| Remote GPU host | `HEADROOM_REMOTE_URL` | local relay to LAN Headroom |
+
+Current verified local setup:
+
+- Headroom `0.20.27`
+- Kompress model `chopratejas/kompress-base`
+- OpenVINO backend on Intel `GPU.0`
+- OpenVINO IR size: about `286M`
+- Headroom process RSS after preload: about `603 MiB`
+
+Details: [docs/headroom-acceleration.md](docs/headroom-acceleration.md)
+
+## LAN GPU Sharing
+
+Run Headroom once on the best GPU machine, then point other machines at it:
 
 ```bash
-# Configuration
-python start_proxy.py --setup           # First-time wizard
-python start_proxy.py --settings        # Unified settings TUI
-python start_proxy.py --doctor          # Health check + auto-fix
-
-# Model management
-python start_proxy.py --select-models   # Interactive model selector
-python start_proxy.py --set-big MODEL   # Quick set BIG model
-python start_proxy.py --show-models     # List available models
-
-# Diagnostics
-python start_proxy.py --config          # Show configuration
-python start_proxy.py --dry-run         # Validate without starting
-python start_proxy.py --analytics       # View usage stats
+HEADROOM_REMOTE_URL=http://gpu-box.local:8787 ./proxies restart headroom
 ```
 
----
+The local machine keeps a local `:8787` endpoint, but requests relay to the remote Headroom instance. The remote Headroom server must be configured so its upstream gateway is reachable from that GPU host.
 
-## 🗣️ Crosstalk
-
-Multi-model conversations where AI models talk to each other:
+## Core Commands
 
 ```bash
-# Launch visual TUI
-python start_proxy.py --crosstalk-studio
-
-# Quick setup
-python start_proxy.py --crosstalk "claude-opus,gemini-pro" --topic "Explore consciousness"
+./proxies up                         # start gateway + Headroom in tmux
+./proxies down                       # stop managed services
+./proxies restart headroom           # restart compression layer
+./proxies status                     # health for chain entries
+./proxies config show                # inspect chain config
+./proxies router show                # inspect role routing
+./proxies metrics summary            # usage summary
 ```
 
-**Features:**
-- Up to 8 models in a conversation
-- Multiple paradigms: relay, debate, memory, report
-- Jinja templates for message formatting
-- Backrooms-compatible import/export
-- MCP integration for programmatic access
+## Configuration Files
 
-[Read the Crosstalk Guide →](CROSSTALK.md)
+| File | Purpose |
+|------|---------|
+| `.env` | environment overrides and credentials |
+| `config/proxy_chain.json` | service chain, assignments, cascades, model-scan settings |
+| `profiles/profiles.json` | per-tool routing profiles |
+| `logs/proxy.log` | gateway request log |
+| `~/.headroom/logs/proxy.jsonl` | Headroom savings log |
 
----
+Never commit real provider keys. `ANTHROPIC_API_KEY=pass` and `x-api-key: pass` are local client compatibility values, not real credentials.
 
-## 📁 Project Structure
+## Documentation
 
-```
-claude-code-proxy/
-├── start_proxy.py              # Main entry point
-├── proxies                     # Bash CLI for lifecycle/config/metrics
-├── .envrc                      # Environment config (sourced by direnv)
-├── CHANGELOG.md                # Project changelog
-├── CROSSTALK.md                # Multi-model chat docs
-│
-├── src/
-│   ├── core/                   # Config, client, circuit breaker, proxy chain, model router
-│   ├── api/                    # FastAPI routes + WebSocket endpoints
-│   ├── services/               # Conversion, logging, usage tracking, models, prompts
-│   ├── cli/                    # CLI tools and TUIs (chain_tui, statusline_tui)
-│   └── dashboard/              # Terminal dashboard
-│
-├── config/                     # Runtime config (proxy_chain.json, custom_router.example.py)
-├── data/                       # Model rankings, limits, circuit breaker state
-├── scripts/                    # Status line, tmux, metrics shell scripts
-├── tools/                      # Maintenance scripts (refresh_model_rankings.py)
-├── web-ui/                     # Svelte + bits-ui dashboard
-├── docs/                       # Extended documentation
-└── configs/crosstalk/          # Crosstalk presets & templates
-```
+| Guide | Use |
+|-------|-----|
+| [Setup](docs/setup.md) | install, local mode, remote Headroom mode |
+| [Headroom Acceleration](docs/headroom-acceleration.md) | GPU/CPU/remote compression setup |
+| [Configuration](docs/configuration.md) | env vars and settings surfaces |
+| [Model Scan Integration](docs/MODEL_SCAN_INTEGRATION.md) | measured routing snapshot binding |
+| [Status Bars](docs/STATUS_BARS.md) | tmux/RTK/Codex status surfaces |
+| [Troubleshooting 401s](docs/troubleshooting/401-errors.md) | auth and provider failures |
 
----
+## Category Positioning
 
-## 🐛 Troubleshooting
+This project competes less with "proxies" and more with **agent gateways**:
 
-**401 Unauthorized**
-```bash
-python start_proxy.py --doctor  # Auto-fix API keys
-```
+- LiteLLM-style unified provider access
+- Portkey/Bifrost-style routing and resilience
+- Helicone-style usage visibility
+- Headroom/RTK-style context reduction for coding agents
 
-**Model Not Found**
-```bash
-python start_proxy.py --show-models  # List available models
-```
+The differentiator is the combination: local gateway + context compression + coding-agent routing profiles.
 
-**Connection Refused**
-- Ensure proxy is running: `proxies up` or `python start_proxy.py`
-- Check port 8082 is not in use
+## Repository Layout
 
-**Stream Stalls / Infinite Lag**
-- Likely caused by upstream model emitting `reasoning_content` without client requesting it
-- Proxy now emits liveness heartbeat during unrequested reasoning (Option C handling)
-- Restart proxy to activate: `proxies restart`
+| Path | Purpose |
+|------|---------|
+| `src/` | gateway API, routing, conversion, logging |
+| `scripts/` | launchers, status tools, Headroom relay |
+| `config/` | chain and assignment configuration |
+| `profiles/` | per-agent profile config |
+| `docs/` | operator docs |
+| `tests/` | unit and integration tests |
+| `compression/` | vendored compression projects and references |
+| `archive/` | historical cleanup snapshot |
 
----
+## Current Caveats
 
-## 🗜️ Compression Stack
-
-**Integrated compression layer for 95-99% cost savings**
-
-### Quick Start
-
-```bash
-# Start compression stack
-proxies up
-
-# Use Claude with auto-compression
-cc  # or csr to resume
-```
-
-### Features
-
-- **97% compression rate** (900→26 tokens)
-- **GPU acceleration** — NVIDIA CUDA, Intel Arc (Level Zero), AMD ROCm, or CPU-only
-- **Multi-CLI support** (Claude, Qwen, Codex, OpenCode, OpenClaw, Hermes)
-- **Real-time dashboard** (terminal + web at `:8899`)
-- **Multi-tier compression** — default (`:8787`) + small model (`:8790`)
-- **Semantic caching** — deduplicates repeated context across turns
-- **RTK command compression** — 2-line summaries for CLI output
-
-### Architecture
-
-```
-Claude Code → RTK → Proxy (:8082) → Headroom (:8787) → OpenRouter
-                        │
-                  Model Router
-                  Cascade Fallback
-                  Circuit Breaker
-                  Usage Tracking
-```
-
-### Documentation
-
-- **Full Guide:** [docs/COMPRESSION-STACK.md](docs/COMPRESSION-STACK.md)
-- **Performance Analysis:** [docs/PERFORMANCE-ANALYSIS.md](docs/PERFORMANCE-ANALYSIS.md)
-- **GPU Optimization:** [docs/GPU-OPTIMIZATION.md](docs/GPU-OPTIMIZATION.md)
-- **Status Bars:** [docs/STATUS_BARS.md](docs/STATUS_BARS.md)
-- **Roadmap:** [ROADMAP.md](ROADMAP.md)
-- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
-
-### Low-VRAM / No-GPU Support
-
-The installer handles this automatically:
-- **Intel Arc A370M** (4GB) — Level Zero runtime, `ONEAPI_DEVICE_SELECTOR=level_zero:0`
-- **CPU-only** — fallback when no GPU is detected, runs entirely on CPU
-- **WSL2 passthrough** — GPU exposed via `/dev/dxg` from Windows host
-
-For manual configuration, see [docs/GPU-OPTIMIZATION.md](docs/GPU-OPTIMIZATION.md)
-
----
-
-## 🔮 Roadmap
-
-**See full roadmap:** [ROADMAP.md](ROADMAP.md)
-
-### Phase 1: Parallel Installation (April 2026) ✅ COMPLETE
-- [x] Single install script with GPU auto-detection (`install-all.sh` v2.0)
-- [x] Unified start/stop commands
-- [x] Low-VRAM mode (Intel Arc A370M 4GB via Level Zero)
-- [x] No-GPU mode (CPU-only fallback)
-- [x] Network proxy access (HTTP/HTTPS)
-- [x] Compression monitoring dashboard (`:8899`)
-- [x] RTK integration (v0.34.3)
-
-### Phase 2: Tight Integration (May 2026)
-- [ ] Shared state management
-- [ ] Unified health monitoring
-- [ ] Log aggregation
-
-### Phase 3: Full Merger (Q3 2026)
-- [ ] Headroom as proxy middleware
-- [ ] Single unified proxy process
-- [ ] Resource optimization
-
----
-
-<div align="center">
-
-**The Ultimate Proxy** • Made with ❤️ for the Claude Code community
-
-[Report Bug](https://github.com/aaaronmiller/the-ultimate-proxy/issues) • [Request Feature](https://github.com/aaaronmiller/the-ultimate-proxy/issues)
-
-</div>
+- The repo is still named `claude-code-proxy`; docs now use the product direction `Clutch Gateway`.
+- Remote Headroom works as a relay, but the remote GPU host must have network reachability to its configured upstream gateway.
+- Exact Intel VRAM counters are not exposed in this WSL environment; verify with native i915 tooling on bare metal Linux.

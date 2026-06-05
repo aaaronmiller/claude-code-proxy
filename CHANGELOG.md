@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased] — Performance & Reliability Improvements + Profile Routing Spec
 
 ### Added
+- **Headroom auto acceleration and LAN relay** (`scripts/headroom-start.sh`, `scripts/headroom-relay.py`, `scripts/headroom-openvino-site/sitecustomize.py`) — Headroom startup now detects NVIDIA, Intel Arc/iGPU, or CPU fallback; pins Intel OpenVINO Kompress to the verified device; restores the missing ONNX wrapper in Headroom 0.20.27 for CPU fallback; and supports `HEADROOM_REMOTE_URL` so machines without a useful GPU can relay local `:8787` traffic to a shared LAN Headroom host. Docs added in `docs/headroom-acceleration.md`.
+- **Gateway documentation rewrite** (`README.md`, `docs/setup.md`, `docs/index.md`) — Repositioned the project from "proxy" to local AI gateway for coding agents, documented the Headroom-first path, remote GPU sharing, and operational command surface. Working product name: Clutch Gateway.
 - **Spec-kit documentation: Profile Routing feature** (`specs/002-profile-routing/`) — 7 files generated from requirements.md and design.md via spec-kit templates: spec.md, plan.md, research.md, data-model.md, tasks.md, quickstart.md, contracts/api-contracts.md. Referenced project constitution (`.specify/memory/constitution.md`) and global agent constitution (`~/code/agents/constitution.md`).
 
 ### Fixed (Deliberative Refinement audit — 8 issues resolved)

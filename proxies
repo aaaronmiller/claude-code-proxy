@@ -431,7 +431,9 @@ cmd_start() {
     local all_ok=true
     while IFS='|' read -r id name cmd port health type; do
         if [ "$port" -gt 0 ]; then
-            wait_for_port "$port" 30 "$health" && ok "$name :$port" || { fail "$name :$port"; all_ok=false; }
+            wait_timeout=30
+            [ "$id" = "headroom" ] && wait_timeout="${HEADROOM_START_TIMEOUT:-120}"
+            wait_for_port "$port" "$wait_timeout" "$health" && ok "$name :$port" || { fail "$name :$port"; all_ok=false; }
         fi
     done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
 
@@ -1661,7 +1663,9 @@ cmd_restart_service() {
 
     if [ "${port:-0}" -gt 0 ]; then
         info "Waiting for $found_name :$port..."
-        wait_for_port "$port" 30 "${health_path:-/health}" && ok "$found_name :$port healthy" || fail "$found_name :$port did not come up"
+        wait_timeout=30
+        [ "$target" = "headroom" ] && wait_timeout="${HEADROOM_START_TIMEOUT:-120}"
+        wait_for_port "$port" "$wait_timeout" "${health_path:-/health}" && ok "$found_name :$port healthy" || fail "$found_name :$port did not come up"
     else
         ok "$found_name restarted (no health endpoint)"
     fi
