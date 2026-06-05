@@ -179,7 +179,9 @@ cmd_stop() {
 # ── GPU detection for headroom kompressor ────────────────────────────────────
 # Returns the env-var prefix to prepend to headroom's service_cmd.
 # NVIDIA: ONNX/PyTorch+CUDA — no special vars needed (headroom detects CUDA auto)
-# Intel Arc: OpenVINO requires ONEAPI_DEVICE_SELECTOR=level_zero:0
+# Intel Arc: OpenVINO requires Level Zero and an explicit Kompress device.
+# On this host Headroom's default GPU.1 fails with CL_OUT_OF_RESOURCES; GPU.0
+# is the Arc dGPU verified by Kompress preload.
 # CPU: no vars — headroom falls back to ONNX CPU
 #
 # WSL2 note: lspci only shows "Microsoft Basic Render Driver" — use clinfo or
@@ -200,7 +202,7 @@ _detect_gpu_env() {
         local intel_cl
         intel_cl=$(clinfo --list 2>/dev/null | grep -i intel | head -1)
         if [[ -n "$intel_cl" ]]; then
-            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0"
+            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0 HEADROOM_KOMPRESS_DEVICE=${HEADROOM_KOMPRESS_DEVICE:-GPU.0} LIBVA_DRIVER_NAME=iHD"
             return
         fi
     fi
@@ -210,14 +212,14 @@ _detect_gpu_env() {
         local intel_gpu
         intel_gpu=$(lspci 2>/dev/null | grep -i 'vga\|display\|3d' | grep -i intel | head -1)
         if [[ -n "$intel_gpu" ]]; then
-            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0"
+            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0 HEADROOM_KOMPRESS_DEVICE=${HEADROOM_KOMPRESS_DEVICE:-GPU.0} LIBVA_DRIVER_NAME=iHD"
             return
         fi
     fi
 
     # WSL2 with /dev/dxg but no clinfo — DirectX GPU present, try level_zero anyway
     if [[ -e /dev/dxg ]] && [[ -d /dev/dri ]]; then
-        echo "ONEAPI_DEVICE_SELECTOR=level_zero:0"
+        echo "ONEAPI_DEVICE_SELECTOR=level_zero:0 HEADROOM_KOMPRESS_DEVICE=${HEADROOM_KOMPRESS_DEVICE:-GPU.0} LIBVA_DRIVER_NAME=iHD"
         return
     fi
 
