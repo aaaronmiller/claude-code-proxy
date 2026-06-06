@@ -139,6 +139,28 @@ class RouterConfig:
 
 
 @dataclass
+class ModelScanConfig:
+    """Optional model-scan binding configuration, preserved across registry saves."""
+
+    enabled: bool = False
+    policy: str = "static"
+    snapshot_path: str = "~/.config/model-scan/routing_snapshot.json"
+    gateway_url: str = "http://127.0.0.1:7099/routing-snapshot"
+    cache_ttl_s: int = 300
+    staleness_limit_s: int = 86400
+    lanes: dict = field(default_factory=lambda: {"interactive": {"allow_paid": True}, "standby": {"allow_paid": False}})
+
+    @classmethod
+    def from_any(cls, val: Any) -> "ModelScanConfig":
+        if isinstance(val, cls):
+            return val
+        if not isinstance(val, dict):
+            return cls()
+        fields = cls.__dataclass_fields__
+        return cls(**{k: v for k, v in val.items() if k in fields})
+
+
+@dataclass
 class ProxyChain:
     """
     The full proxy chain configuration, including ordered chain entries,
@@ -157,6 +179,7 @@ class ProxyChain:
     identifier_mappings: list[Any] = field(
         default_factory=list
     )  # list[IdentifierMapping]
+    model_scan: ModelScanConfig = field(default_factory=ModelScanConfig)
 
     # ── Serialization ────────────────────────────────────────────────────────
 
@@ -167,6 +190,7 @@ class ProxyChain:
             "router": asdict(self.router),
             "assignments": [asdict(a) for a in self.assignments],
             "identifier_mappings": [asdict(m) for m in self.identifier_mappings],
+            "model_scan": asdict(self.model_scan),
         }
         return result
 
@@ -224,6 +248,7 @@ class ProxyChain:
             schema_version=data.get("schema_version", "1.0.0"),
             assignments=assignments,
             identifier_mappings=identifier_mappings,
+            model_scan=ModelScanConfig.from_any(data.get("model_scan", {})),
         )
         # Re-sort by order field
         chain.entries.sort(key=lambda e: e.order)
@@ -526,7 +551,16 @@ def reload_chain() -> ProxyChain:
 
 
 def _is_local_proxy_entry(entry: ProxyEntry) -> bool:
-    """Skip self-referential chain entries when deriving the proxy upstream URL."""
+    """Skip local chain proxies when deriving the proxy upstream URL.
+
+    The router (8082) sits downstream of local front-door/compression proxies — headroom
+    (8787/8788) and the OAuth upstream proxy on its loopback port — in the chain topology
+    ``Claude → headroom(:8787) → router(:8082) → provider``. None of these loopback proxies is a
+    real upstream *provider* for the router; treating them as the router's upstream makes the
+    router route back into the chain (the headroom→router→headroom loop that surfaced as the
+    401 cascade). So the router's upstream must resolve to the actual provider, never a local
+    compression/front-door proxy.
+    """
     if entry.id == "claude_code_proxy":
         return True
 
@@ -536,4 +570,6 @@ def _is_local_proxy_entry(entry: ProxyEntry) -> bool:
         return False
 
     hostname = (parsed.hostname or "").lower()
-    return hostname in {"127.0.0.1", "localhost", "0.0.0.0"} and parsed.port == 8082
+    # Local loopback proxy ports that are chain stages, not upstream providers.
+    _LOCAL_PROXY_PORTS = {8082, 8787, 8788}
+    return hostname in {"127.0.0.1", "localhost", "0.0.0.0"} and parsed.port in _LOCAL_PROXY_PORTS

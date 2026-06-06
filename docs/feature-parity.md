@@ -10,7 +10,7 @@ are listed per setting. ✅ = supported, — = N/A on that surface.
 | Surface | Coverage |
 |---|---|
 | .env file | 63/63 (100%) — every setting has an env var by definition |
-| CLI flags | 59/63 (93%) |
+| CLI flags | 63/63 (100%) |
 | TUI widgets | 63/63 (100%) |
 | Web components | 63/63 (100%) |
 
@@ -132,15 +132,15 @@ are listed per setting. ✅ = supported, — = N/A on that surface.
 |---|---|---|---|---|---|
 | `TRACK_USAGE` | ✅ | `--track-usage` | `toggle` | `switch` | Record request statistics to SQLite database |
 | `USAGE_TRACKING_DB_PATH` | ✅ | `--usage-db` | `input` | `input` | SQLite database file path for usage tracking |
-| `SILENCE_DEPRECATION_WARNINGS` | ✅ | `—` | `toggle` | `switch` | Suppress deprecated env-var warnings on startup |
+| `SILENCE_DEPRECATION_WARNINGS` | ✅ | `--silence-deprecation-warnings` | `toggle` | `switch` | Suppress deprecated env-var warnings on startup |
 
 ## Watchdog
 
 | Setting | .env | CLI | TUI | Web | Description |
 |---|---|---|---|---|---|
-| `PROXY_WATCHDOG` | ✅ | `—` | `toggle` | `switch` | Start auto-recovery watchdog pane (checks health, restarts dead services) |
-| `WATCHDOG_INTERVAL` | ✅ | `—` | `number` | `number` | Watchdog health check frequency |
-| `WATCHDOG_GRACE` | ✅ | `—` | `number` | `number` | Seconds to wait before restarting after first failure |
+| `PROXY_WATCHDOG` | ✅ | `--proxy-watchdog` | `toggle` | `switch` | Start auto-recovery watchdog pane (checks health, restarts dead services) |
+| `WATCHDOG_INTERVAL` | ✅ | `--watchdog-interval` | `number` | `number` | Watchdog health check frequency |
+| `WATCHDOG_GRACE` | ✅ | `--watchdog-grace` | `number` | `number` | Seconds to wait before restarting after first failure |
 
 ## How to Configure
 

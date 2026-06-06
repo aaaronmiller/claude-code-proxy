@@ -20,8 +20,19 @@
       "health_path": "/health",
       "enabled": true,
       "order": 1,
-      "service_cmd": "headroom proxy --port 8787 --mode token_headroom --anthropic-api-url https://openrouter.ai/api/v1 --log-file ~/.headroom/logs/proxy.jsonl",
+      "service_cmd": "scripts/headroom-start.sh",
       "url": "http://127.0.0.1:8787/v1"
+    },
+    {
+      "id": "cliproxyapi",
+      "name": "CLIProxyAPI (Antigravity)",
+      "type": "http",
+      "port": 8317,
+      "health_path": "/v1/models",
+      "enabled": false,
+      "order": 2,
+      "service_cmd": "/home/cheta/code/cliproxyapi/cli-proxy-api-plus --config /home/cheta/code/cliproxyapi/config.yaml",
+      "url": "http://127.0.0.1:8317/v1"
     }
   ],
   "router": {
@@ -44,7 +55,7 @@
       "assignment_id": ""
     },
     "long_context": {
-      "model": "minimax/minimax-m2.5:free",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
       "base_url": "",
       "api_key": "",
       "assignment_id": ""
@@ -70,38 +81,43 @@
     {
       "id": "big",
       "kind": "tier",
-      "model": "baidu/cobuddy:free",
+      "model": "moonshotai/kimi-k2.6:free",
       "provider": "openrouter",
       "base_url": "https://openrouter.ai/api/v1",
       "api_key": "${OPENROUTER_API_KEY}",
       "enabled": true,
-      "cascade": []
+      "cascade": [
+        "openai/gpt-oss-120b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "z-ai/glm-4.5-air:free"
+      ]
     },
     {
       "id": "middle",
       "kind": "tier",
-      "model": "opencode_go/minimax-m2.7",
-      "provider": "opencode_go",
-      "base_url": "https://opencode.ai/zen/go/v1",
-      "api_key": "${OPENCODE_GO_API_KEY}",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "provider": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "${OPENROUTER_API_KEY}",
       "enabled": true,
       "cascade": [
-        "minimax/minimax-m2.5-20260211:free",
-        "nvidia/nemotron-3-super-120b-a12b:free"
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "z-ai/glm-4.5-air:free",
+        "openai/gpt-oss-120b:free"
       ]
     },
     {
       "id": "small",
       "kind": "tier",
-      "model": "minimax/minimax-m2.5:free",
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
       "provider": "openrouter",
       "base_url": "https://openrouter.ai/api/v1",
       "api_key": "${OPENROUTER_API_KEY}",
       "enabled": true,
       "cascade": [
-        "minimax/minimax-m2.5-20260211:free",
-        "nvidia/nemotron-nano-9b-v2:free",
-        "qwen/qwen3-235b-a22b:free"
+        "openai/gpt-oss-120b:free",
+        "inclusionai/ling-2.6-flash:free",
+        "nvidia/nemotron-3-super-120b-a12b:free"
       ]
     },
     {
@@ -117,7 +133,7 @@
     {
       "id": "long_context",
       "kind": "slot",
-      "model": "minimax/minimax-m2.5:free",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
       "provider": "",
       "base_url": "",
       "api_key": "",
@@ -206,5 +222,21 @@
       "priority": 0,
       "notes": "Auto-route Claude haiku models to SMALL tier"
     }
-  ]
+  ],
+  "model_scan": {
+    "enabled": false,
+    "policy": "static",
+    "snapshot_path": "~/.config/model-scan/routing_snapshot.json",
+    "gateway_url": "http://127.0.0.1:7099/routing-snapshot",
+    "cache_ttl_s": 300,
+    "staleness_limit_s": 86400,
+    "lanes": {
+      "interactive": {
+        "allow_paid": true
+      },
+      "standby": {
+        "allow_paid": false
+      }
+    }
+  }
 }

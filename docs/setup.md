@@ -1,168 +1,151 @@
-# Setup Guide: Quick Start & Configuration
+# Setup
 
-This guide covers all setup methods for the Claude Code Proxy.
+This project is now a local AI gateway for coding agents. The common path is:
 
-## 🚀 Quick Start (Recommended for New Users)
+```text
+agent CLI -> Headroom :8787 -> gateway :8082 -> provider
+```
 
-For the fastest setup experience, use our automated script:
+Use `:8787` when you want compression. Use `:8082` only when you want routing without Headroom.
+
+## Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/holegots/claude-code-proxy.git
+git clone https://github.com/aaaronmiller/claude-code-proxy.git
 cd claude-code-proxy
-
-# Run automated setup
-python quickstart.py
-```
-
-This will:
-- ✅ Check system requirements (Python 3.9+)
-- ✅ Create virtual environment
-- ✅ Install all dependencies
-- ✅ Configure environment variables interactively
-- ✅ Initialize the database
-- ✅ Launch the proxy
-
-📖 **See the full [QUICKSTART.md](../QUICKSTART.md) guide for detailed instructions.**
-
----
-
-## 1. Manual Setup (Advanced)
-
-If you prefer manual control over the setup process:
-
-### Step 1: Install Dependencies
-
-```bash
-# Using uv (recommended)
 uv sync
-
-# OR using pip
-pip install -r requirements.txt
-```
-
-### Step 2: Configure Environment
-
-```bash
-# Copy example configuration
 cp .env.example .env
-
-# Edit with your values
-nano .env
 ```
 
-### Step 3: Run Setup Wizard
+Edit `.env` with provider keys and model assignments, then start:
 
 ```bash
-python start_proxy.py --setup
+./proxies up
 ```
 
-### Step 4: Start the Proxy
+## Use with Claude Code
 
 ```bash
-python start_proxy.py
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+export ANTHROPIC_API_KEY=pass
+claude
 ```
 
----
+`ANTHROPIC_API_KEY=pass` is a local SDK compatibility value. Real provider credentials stay in `.env` or your shell.
 
-## 3. Add Aliases to Profile
+## Headroom Acceleration
 
-Add the following aliases to your `~/.zshrc` (or `~/.bash_profile`):
+Default behavior is automatic:
 
 ```bash
-# -----------------------------------------------------------------------------
-# CLAUDE CODE PROXY ALIASES
-# -----------------------------------------------------------------------------
-# Function for proxy swap to allow ahtropic or proxy to be run
-cproxy() { # Toggle Claude Code proxy on/off
-  if [[ -n "$ANTHROPIC_BASE_URL" ]]; then
-    unset ANTHROPIC_BASE_URL ANTHROPIC_CUSTOM_HEADERS
-    export PROXY_AUTH_KEY="${CLAUDE_REAL_KEY:-$PROXY_AUTH_KEY}"
-    echo "🎯 Direct to Anthropic"
-  else
-    export CLAUDE_REAL_KEY="${PROXY_AUTH_KEY}"
-    export ANTHROPIC_BASE_URL="${CLAUDE_PROXY_URL:-http://localhost:8082}"
-    echo "🔀 Proxy: $ANTHROPIC_BASE_URL"
-  fi
-}
-
-# PROXY SERVER (Terminal A)
-# Sources profile to ensure REAL keys are loaded.
-# Sets PROXY_AUTH_KEY=pass so the proxy expects 'pass' from the client.
-alias ccproxy='cd $HOME/code/claude-code-proxy && python quickstart.py --no-launch' # switch claude code proxy between anthropic account and proxy
-
-# CLIENT (Terminal B)
-# Uses the Python wrapper to auto-heal on 401 errors.
-# Forces ANTHROPIC_API_KEY=pass to authenticate with the proxy.
-alias cproxy-continue='ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY=pass CLAUDE_CODE_MAX_OUTPUT_TOKENS=128768 claude --continue --dangerously-skip-permissions --verbose --model=opus' # Continue Claude session with verbose output, via proxy
-alias cproxy-init='ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY=pass CLAUDE_CODE_MAX_OUTPUT_TOKENS=128768 claude --dangerously-skip-permissions --verbose' # Initialize new Claude session with verbose output, via proxy
-
-# DIRECT CLIENT (No Proxy)
-# Standard command, uses your real keys directly.
-alias claude-continue='claude --continue --dangerously-skip-permissions --verbose' # Continue Claude session with verbose output, anthropic account
-alias claude-init='claude --dangerously-skip-permissions --verbose' # Initialize new Claude session with verbose output, anthropic account
+./proxies restart headroom
 ```
 
-> **Note**: Adjust the path `$HOME/code/claude-code-proxy` if your repository is located elsewhere.
+The launcher detects GPU support in this order:
 
-## 4. Usage
+1. NVIDIA via `nvidia-smi`
+2. Intel Arc/iGPU via `clinfo`, `lspci`, or WSL `/dev/dxg`
+3. CPU fallback
 
-### Step 1: Start the Proxy
-Open **Terminal A** and run:
+Force a mode:
+
 ```bash
-ccproxy
+HEADROOM_ACCELERATOR=intel ./proxies restart headroom
+HEADROOM_ACCELERATOR=nvidia ./proxies restart headroom
+HEADROOM_ACCELERATOR=cpu ./proxies restart headroom
 ```
-*The proxy will start and listen on port 8082.*
 
-### Step 2: Start the Client
-Open **Terminal B** and run:
+Intel Arc default:
+
 ```bash
-cproxy-init
+HEADROOM_KOMPRESS_DEVICE=GPU.0
+ONEAPI_DEVICE_SELECTOR=level_zero:0
+LIBVA_DRIVER_NAME=iHD
 ```
-*This runs Claude Code through the proxy.*
 
-### Step 3: Auto-Healing
-If your API key is invalid or missing, Claude Code Proxy will:
-1.  Detect the 401 error.
-2.  Launch the **API Key Wizard**.
-3.  Ask you to select a provider and enter your **REAL** key.
-4.  Update your `~/.zshrc`.
-5.  **Prompt you to restart the Proxy (Terminal A)**.
-6.  Once you restart the proxy, the client will retry automatically.
+Full details: [Headroom Acceleration](headroom-acceleration.md).
 
----
+## Remote Headroom on a LAN GPU Host
 
-## 🆘 Troubleshooting
+Use a shared GPU machine when your laptop has no useful GPU.
 
-### Common Issues
+On the GPU host:
 
-**"No module named 'fastapi'"**
 ```bash
-# Activate virtual environment and reinstall
-source .venv/bin/activate
-pip install -r requirements.txt
+HEADROOM_HOST=0.0.0.0 \
+HEADROOM_ACCELERATOR=intel \
+HEADROOM_UPSTREAM_URL=http://127.0.0.1:8082 \
+scripts/headroom-start.sh
 ```
 
-**"Port 8082 already in use"**
+On each client machine:
+
 ```bash
-# Change port in .env
-PORT=8083
+HEADROOM_REMOTE_URL=http://gpu-box.local:8787 ./proxies restart headroom
 ```
 
-**"401 Unauthorized"**
+Clients keep using:
+
 ```bash
-# Run health check
-python start_proxy.py --doctor
-
-# Or reconfigure
-python start_proxy.py --setup
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
 ```
 
-**Database errors (missing columns)**
+The local `:8787` service becomes a relay to the remote Headroom instance.
+
+## Health Checks
+
 ```bash
-# Delete old database (will recreate on startup)
-rm usage_tracking.db
-python start_proxy.py
+curl -sf http://127.0.0.1:8787/health
+curl -sf http://127.0.0.1:8082/health
+./proxies status
 ```
 
-For more help, see [QUICKSTART.md](../QUICKSTART.md#troubleshooting)
+## Observability
+
+Gateway Prometheus metrics are exposed at:
+
+```bash
+curl -sf http://127.0.0.1:8082/metrics
+```
+
+Start the optional local Prometheus and Grafana stack:
+
+```bash
+docker compose -f deploy/observability/docker-compose.yml up -d
+```
+
+Then open:
+
+```text
+Prometheus: http://127.0.0.1:9090
+Grafana:    http://127.0.0.1:3000
+```
+
+The bundled Grafana dashboard tracks gateway request rate, tokens, latency,
+cascade switches, and active profiles. RTK stats are available from
+`/api/rtk/stats`; Headroom metrics are scraped from `:8787/metrics`.
+
+## Common Failures
+
+### Headroom starts on CPU when a GPU exists
+
+Force the accelerator:
+
+```bash
+HEADROOM_ACCELERATOR=intel HEADROOM_KOMPRESS_DEVICE=GPU.0 ./proxies restart headroom
+```
+
+### Remote Headroom relay is healthy but requests fail
+
+The remote GPU host sends upstream requests from its own network namespace. Make sure its `HEADROOM_UPSTREAM_URL` points to a gateway reachable from that host.
+
+### Port already in use
+
+```bash
+./proxies down
+./proxies up
+```
+
+### Provider 401
+
+Do not replace `ANTHROPIC_API_KEY=pass`. Check the real provider key in `.env`, then see [401 troubleshooting](troubleshooting/401-errors.md).

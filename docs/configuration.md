@@ -99,11 +99,17 @@ python start_proxy.py --save-config ~/my-proxy.json
 | `CB_SUCCESS_THRESHOLD` | `--cb-success-threshold` | `1` | Successes to close from half-open |
 | `CB_TIMEOUT_SECONDS` | `--cb-timeout` | `300` | Cooldown before half-open probe |
 
-### Compression (9 settings)
+### Compression and Headroom (15 settings)
 
 | Setting | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
 | `HEADROOM_BYPASS_THRESHOLD` | `--headroom-bypass` | `0` | Skip compression below N tokens |
+| `HEADROOM_ACCELERATOR` | — | `auto` | `auto`, `intel`, `nvidia`, or `cpu` for Headroom Kompress |
+| `HEADROOM_KOMPRESS_DEVICE` | — | auto-detected | OpenVINO device, usually `GPU.0` on Intel Arc |
+| `HEADROOM_REMOTE_URL` | — | — | Relay local Headroom port to a remote LAN Headroom instance |
+| `HEADROOM_UPSTREAM_URL` | — | `http://127.0.0.1:8082` | Upstream gateway URL used by local Headroom |
+| `HEADROOM_ALLOW_CPU_FALLBACK` | — | `1` | Retry CPU/ONNX when GPU preload fails |
+| `HEADROOM_PRELOAD_TIMEOUT` | — | `90s` | Timeout for Kompress preload |
 | `TOOL_SCHEMA_STRIP` | `--tool-schema-strip` | `true` | Strip redundant tool schema fields |
 | `TOOL_DESC_MAX` | `--tool-desc-max` | `200` | Max tool description chars |
 | `TOOL_PARAM_DESC_MAX` | `--tool-param-desc-max` | `120` | Max property description chars |

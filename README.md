@@ -1,361 +1,471 @@
 <div align="center">
 
-<img src="web-ui/static/logo.png" alt="The Ultimate Proxy" width="120">
+# Clutch Gateway
 
-# ⚡ The Ultimate Proxy
+### Run 8 coding agents through one gateway. Cheaper context, automatic failover, one launcher.
 
-**The only proxy you need for Claude Code CLI**
+[![GitHub stars](https://img.shields.io/github/stars/aaaronmiller/claude-code-proxy?style=flat-square)](https://github.com/aaaronmiller/claude-code-proxy)
+[![License](https://img.shields.io/github/license/aaaronmiller/claude-code-proxy?style=flat-square)](MIT)
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![2026 Ready](https://img.shields.io/badge/2026-Ready-06ffd4.svg)](#)
-
-[Quick Start](#-quick-start) • [Features](#-features) • [Web Dashboard](#-web-dashboard) • [Crosstalk](docs/crosstalk.md) • [Compression Stack](#-compression-stack) • [Roadmap](ROADMAP.md) • [Changelog](CHANGELOG.md)
-
-<br>
-
-<img src="web-ui/static/hero-banner.png" alt="The Ultimate Proxy Dashboard" width="800">
-
-**Route Claude Code to any provider. Save 90% on API costs. Run locally for free.**
+```
+  Claude Code  ·  Codex  ·  Qwen  ·  Pi
+  Hermes       ·  Ante   ·  Antigravity  ·  OpenCode
+           ↓
+    ┌─ Clutch Gateway ───────────────┐
+    │  :8787  Headroom compression   │
+    │  :8082  Router + fallback      │
+    │  :8317  CLI proxy (optional)   │
+    └────────────────────────────────┘
+           ↓
+    OpenRouter · Anthropic · OpenAI · Gemini · Ollama
+```
 
 </div>
 
----
+## Your aliases are broken. Here's the fix.
 
-## 🌟 What Is It?
+You have 25 aliases in your `.zshrc`. Half of them pass the wrong flags. Hermes doesn't get `--yolo`, Codex gets `--dangerously-bypass-approvals` (a flag that doesn't exist), and Ante has no bypass flag at all so it approves every file change manually.
 
-The Ultimate Proxy sits between Claude Code CLI and your chosen API provider. It translates Anthropic's API format to OpenAI-compatible format, letting you use **any model** with Claude Code:
+This repo fixes that with two things:
 
-```
-Claude Code CLI  →  RTK (terminal compression)
-                       →  The Ultimate Proxy (:8082)
-                            ├─ Model Router (per-use-case routing)
-                            ├─ Cascade fallback (circuit breaker + retry)
-                            ├─ OpenRouter native fallback (inject models array)
-                            └─ Response conversion (OpenAI SSE → Claude SSE)
-                               →  Headroom (:8787, context compression)
-                                    →  OpenRouter API (free models)
-```
-
----
-
-## 🚀 Quick Start
-
-### Option 1: Unified Installation (Recommended)
-
-**Single command installs everything with automatic GPU detection:**
+1. **A local gateway** (`:8082`) that routes requests, compresses context, cascades through free models when paid ones fail, and tracks usage.
+2. **`xx`** — a unified launcher replacing all 25 aliases with a single 3-character encoding.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aaaronmiller/claude-code-proxy/main/install-all.sh | bash
+# Before: 25 aliases, half broken
+alias cc='unset ANTHROPIC... && ANTHROPIC_BASE_URL=... rtk claude ...'
+alias hsi='... --dangerously-skip-permissions (hermes has --yolo, dumbass) ...'
+alias codex-run='... --dangerously-bypass-approvals (flag doesn't exist) ...'
+
+# After: One command for everything (wrapped in cg_run for crash recovery)
+cc        # = cg_run xx cip   → Claude init, proxy
+hsi       # = cg_run xx hip   → Hermes init, proxy
+codex-run # = cg_run xx xip   → Codex init, proxy
 ```
 
-The installer will:
-- 🔍 **Auto-detect your GPU** (NVIDIA CUDA, Intel Arc/iGPU, AMD ROCm, or CPU-only)
-- 💬 **Prompt you to confirm or override** the detected GPU backend
-- ✅ Clone claude-code-proxy
-- ✅ Install Headroom (compression layer)
-- ✅ Install RTK (command compression)
-- ✅ Install GPU compute stack (Level Zero for Intel, CUDA for NVIDIA, ROCm for AMD)
-- ✅ Configure environment variables
-- ✅ Add compression aliases (`cc`, `qw`, `qw-resume`)
-- ✅ Start all services
-- ✅ Show health status
+---
 
-**Supported GPU backends:**
-
-| Backend | Hardware | Env Vars Set |
-|---------|----------|-------------|
-| **NVIDIA CUDA** | RTX 30/40/50 series, datacenter GPUs | `CUDA_VISIBLE_DEVICES=0` |
-| **Intel Arc / iGPU** | Arc A370M/A580/A770, Iris Xe, UHD | `ONEAPI_DEVICE_SELECTOR=level_zero:0`, `LIBVA_DRIVER_NAME=iHD` |
-| **AMD ROCm** | RX 6000/7000, Instinct MI series | `HSA_OVERRIDE_GFX_VERSION=10.3.0` |
-| **CPU-only** | No GPU available | `HEADROOM_DEVICE=cpu` |
-
-**Manual installation:**
+## Quick Start
 
 ```bash
-# Clone & install
-git clone https://github.com/aaaronmiller/claude-code-proxy.git ~/code/claude-code-proxy
-cd ~/code/claude-code-proxy
-./install-all.sh
+# 1. Install
+git clone https://github.com/aaaronmiller/claude-code-proxy.git
+cd claude-code-proxy
+cp .env.example .env
+
+# 2. Start the gateway
+./proxies up
+
+# 3. Install the xx launcher
+bash scripts/install-aliases.sh
+exec zsh   # or source ~/.zshrc
+
+# 4. Launch anything
+xx cip  # Claude Code — proxy route, fresh session
 ```
 
-### Using with Claude Code
+That's it. **30 seconds to launching any coding agent** through a local gateway with context compression, automatic failover, and free-model cascading.
 
-In a **new terminal**, run:
+---
+
+## The `xx` Encoding System
+
+Stop remembering 25 aliases. This is the only thing you need to know:
+
+```
+xx <AGENT><MODE><ROUTE>[<TIER>]
+```
+
+| Position | Char | Meaning | Example |
+|----------|------|---------|---------|
+| **1: Agent** | `c` | Claude Code | |
+| | `h` | Hermes | |
+| | `x` | Codex | |
+| | `q` | Qwen | |
+| | `p` | Pi | |
+| | `o` | OpenCode | |
+| | `a` | Ante | |
+| | `g` | Antigravity | |
+| **2: Mode** | `i` | Init (new session) | |
+| | `c` | Continue (resume last) | |
+| | `n` | Non-interactive (prompt flag) | |
+| | `s` | Session (`--session <id>`) | |
+| | `r` | Resume picker | |
+| **3: Route** | `p` | Proxy (routing + fallback) | **Everyday use** |
+| | `b` | Bypass (keep proxy features, skip model reroute) | |
+| | `d` | Debug (direct to provider, no proxy) | Troubleshooting |
+| **4: Tier** | *(optional)* | | |
+| | `d` | DeepSeek V4 Flash | Budget coding |
+| | `n` | Nemotron 3 Super 120B | Daily driver |
+| | `k` | Kimi K2.6 | |
+| | `q` | Qwen3 Next 80B | |
+| | `m` | Model-scan best | Auto-selected |
+| | `f` | Model-scan free | Cheapest working |
+| | `0`-`9` | Named profiles | Your custom config |
+
+### Everyday examples
+
+All aliases wrap through `cg_run` (crash-guard tmux attach + recovery). Run `xx <code>` directly to skip the wrapper.
 
 ```bash
-export ANTHROPIC_BASE_URL=http://localhost:8082
-export ANTHROPIC_API_KEY=pass
-claude
+# ── Claude Code ──────────────────────────────────────────────────
+cc                  # = cg_run xx cip      Init, proxy
+ccc                 # = cg_run xx ccf      Continue, free tier
+cc-debug            # = cg_run xx cid      Init, direct (no proxy)
+cc-ds               # = cg_run xx cipd     Init, proxy, DeepSeek tier
+cc -m claude/sonnet-4  # Init with model override
+
+# ── Hermes ───────────────────────────────────────────────────────
+hsi                 # = cg_run xx hip      Init, proxy
+hsr                 # = cg_run xx hcf      Continue, free tier
+hsi-bp              # = cg_run xx hib      Init, bypass route
+xx hif              # raw:  Init, proxy, free tier (no cg_run)
+
+# ── Pi ───────────────────────────────────────────────────────────
+psi                 # = cg_run xx pip      Init, proxy
+psi-c               # = cg_run xx pcf      Continue, free tier
+psi-ds              # = cg_run xx pipd     Init, proxy, DeepSeek
+
+# ── Codex ────────────────────────────────────────────────────────
+codex-run           # = cg_run xx xip      Init, proxy
+codex-res           # = cg_run xx xcf      Continue, free tier
+xx xid              # raw:  Init, direct
+
+# ── Qwen / Antigravity / Ante / OpenCode ────────────────────────
+qw                  # = cg_run xx qip      Qwen init, proxy
+antigravity         # = cg_run xx gip      Antigravity init, proxy
+ante                # = cg_run xx aip      Ante init, proxy
+oc                  # = cg_run xx oip      OpenCode init, proxy
 ```
 
-If you want the proxy itself to require a client key, set `PROXY_AUTH_KEY`.
-`ANTHROPIC_API_KEY` is for the Claude Code client side and no longer enables proxy auth by default.
+### Session management
 
-> 💡 **Pro Tip**: Add aliases to your `~/.zshrc` for easier access (see [Setup Guide](docs/setup.md))
-
----
-
-## 🌌 VibeProxy + Antigravity (Free Premium Models)
-
-The easiest way to use Claude Code with premium models for **free**:
-
-1. **Install VibeProxy**: [Download](https://github.com/automazeio/vibeproxy/releases)
-2. **Authenticate**: Sign in with Google (Antigravity OAuth)
-3. **Setup**: `python start_proxy.py --setup` → Select "VibeProxy/Antigravity"
-
-**What you get:**
-- 🧠 Claude Opus 4.5 with 128k thinking tokens
-- ⚡ Gemini 3 Pro/Flash
-- 📊 BIG/MIDDLE/SMALL model routing
-- 📈 Usage tracking & analytics
-- 💸 No API keys or billing required
-
----
-
-## ✨ Features
-
-| Feature | Description |
-|---------|-------------|
-| **Multi-Provider** | OpenRouter, Gemini, OpenAI, Azure, Ollama, LM Studio |
-| **Model Routing** | BIG/MIDDLE/SMALL tiers + per-use-case routing (background, think, long_context, image, web_search) |
-| **Model Cascade** | Automatic fallback with circuit breakers, exponential backoff, and dynamic model list |
-| **OpenRouter Native Fallback** | Inject `models` array for OR endpoint selection — zero extra latency |
-| **Session Tracking** | Conversation-level request grouping via stable fingerprint |
-| **Streaming Usage Tracking** | Full token/cost/duration tracking for both streaming and non-streaming requests |
-| **Web Dashboard** | Real-time monitoring with glassmorphism UI |
-| **Proxy Chain** | Configurable ordered list of upstream services (proxy → headroom → provider) |
-| **Crosstalk** | Model-to-model conversations (up to 8 models) |
-| **Usage Tracking** | Cost analytics, token metrics, per-model breakdowns in SQLite |
-| **Extended Thinking** | Up to 128k thinking tokens for reasoning models |
-| **Prompt Injection** | Add custom prompts showing routing info |
-| **Compression Stack** | Headroom (context compression) + RTK (CLI output compression) for 95-99% savings |
-
----
-
-## 🎨 Web Dashboard
-
-Access at `http://localhost:8082` when running.
-
-- **Glassmorphism UI** with aurora gradients
-- Real-time request monitoring
-- Provider configuration
-- Proxy chain management (`/chain`)
-- Model selection with hybrid routing
-- WebSocket live log streaming
-- Profile management
-
----
-
-## 🛠️ CLI Commands
-
-### `proxies` CLI (recommended)
+Every tool supports `--session <id>` — the launcher maps it to each tool's native flag:
 
 ```bash
-# Lifecycle
-proxies up                  # Start proxy chain in tmux
-proxies down                # Stop all services
-proxies restart             # Restart proxy
-proxies status              # Show health for all chain entries
-
-# Configuration
-proxies chain               # Open Textual TUI for chain management
-proxies config show         # Show proxy chain config
-proxies config toggle <id>  # Enable/disable a chain entry
-proxies router show         # Show model routing config
-proxies router set <slot> <model>  # Set per-use-case model
-
-# Monitoring
-proxies stats               # Usage summary (requests, tokens, cost)
-proxies metrics summary     # Detailed token/cost/latency metrics
-proxies metrics models      # Per-model token breakdown
-proxies metrics tools       # 24h tool call analytics
-proxies metrics daily       # 7-day usage history
-proxies watch               # Rich-based live watch dashboard
-
-# Status line
-proxies statusline          # TUI for building CC status line segments
+xx hip -s abc123    # Hermes → hermes --resume abc123
+xx pip -s abc123    # Pi → pi --session abc123
+xx gip -s abc123    # Antigravity → agy --conversation abc123
+xx cip -s abc123    # Claude Code → session handled by proxy
 ```
 
-### `start_proxy.py` CLI
+### Model override
 
 ```bash
-# Configuration
-python start_proxy.py --setup           # First-time wizard
-python start_proxy.py --settings        # Unified settings TUI
-python start_proxy.py --doctor          # Health check + auto-fix
-
-# Model management
-python start_proxy.py --select-models   # Interactive model selector
-python start_proxy.py --set-big MODEL   # Quick set BIG model
-python start_proxy.py --show-models     # List available models
-
-# Diagnostics
-python start_proxy.py --config          # Show configuration
-python start_proxy.py --dry-run         # Validate without starting
-python start_proxy.py --analytics       # View usage stats
+xx cip -m gpt-4o                    # Override the main model
+xx hip -m claude/sonnet-4           # Switch mid-stream
+xx qcpd -p "refactor this"         # Prompt without --model
 ```
 
 ---
 
-## 🗣️ Crosstalk
+## How It Works
 
-Multi-model conversations where AI models talk to each other:
-
-```bash
-# Launch visual TUI
-python start_proxy.py --crosstalk-studio
-
-# Quick setup
-python start_proxy.py --crosstalk "claude-opus,gemini-pro" --topic "Explore consciousness"
 ```
-
-**Features:**
-- Up to 8 models in a conversation
-- Multiple paradigms: relay, debate, memory, report
-- Jinja templates for message formatting
-- Backrooms-compatible import/export
-- MCP integration for programmatic access
-
-[Read the Crosstalk Guide →](CROSSTALK.md)
+ ┌──────────────────────────────────────────────────────────────────┐
+ │                         Your Terminal                            │
+ │  xx cip   xx hip   xx xcf   xx qip   xx pip   xx gip  xx aip   │
+ └──────────┬───────────┬──────────┬──────────┬───────────────────-┘
+            │           │          │          │
+            └──────┬────┘──────────┘──────────┘
+                   │
+            ┌──────▼─────────────────────────────┐
+            │     RTK Terminal Compression         │
+            │   (filters shell noise from prompts) │
+            └──────────────┬──────────────────────-┘
+                           │
+            ┌──────────────▼──────────────────────┐
+            │   Headroom Context Compressor :8787  │
+            │  (GPU-accelerated prompt compression) │
+            │  saves 40-70% on context window       │
+            └──────────────┬──────────────────────-┘
+                           │
+            ┌──────────────▼──────────────────────┐
+            │    Clutch Gateway Router :8082        │
+            │                                      │
+            │  ┌─────────────────────────────────┐ │
+            │  │  Role Router                     │ │
+            │  │  • BIG → primary model           │ │
+            │  │  • MIDDLE → tool calls           │ │
+            │  │  • SMALL → background tasks      │ │
+            │  │  • FALLBACK → cascade chain      │ │
+            │  └──────────────┬──────────────────┘ │
+            │                 │                    │
+            │  ┌──────────────▼──────────────────┐ │
+            │  │  Circuit Breaker                 │ │
+            │  │  • 3 failures = 60s cooldown    │ │
+            │  │  • Auto-fallback to next tier   │ │
+            │  │  • Rate-limit detection          │ │
+            │  └─────────────────────────────────┘ │
+            └──────────────┬──────────────────────-┘
+                           │
+         ┌─────────────────┼────────┬───────────┬──────────┐
+         ▼                 ▼        ▼           ▼          ▼
+   OpenRouter          Anthropic  OpenAI    Gemini    Ollama
+   (free + paid)        (Pro)     (API)    (API)     (local)
+```
 
 ---
 
-## 📁 Project Structure
+## Why This Exists
+
+### The alias problem
+
+Every AI coding tool has its own CLI, its own flags, its own auth. You end up with:
+
+```bash
+alias cc='_proxy_stack_auto_start && ANTHROPIC_BASE_URL=... ANTHROPIC_API_KEY=... rtk claude --dangerously-skip-permissions'
+alias hsi='_proxy_stack_auto_start && OPENAI_BASE_URL=... OPENAI_API_KEY=pass rtk hermes --dangerously-skip-permissions'
+alias psi='_proxy_stack_auto_start && OPENAI_BASE_URL=... OPENAI_API_KEY=pass rtk pi --provider openai'
+```
+
+That's three lines for three tools. Most people have **20+ lines**. And they're almost certainly **wrong** — Hermes uses `--yolo`, not `--dangerously-skip-permissions`. Codex uses `-a never`, not `--dangerously-bypass-approvals-and-sandbox`. Ante has no approval bypass flag at all.
+
+`xx` replaces all of that with a single 3-character command. **Each correct flag per tool is baked in.** You can't get them wrong — the launcher knows each tool's exact CLI interface.
+
+### The cost problem
+
+Coding agents burn tokens differently from chat apps. They replay files, tool logs, terminal output, and long histories over and over. A generic API gateway helps, but it doesn't understand the agent loop.
+
+- **Headroom** compresses prompt context **before** it hits the provider bill.
+- **RTK** compresses terminal output **before** it poisons the next turn.
+- **Role-aware routing** sends web searches to cheap models, reasoning to smart models, tool calls to fast models.
+- **Cascade fallback** tries 3-4 free models before giving up on a request.
+
+### The session problem
+
+Every tool names session flags differently:
+
+| Tool | Flag |
+|------|------|
+| Claude Code | implicit (proxy handles it) |
+| Hermes | `--resume <id>` |
+| Pi | `--session <id>` |
+| Antigravity | `--conversation <id>` |
+| Codex | `resume` subcommand |
+
+`xx` normalizes this: `--session <id>` works on every tool. The launcher maps it to the correct native flag.
+
+---
+
+## Free Model Cascading
+
+The proxy doesn't just route — it **fails forward**. When your primary model returns a 401, rate-limits you, or times out, it tries the next one automatically.
+
+```
+BIG tier:  moonshotai/kimi-k2.6:free
+           ↓ failure
+           nvidia/nemotron-3-super-120b-a12b:free
+           ↓ failure
+           deepseek/deepseek-v4-flash:free
+           ↓ failure
+           openai/gpt-oss-120b:free  (last resort)
+
+MIDDLE tier (tool calls):
+           qwen/qwen3-next-80b-a3b-thinking
+           ↓ failure
+           deepseek/deepseek-v4-flash:free
+           ↓ failure
+           nvidia/nemotron-3-super-120b-a12b:free
+```
+
+Configured in `.env` and `~/.xx/config.json`. Add your own models, reorder priorities, set quota limits per provider.
+
+---
+
+## `xx` vs raw CLI tools
+
+| Scenario | Without `xx` | With `xx` |
+|----------|-------------|-----------|
+| Launch Claude Code | `ANTHROPIC_BASE_URL=... ANTHROPIC_API_KEY=... rtk claude --dangerously-skip-permissions` | `xx cip` |
+| Continue last session | Same + `--continue` | `xx ccf` |
+| Launch Hermes free tier | `OPENAI_BASE_URL=... rtk hermes --yolo --accept-hooks chat` | `xx hif` |
+| Launch Pi with DeepSeek | `OPENAI_BASE_URL=... rtk pi --provider openai` | `xx pipd` |
+| Debug mode (no proxy) | Unset all env vars, bypass RC, run raw | `xx cid` |
+| Custom model | Figure out which `--model` flag the tool uses | `xx cip -m gpt-4o` |
+| Session management | `--resume` vs `--conversation` vs `--session` vs subcommand | `xx cip -s <id>` |
+| Crash recovery | `tmux attach -t ...` or lose the session | `cc` (cg_run built in) |
+
+---
+
+## Configuration
+
+### `~/.xx/config.json`
+
+```json
+{
+  "proxy": {
+    "base_url": "http://127.0.0.1:8082",
+    "health_url": "http://127.0.0.1:8082/health",
+    "auto_start": true
+  },
+  "model_tiers": {
+    "BIG": {
+      "default": "moonshotai/kimi-k2.6:free",
+      "cascade": [
+        "openai/gpt-oss-120b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "deepseek/deepseek-v4-flash:free"
+      ]
+    },
+    "MIDDLE": {
+      "default": "nvidia/nemotron-3-super-120b-a12b:free",
+      "cascade": [
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "openai/gpt-oss-120b:free"
+      ]
+    },
+    "SMALL": {
+      "default": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "cascade": [
+        "openai/gpt-oss-120b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free"
+      ]
+    }
+  },
+  "fallbacks": [
+    "deepseek/deepseek-v4-flash:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "openai/gpt-oss-120b:free"
+  ],
+  "toolcall_models": [
+    "qwen/qwen3-next-80b-a3b-thinking",
+    "deepseek/deepseek-v4-flash:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "openai/gpt-oss-120b:free"
+  ],
+  "quotas": {
+    "deepseek/deepseek-v4-flash:free": {
+      "max_requests_per_minute": 30,
+      "cooldown_seconds": 10
+    }
+  }
+}
+```
+
+### `.env`
+
+Copy `.env.example` → `.env`. Key variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `BIG_MODEL` | Default model for primary agent work |
+| `TOOLCALL_MODELS` | Comma-separated cascade for tool-calling |
+| `OPENROUTER_FALLBACK_MODELS` | Models to try when primary fails |
+| `FALLBACK_METHOD` | `cascade`, `openrouter_native`, or both |
+
+---
+
+## Proxies (Lifecycle Manager)
+
+The `proxies` command starts/stops the full gateway chain:
+
+```bash
+proxies up           # Start gateway + Headroom in tmux
+proxies down         # Stop everything
+proxies status       # Health check for all services
+proxies logs         # Tail proxy logs
+proxies watch        # Live metrics dashboard
+proxies config show  # Inspect the current chain config
+proxies restart headroom  # Restart compression layer only
+```
+
+---
+
+## Model-Scan Integration
+
+The gateway integrates with [model-scan](https://github.com/aaaronmiller/model-scan) — a provider health diagnostics tool that scores models on intelligence, speed, agentic ability, and coding skill. The proxy uses these scores to:
+
+- Select the best free model for each role
+- Detect model degradation (slow TPS, high error rates)
+- Auto-swap failing models for healthy ones
+- Track quota exhaustion per provider
+
+```bash
+# Scan all providers and update model rankings
+cd /home/cheta/code/model-scan
+./model-scan --refresh-all
+
+# Apply the best-rated free model
+xx cipm  # Claude with model-scan "best" tier
+xx cipf  # Claude with model-scan "free" tier
+```
+
+---
+
+## Architecture
 
 ```
 claude-code-proxy/
-├── start_proxy.py              # Main entry point
-├── proxies                     # Bash CLI for lifecycle/config/metrics
-├── .envrc                      # Environment config (sourced by direnv)
-├── CHANGELOG.md                # Project changelog
-├── CROSSTALK.md                # Multi-model chat docs
-│
-├── src/
-│   ├── core/                   # Config, client, circuit breaker, proxy chain, model router
-│   ├── api/                    # FastAPI routes + WebSocket endpoints
-│   ├── services/               # Conversion, logging, usage tracking, models, prompts
-│   ├── cli/                    # CLI tools and TUIs (chain_tui, statusline_tui)
-│   └── dashboard/              # Terminal dashboard
-│
-├── config/                     # Runtime config (proxy_chain.json, custom_router.example.py)
-├── data/                       # Model rankings, limits, circuit breaker state
-├── scripts/                    # Status line, tmux, metrics shell scripts
-├── tools/                      # Maintenance scripts (refresh_model_rankings.py)
-├── web-ui/                     # Svelte + bits-ui dashboard
-├── docs/                       # Extended documentation
-└── configs/crosstalk/          # Crosstalk presets & templates
+├── proxies                   # Lifecycle manager (start/stop/status)
+├── scripts/
+│   ├── install-aliases.sh   # xx installer for .zshrc/.bashrc
+│   ├── ccp-launch.sh        # Session-scoped profile launcher
+├── config/
+│   └── proxy_chain.json     # Service chain definition
+├── profiles/                 # Per-agent routing profiles
+│   └── profiles.json
+├── src/                      # Gateway API server
+│   ├── api/                  # FastAPI endpoints
+│   └── routing/              # Model routing + cascades
+├── compression/
+│   ├── headroom/             # GPU-accelerated context compression
+│   └── rtk/                  # Terminal output compression
+├── docs/                     # Operator guides
+└── .env                      # Environment overrides
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## Comparison
 
-**401 Unauthorized**
-```bash
-python start_proxy.py --doctor  # Auto-fix API keys
-```
-
-**Model Not Found**
-```bash
-python start_proxy.py --show-models  # List available models
-```
-
-**Connection Refused**
-- Ensure proxy is running: `proxies up` or `python start_proxy.py`
-- Check port 8082 is not in use
-
-**Stream Stalls / Infinite Lag**
-- Likely caused by upstream model emitting `reasoning_content` without client requesting it
-- Proxy now emits liveness heartbeat during unrequested reasoning (Option C handling)
-- Restart proxy to activate: `proxies restart`
+| Feature | Raw CLI | LiteLLM | Portkey | **Clutch Gateway** |
+|---------|---------|---------|---------|-------------------|
+| Context compression | ❌ | ❌ | ❌ | ✅ Headroom |
+| Terminal compression | ❌ | ❌ | ❌ | ✅ RTK |
+| Role-based routing | ❌ | ✅ basic | ✅ basic | ✅ agent-aware |
+| Free model cascading | ❌ | ❌ | ❌ | ✅ |
+| Circuit breakers | ❌ | ❌ | ✅ | ✅ |
+| Model-scan integration | ❌ | ❌ | ❌ | ✅ |
+| Unified launcher (`xx`) | ❌ | ❌ | ❌ | ✅ |
+| Per-tool correct flags | ❌ | ❌ | ❌ | ✅ built-in |
+| `--session` normalization | ❌ | ❌ | ❌ | ✅ |
+| Quota tracking | ❌ | ❌ | ❌ | ✅ |
 
 ---
 
-## 🗜️ Compression Stack
+## Troubleshooting
 
-**Integrated compression layer for 95-99% cost savings**
+### `Cannot continue from message role: assistant`
 
-### Quick Start
+**Pi only.** The Pi agent loop requires conversations to end with a user message before continuing. If a session ended mid-response (assistant message last), Pi won't continue it.
+
+**Fix**: Use `xx pip -s <id>` (init mode with session reference) instead of `--continue`. Or strip the trailing assistant message from the session file.
+
+### Proxy health check fails
 
 ```bash
-# Start compression stack
-proxies up
-
-# Use Claude with auto-compression
-cc  # or csr to resume
+curl http://127.0.0.1:8082/health
+# Should return 200. If not: proxies up
 ```
 
-### Features
+### Model not found in cascade
 
-- **97% compression rate** (900→26 tokens)
-- **GPU acceleration** — NVIDIA CUDA, Intel Arc (Level Zero), AMD ROCm, or CPU-only
-- **Multi-CLI support** (Claude, Qwen, Codex, OpenCode, OpenClaw, Hermes)
-- **Real-time dashboard** (terminal + web at `:8899`)
-- **Multi-tier compression** — default (`:8787`) + small model (`:8790`)
-- **Semantic caching** — deduplicates repeated context across turns
-- **RTK command compression** — 2-line summaries for CLI output
-
-### Architecture
-
-```
-Claude Code → RTK → Proxy (:8082) → Headroom (:8787) → OpenRouter
-                        │
-                  Model Router
-                  Cascade Fallback
-                  Circuit Breaker
-                  Usage Tracking
-```
-
-### Documentation
-
-- **Full Guide:** [docs/COMPRESSION-STACK.md](docs/COMPRESSION-STACK.md)
-- **Performance Analysis:** [docs/PERFORMANCE-ANALYSIS.md](docs/PERFORMANCE-ANALYSIS.md)
-- **GPU Optimization:** [docs/GPU-OPTIMIZATION.md](docs/GPU-OPTIMIZATION.md)
-- **Status Bars:** [docs/STATUS_BARS.md](docs/STATUS_BARS.md)
-- **Roadmap:** [ROADMAP.md](ROADMAP.md)
-- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
-
-### Low-VRAM / No-GPU Support
-
-The installer handles this automatically:
-- **Intel Arc A370M** (4GB) — Level Zero runtime, `ONEAPI_DEVICE_SELECTOR=level_zero:0`
-- **CPU-only** — fallback when no GPU is detected, runs entirely on CPU
-- **WSL2 passthrough** — GPU exposed via `/dev/dxg` from Windows host
-
-For manual configuration, see [docs/GPU-OPTIMIZATION.md](docs/GPU-OPTIMIZATION.md)
+Check `.env` for `BIG_MODEL`, `TOOLCALL_MODELS`, and run `cd /home/cheta/code/model-scan && ./model-scan --refresh-all` to update rankings.
 
 ---
 
-## 🔮 Roadmap
+## What's Next
 
-**See full roadmap:** [ROADMAP.md](ROADMAP.md)
-
-### Phase 1: Parallel Installation (April 2026) ✅ COMPLETE
-- [x] Single install script with GPU auto-detection (`install-all.sh` v2.0)
-- [x] Unified start/stop commands
-- [x] Low-VRAM mode (Intel Arc A370M 4GB via Level Zero)
-- [x] No-GPU mode (CPU-only fallback)
-- [x] Network proxy access (HTTP/HTTPS)
-- [x] Compression monitoring dashboard (`:8899`)
-- [x] RTK integration (v0.34.3)
-
-### Phase 2: Tight Integration (May 2026)
-- [ ] Shared state management
-- [ ] Unified health monitoring
-- [ ] Log aggregation
-
-### Phase 3: Full Merger (Q3 2026)
-- [ ] Headroom as proxy middleware
-- [ ] Single unified proxy process
-- [ ] Resource optimization
+- **Quantized local models** — run Llama 4 / DeepSeek via Ollama as fallback tier
+- **Multi-host gateway** — share one gateway across your LAN
+- **Usage dashboard** — cost breakdown per tool, per session, per model
+- **Agent-to-agent routing** — Claude calls Pi calls Hermes, all through one gateway
 
 ---
 
 <div align="center">
 
-**The Ultimate Proxy** • Made with ❤️ for the Claude Code community
-
-[Report Bug](https://github.com/aaaronmiller/the-ultimate-proxy/issues) • [Request Feature](https://github.com/aaaronmiller/the-ultimate-proxy/issues)
+**MIT** — Built for the agentic coding era. PRs welcome.
 
 </div>

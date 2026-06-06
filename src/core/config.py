@@ -152,6 +152,15 @@ class Config:
     middle_system_prompt = ConfigField("middle_system_prompt")
     small_system_prompt = ConfigField("small_system_prompt")
 
+    # Normalize 'system' role messages → 'user' role for backends that
+    # don't accept the system role. Set NORMALIZE_SYSTEM_ROLE=true when
+    # your target backend (e.g. some OpenAI-compatible proxies) returns
+    # 422 on "role": "system" messages.
+    normalize_system_role = ConfigField(
+        "normalize_system_role",
+        lambda v: str(v).lower() in ("true", "1", "yes") if v is not None else False,
+    )
+
     reasoning_effort = ConfigField("reasoning_effort")
     verbosity = ConfigField("verbosity")
     reasoning_exclude = ConfigField(
@@ -325,8 +334,9 @@ class Config:
             api_key = combined.get(f"{key_prefix}_API_KEY") or combined.get(
                 f"{key_prefix}_KEY"
             )
+            api_keys = combined.get(f"{key_prefix}_API_KEYS", "")
             if url:
-                reg[name] = {"url": url, "api_key": api_key}
+                reg[name] = {"url": url, "api_key": api_key, "api_keys": api_keys}
         return reg
 
     @property
@@ -439,6 +449,22 @@ class Config:
         reg = self.provider_registry
         entry = reg.get(provider_name.lower())
         return entry.get("api_key") if entry else None
+
+    def get_provider_api_keys(self, provider_name: str) -> List[str]:
+        """Get the provider key pool. Single-key providers return a one-item list."""
+        reg = self.provider_registry
+        entry = reg.get(provider_name.lower())
+        if not entry:
+            return []
+        pool = [
+            item.strip()
+            for item in str(entry.get("api_keys") or "").split(",")
+            if item.strip()
+        ]
+        single = entry.get("api_key")
+        if single and single not in pool:
+            pool.insert(0, single)
+        return pool
 
     def get_custom_headers(self) -> Dict[str, str]:
         """Extract CUSTOM_HEADER_* environment variables."""

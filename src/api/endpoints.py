@@ -327,6 +327,50 @@ openai_client = OpenAIClient(
 openai_client.configure_per_model_clients(config)
 
 
+@router.post("/api/proxy/reload-models")
+async def reload_model_scan_bindings():
+    """Reload model-scan snapshot bindings into assignments and profile overlays."""
+    try:
+        from src.core.model_scan_runtime import reload_model_scan
+
+        return reload_model_scan()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"model-scan reload failed: {exc}")
+        raise HTTPException(status_code=500, detail="model-scan reload failed") from exc
+
+
+@router.get("/api/model-scan/dashboard")
+async def model_scan_dashboard(limit: int = 25):
+    """Return model-scan provenance, compression stats, and recent CCP errors."""
+    from src.core.model_scan_runtime import get_active_binding
+    from src.services.observability.error_sink import tail_errors
+
+    active = get_active_binding()
+    compression: dict[str, Any] = {}
+    try:
+        from pathlib import Path
+        from scripts.status.rtk_status import DEFAULT_CACHE_PATH, get_stats
+
+        compression = get_stats(cache_path=Path(DEFAULT_CACHE_PATH), ttl_seconds=10)
+    except Exception:
+        compression = {"available": False}
+
+    return {
+        "model_scan": {
+            "active": active is not None,
+            "scan_id": active.scan_id if active else None,
+            "schema_version": active.schema_version if active else "",
+            "global_tiers": sorted(active.global_tiers.keys()) if active else [],
+            "overlay_profiles": sorted(active.overlay.keys()) if active else [],
+            "provenance": dict(active.provenance) if active else {},
+        },
+        "compression": compression,
+        "errors": tail_errors(limit),
+    }
+
+
 async def validate_and_extract_api_key(
     x_api_key: Optional[str] = Header(None),
     authorization: Optional[str] = Header(None),
@@ -615,6 +659,40 @@ async def create_message(
                                 f"({assignment_id}): {_orig_model} → {_new}"
                             )
                             openai_request["model"] = _new
+                # 3.6. model-scan slot_bindings: request-time profile overlay.
+                #      The binder resolves this at reload time; the hot path only
+                #      reads the in-memory overlay and applies its cascade.
+                if assignment_id:
+                    try:
+                        from src.core.model_scan_runtime import resolve_profile_binding
+
+                        _binding = resolve_profile_binding(_profile.name, assignment_id)
+                    except Exception:
+                        _binding = None
+                    if _binding is not None:
+                        _orig_model = openai_request.get("model")
+                        if _orig_model != _binding.api_model:
+                            logger.info(
+                                f"[profile={_profile.name}] model_scan "
+                                f"({assignment_id}): {_orig_model} → {_binding.api_model}"
+                            )
+                            openai_request["model"] = _binding.api_model
+                        openai_request["_model_scan_cascade"] = list(_binding.cascade)
+                        if _binding.base_url:
+                            endpoint = _binding.base_url
+                            if _binding.provider:
+                                provider = _binding.provider
+                                _binding_key = config.get_provider_api_key(_binding.provider)
+                                if _binding_key:
+                                    active_api_key = _binding_key
+                            custom_client = OpenAIClient(
+                                active_api_key,
+                                endpoint,
+                                config.request_timeout,
+                                api_version=config.azure_api_version,
+                                custom_headers=custom_headers,
+                            )
+                            custom_client.configure_per_model_clients(config)
                 # 4. provider_override (Phase 4): force a specific provider entry
                 #    from the PROVIDERS_* registry. Wins over the use_case_route's
                 #    base_url/api_key. Used for per-profile OAuth account selection,

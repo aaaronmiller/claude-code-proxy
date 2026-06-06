@@ -60,3 +60,34 @@ def sample_config(monkeypatch):
     monkeypatch.setenv("PORT", "8082")
 
     return monkeypatch
+
+
+@pytest.fixture(autouse=True)
+def _isolate_proxy_chain_file(tmp_path, monkeypatch):
+    """Prevent any test from mutating the repo's real config/proxy_chain.json.
+
+    The chain API and AssignmentRegistry persist via ProxyChain.save(), which writes to
+    config/proxy_chain.json (path overridable via PROXY_CHAIN_FILE). Chain/assignment tests that
+    POST/PATCH/DELETE entries were saving to the real file, polluting it with test entries and
+    breaking later runs (e.g. a leftover 'tobedeleted' entry made test_delete_chain_entry fail).
+
+    This autouse fixture copies the real chain to a per-test temp file and points
+    PROXY_CHAIN_FILE at it, so reads see identical content but writes stay isolated. Tests that set
+    PROXY_CHAIN_FILE themselves run after this setup and override it, keeping their own behavior.
+    """
+    from src.core.proxy_chain import DEFAULT_CHAIN_FILE, reload_chain
+
+    real = Path(DEFAULT_CHAIN_FILE)
+    if real.exists():
+        tmp = tmp_path / "proxy_chain.json"
+        tmp.write_text(real.read_text())
+        monkeypatch.setenv("PROXY_CHAIN_FILE", str(tmp))
+        reload_chain()
+    yield
+    # monkeypatch restores the env automatically; reset the singleton best-effort. A test may have
+    # repointed PROXY_CHAIN_FILE at a deliberately-malformed file (e.g. migration-halt tests) that
+    # is still active during teardown, so a reload here must never raise.
+    try:
+        reload_chain()
+    except Exception:
+        pass

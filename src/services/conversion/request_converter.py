@@ -601,9 +601,46 @@ def convert_claude_to_openai(
     openai_messages = inject_system_prompt(
         openai_messages, model_size, model_manager.config
     )
+
+    # Normalise system-role messages for backends that reject "role": "system"
+    openai_messages = _normalize_system_role(openai_messages, model_manager.config)
+
     openai_request["messages"] = openai_messages
 
     return openai_request
+
+
+def _normalize_system_role(messages: list, config) -> list:
+    """Normalise 'system' role messages for backends that reject "role": "system".
+
+    When ``config.normalize_system_role`` is ``True``, any message whose role is
+    ``system`` is converted to ``user``, preserving all content and position.
+    Empty system messages are dropped silently.
+
+    This is a generic compatibility shim — no model-specific knowledge required.
+    """
+    if not config.normalize_system_role:
+        return messages
+
+    changed = 0
+    normalized: list = []
+    for msg in messages:
+        if msg.get("role") == Constants.ROLE_SYSTEM:
+            content = msg.get("content")
+            if content:
+                normalized.append({"role": Constants.ROLE_USER, "content": content})
+                changed += 1
+            # empty system messages are dropped
+        else:
+            normalized.append(msg)
+
+    if changed:
+        logger.info(
+            f"Normalised {changed} system message(s) to user role "
+            f"(NORMALIZE_SYSTEM_ROLE=True)"
+        )
+
+    return normalized
 
 
 def _model_supports_reasoning(model_id: str, model_manager=None) -> bool:

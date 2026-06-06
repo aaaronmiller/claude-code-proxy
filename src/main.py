@@ -16,6 +16,7 @@ from src.api.openai_endpoints import router as openai_router
 from src.api.routing_profiles_api import router as routing_profiles_router
 from src.api.metrics_api import router as metrics_router
 from src.api.docs_routes import router as docs_router
+from src.api.rtk_stats import router as rtk_stats_router
 
 # NEW: System monitoring and live metrics
 from src.api.system_monitor import router as system_monitor_router
@@ -56,6 +57,7 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan events for startup and shutdown."""
+    reliability_task = None
 
     # Database Migrations
     try:
@@ -234,7 +236,39 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"⚠️  Failed to start advanced scheduler: {e}")
 
+    # Startup: bind model-scan snapshot if enabled. This is additive; disabled or invalid
+    # snapshots keep static assignments in place.
+    try:
+        from src.core.model_scan_runtime import reload_model_scan
+
+        summary = reload_model_scan()
+        if summary.get("enabled"):
+            scan_id = summary.get("scan_id")
+            changed = summary.get("changed")
+            print(f"✅ Model-scan bindings loaded (scan_id={scan_id}, changed={changed})")
+            try:
+                import asyncio
+                from src.core.proxy_chain import get_chain
+                from src.services.observability.reliability_feedback import (
+                    reliability_feedback_loop,
+                )
+
+                reliability_task = asyncio.create_task(
+                    reliability_feedback_loop(
+                        get_chain().model_scan,
+                        config.usage_tracking_db_path,
+                    )
+                )
+                print("✅ Model-scan reliability feedback loop started")
+            except Exception as loop_err:
+                print(f"⚠️  Failed to start model-scan reliability feedback: {loop_err}")
+    except Exception as e:
+        print(f"⚠️  Model-scan binding reload failed: {e}")
+
     yield
+
+    if reliability_task is not None:
+        reliability_task.cancel()
 
     # Shutdown: Stop advanced scheduler
     try:
@@ -291,6 +325,7 @@ app.include_router(billing_router)
 app.include_router(benchmarks_router)
 app.include_router(users_router)
 app.include_router(docs_router)  # Documentation API
+app.include_router(rtk_stats_router)  # RTK cached token savings stats
 
 # NEW: Enhanced monitoring and live metrics
 app.include_router(system_monitor_router)  # System health and stats
@@ -554,6 +589,20 @@ def main(env_updates: dict = None, skip_validation: bool = False):
     except ImportError:
         pass  # profiles module not yet present during partial install
 
+    # Bind model-scan snapshot during CLI startup when enabled. Uvicorn lifespan does the same
+    # for direct ASGI startup, so both entrypoints converge.
+    try:
+        from src.core.model_scan_runtime import reload_model_scan
+
+        _ms_summary = reload_model_scan()
+        if _ms_summary.get("enabled"):
+            print(
+                "✅ Model-scan bindings loaded "
+                f"(scan_id={_ms_summary.get('scan_id')}, changed={_ms_summary.get('changed')})"
+            )
+    except Exception as e:
+        print(f"⚠ Model-scan binding reload failed: {e}")
+
     # Validate configuration
     if not skip_validation:
         from src.core.validator import validate_config_on_startup
@@ -717,6 +766,34 @@ def main(env_updates: dict = None, skip_validation: bool = False):
                 )
     except Exception as _prune_err:
         _logging.getLogger(__name__).debug(f"Reasoning log prune skipped: {_prune_err}")
+
+    # SIGHUP: reload router config and rebind model-scan without restarting the process.
+    try:
+        import signal as _signal
+
+        if hasattr(_signal, "SIGHUP"):
+
+            def _handle_sighup(signum, frame):
+                try:
+                    from src.core.model_router import reload_router
+                    from src.core.model_scan_runtime import reload_model_scan
+
+                    reload_router(config)
+                    _summary = reload_model_scan()
+                    _logging.getLogger(__name__).info(
+                        "SIGHUP reload complete: model_scan=%s scan_id=%s changed=%s",
+                        _summary.get("enabled"),
+                        _summary.get("scan_id"),
+                        _summary.get("changed"),
+                    )
+                except Exception as _reload_err:
+                    _logging.getLogger(__name__).error(
+                        "SIGHUP reload failed: %s", _reload_err
+                    )
+
+            _signal.signal(_signal.SIGHUP, _handle_sighup)
+    except Exception as _signal_err:
+        _logging.getLogger(__name__).debug(f"SIGHUP handler unavailable: {_signal_err}")
 
     # Start server
     try:

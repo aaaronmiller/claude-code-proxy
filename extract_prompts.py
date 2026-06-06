@@ -6,9 +6,11 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
+REPO_ROOT = Path("/home/cheta/code/claude-code-proxy")
 PROJECT_DIR = Path.home() / ".claude" / "projects" / "-home-cheta-code-claude-code-proxy"
-OUTPUT_FILE = Path("/home/cheta/code/claude-code-proxy/USERPROMPTS.md")
-OUTPUT_FILE_V2 = Path("/home/cheta/code/claude-code-proxy/USERPROMPTS-v2.md")
+OUTPUT_DIR = REPO_ROOT / "archive" / "session-prompts"
+OUTPUT_FILE = OUTPUT_DIR / "USERPROMPTS.md"
+OUTPUT_FILE_V2 = OUTPUT_DIR / "USERPROMPTS-v2.md"
 
 def extract_text_from_content(content):
     """Extract readable text from message content (string or list)."""
@@ -168,6 +170,8 @@ def main():
     # Deduplicate
     deduped, dupes_removed = deduplicate_prompts(all_prompts)
     print(f"\nDeduplication: {len(all_prompts)} → {len(deduped)} ({dupes_removed} duplicates removed)")
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Write v2: full-length, deduplicated
     write_prompts_md(deduped, OUTPUT_FILE_V2, len(jsonl_files),

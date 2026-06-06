@@ -1,14 +1,12 @@
 """
-Read-only API for Option C-slim routing profiles.
+API for Option C-slim routing profiles.
 
 Lives at /api/routing-profiles to avoid colliding with the legacy
 /api/profiles endpoints in web_ui.py (which manage the env-var profile
 system — saving model configs from the wizard).
 
-Editing routing profiles is done by hand in profiles/profiles.json; the
-resolver's mtime check picks up changes on the next request without restart.
-This API surface is intentionally read-only so the editing workflow stays
-"git-tracked text file" rather than a fragile UI.
+Persistent routing profiles are edited by hand in profiles/profiles.json. This API also supports
+temporary profiles used by the ccp launcher for per-session routing.
 """
 
 from __future__ import annotations
@@ -19,15 +17,27 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from src.core.profiles import (
     DEFAULT_PROFILES_PATH,
     get_all_profiles,
     resolve_profile,
+    register_ephemeral_profile,
+    delete_ephemeral_profile,
+    list_ephemeral_profiles,
+    sweep_ephemeral_profiles,
 )
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class EphemeralProfileRequest(BaseModel):
+    preset: str = "default"
+    overlay: Dict[str, Any] = Field(default_factory=dict)
+    ttl_s: int = 3600
+    profile_id: Optional[str] = None
 
 
 def _request_counts_by_profile(hours: int = 24) -> Dict[str, int]:
@@ -97,8 +107,49 @@ async def list_routing_profiles(hours: int = 24) -> Dict[str, Any]:
         "profiles_file": str(DEFAULT_PROFILES_PATH),
         "window_hours": hours,
         "default_exists": "default" in raw,
+        "ephemeral": {
+            name: {
+                "preset": item.get("preset"),
+                "expires_at": item.get("expires_at"),
+            }
+            for name, item in list_ephemeral_profiles().items()
+        },
         "unprefixed_count": counts.get("(unprefixed)", 0),
     }
+
+
+@router.post("/api/routing-profiles")
+async def create_ephemeral_routing_profile(payload: EphemeralProfileRequest) -> Dict[str, Any]:
+    """Create a temporary routing profile and return its proxy URL prefix."""
+    raw = get_all_profiles()
+    if payload.preset not in raw:
+        raise HTTPException(status_code=404, detail=f"Preset '{payload.preset}' not found")
+    ctx = register_ephemeral_profile(
+        preset=payload.preset,
+        overlay=payload.overlay,
+        ttl_s=payload.ttl_s,
+        profile_id=payload.profile_id,
+    )
+    return {
+        "id": ctx.name,
+        "preset": payload.preset,
+        "url_prefix": f"/p/{ctx.name}",
+        "base_url": f"http://127.0.0.1:8082/p/{ctx.name}",
+        "ttl_s": payload.ttl_s,
+        "resolved": ctx.slots,
+    }
+
+
+@router.delete("/api/routing-profiles/{name}")
+async def delete_ephemeral_routing_profile(name: str) -> Dict[str, Any]:
+    """Delete a temporary routing profile. Idempotent by design."""
+    existed = delete_ephemeral_profile(name)
+    return {"id": name, "deleted": existed}
+
+
+@router.post("/api/routing-profiles/sweep")
+async def sweep_expired_routing_profiles() -> Dict[str, Any]:
+    return {"removed": sweep_ephemeral_profiles()}
 
 
 @router.get("/api/routing-profiles/{name}")

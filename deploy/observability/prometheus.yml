@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: clutch-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:8082
+  - job_name: headroom
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:8787

@@ -19,6 +19,8 @@ Profile schema (flat dict; unknown keys ignored for forward compat):
                                     "middle": "...", "big": "..."}. Lets a
                                     profile route haiku→cheap-model invisibly
                                     while preserving opus/sonnet routing.
+  - slot_bindings:          dict — model-scan role bindings by assignment id.
+                                    Format: {"big": "R1_primary"}.
   - spoof_response_model:   bool — when tier_overrides (or future force_main)
                                     swaps the model, rewrite the upstream
                                     response's `model` field back to what the
@@ -49,6 +51,7 @@ import logging
 import os
 import re
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -112,6 +115,7 @@ def current_profile_name() -> Optional[str]:
 _cache: Dict[str, Any] = {}
 _cache_mtime: float = 0.0
 _cache_path: Optional[Path] = None
+_ephemeral_profiles: Dict[str, Dict[str, Any]] = {}
 
 
 def _load_from_disk(path: Path) -> Dict[str, Any]:
@@ -149,11 +153,15 @@ def _refresh_cache(path: Optional[Path] = None) -> Dict[str, Any]:
 
 def get_all_profiles(path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
     """Return the full profiles dict, refreshing from disk if mtime changed."""
-    return _refresh_cache(path)
+    sweep_ephemeral_profiles()
+    merged = dict(_refresh_cache(path))
+    merged.update({name: item["slots"] for name, item in _ephemeral_profiles.items()})
+    return merged
 
 
 def has_profile(name: str, path: Optional[Path] = None) -> bool:
-    return name in _refresh_cache(path)
+    sweep_ephemeral_profiles()
+    return name in _ephemeral_profiles or name in _refresh_cache(path)
 
 
 def resolve_profile(name: str, path: Optional[Path] = None) -> ProfileContext:
@@ -163,14 +171,69 @@ def resolve_profile(name: str, path: Optional[Path] = None) -> ProfileContext:
     If `name` is missing or unknown, returns the 'default' profile (if it
     exists) or an empty ProfileContext.
     """
-    profiles = _refresh_cache(path)
+    profiles = get_all_profiles(path)
     default = dict(profiles.get("default", {}))
     if name and name != "default" and name in profiles:
         # Overlay named profile onto default; named keys win
-        merged = {**default, **profiles[name]}
+        named = profiles[name]
+        merged = {**default, **named}
+        for key in ("slot_bindings", "tier_overrides"):
+            if isinstance(default.get(key), dict) or isinstance(named.get(key), dict):
+                merged[key] = {
+                    **(default.get(key) if isinstance(default.get(key), dict) else {}),
+                    **(named.get(key) if isinstance(named.get(key), dict) else {}),
+                }
     else:
         merged = default
     return ProfileContext(name=name or "default", slots=merged)
+
+
+def register_ephemeral_profile(
+    *,
+    preset: str = "default",
+    overlay: Optional[Dict[str, Any]] = None,
+    ttl_s: int = 3600,
+    profile_id: Optional[str] = None,
+) -> ProfileContext:
+    """Register a temporary profile overlay and return its resolved context."""
+    base = resolve_profile(preset).slots
+    slots = {**base, **(overlay or {})}
+    for key in ("slot_bindings", "tier_overrides"):
+        if isinstance(base.get(key), dict) or isinstance((overlay or {}).get(key), dict):
+            slots[key] = {
+                **(base.get(key) if isinstance(base.get(key), dict) else {}),
+                **((overlay or {}).get(key) if isinstance((overlay or {}).get(key), dict) else {}),
+            }
+    name = profile_id or f"{preset}-{uuid.uuid4().hex[:8]}"
+    _ephemeral_profiles[name] = {
+        "slots": slots,
+        "preset": preset,
+        "created_at": time.time(),
+        "expires_at": time.time() + max(1, int(ttl_s)),
+    }
+    return ProfileContext(name=name, slots=slots)
+
+
+def delete_ephemeral_profile(name: str) -> bool:
+    """Delete a temporary profile. Returns True when it existed."""
+    return _ephemeral_profiles.pop(name, None) is not None
+
+
+def sweep_ephemeral_profiles(now: Optional[float] = None) -> int:
+    """Remove expired temporary profiles and return the number removed."""
+    current = now if now is not None else time.time()
+    expired = [
+        name for name, item in _ephemeral_profiles.items()
+        if float(item.get("expires_at", 0)) <= current
+    ]
+    for name in expired:
+        _ephemeral_profiles.pop(name, None)
+    return len(expired)
+
+
+def list_ephemeral_profiles() -> Dict[str, Dict[str, Any]]:
+    sweep_ephemeral_profiles()
+    return dict(_ephemeral_profiles)
 
 
 def extract_profile_from_path(path: str) -> tuple[Optional[str], str]:

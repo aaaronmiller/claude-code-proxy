@@ -1,0 +1,18 @@
+{
+  "preset": "claude",
+  "policy": "budget:0.50",
+  "compress": true,
+  "provider_override": "anthropic",
+  "roles": {
+    "big": {
+      "model": "anthropic/claude-opus-4-8",
+      "provider": "anthropic"
+    },
+    "toolcall": {
+      "slot": "R8_web_extract"
+    },
+    "background": {
+      "passthrough": true
+    }
+  }
+}

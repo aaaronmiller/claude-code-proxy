@@ -179,7 +179,9 @@ cmd_stop() {
 # ── GPU detection for headroom kompressor ────────────────────────────────────
 # Returns the env-var prefix to prepend to headroom's service_cmd.
 # NVIDIA: ONNX/PyTorch+CUDA — no special vars needed (headroom detects CUDA auto)
-# Intel Arc: OpenVINO requires ONEAPI_DEVICE_SELECTOR=level_zero:0
+# Intel Arc: OpenVINO requires Level Zero and an explicit Kompress device.
+# On this host Headroom's default GPU.1 fails with CL_OUT_OF_RESOURCES; GPU.0
+# is the Arc dGPU verified by Kompress preload.
 # CPU: no vars — headroom falls back to ONNX CPU
 #
 # WSL2 note: lspci only shows "Microsoft Basic Render Driver" — use clinfo or
@@ -200,7 +202,7 @@ _detect_gpu_env() {
         local intel_cl
         intel_cl=$(clinfo --list 2>/dev/null | grep -i intel | head -1)
         if [[ -n "$intel_cl" ]]; then
-            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0"
+            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0 HEADROOM_KOMPRESS_DEVICE=${HEADROOM_KOMPRESS_DEVICE:-GPU.0} LIBVA_DRIVER_NAME=iHD"
             return
         fi
     fi
@@ -210,14 +212,14 @@ _detect_gpu_env() {
         local intel_gpu
         intel_gpu=$(lspci 2>/dev/null | grep -i 'vga\|display\|3d' | grep -i intel | head -1)
         if [[ -n "$intel_gpu" ]]; then
-            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0"
+            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0 HEADROOM_KOMPRESS_DEVICE=${HEADROOM_KOMPRESS_DEVICE:-GPU.0} LIBVA_DRIVER_NAME=iHD"
             return
         fi
     fi
 
     # WSL2 with /dev/dxg but no clinfo — DirectX GPU present, try level_zero anyway
     if [[ -e /dev/dxg ]] && [[ -d /dev/dri ]]; then
-        echo "ONEAPI_DEVICE_SELECTOR=level_zero:0"
+        echo "ONEAPI_DEVICE_SELECTOR=level_zero:0 HEADROOM_KOMPRESS_DEVICE=${HEADROOM_KOMPRESS_DEVICE:-GPU.0} LIBVA_DRIVER_NAME=iHD"
         return
     fi
 
@@ -318,11 +320,11 @@ _launch_chain_tmux() {
         tmux set-option -t "$TMUX_SESSION" -g pane-border-status top
         tmux set-option -t "$TMUX_SESSION" -g pane-border-format "#{pane_title}"
         tmux set-option -t "$TMUX_SESSION" -g status-interval 5
-        tmux set-option -t "$TMUX_SESSION" -g status-left-length 200
+        tmux set-option -t "$TMUX_SESSION" -g status-left-length 300
         tmux set-option -t "$TMUX_SESSION" -g status-right-length 200
         # Bottom status bar: proxy summary + headroom summary + rtk summary
-        tmux set-option -t "$TMUX_SESSION" -g status-left "#(${status_script} proxy) "
-        tmux set-option -t "$TMUX_SESSION" -g status-right "#(${status_script} headroom) │ #(${status_script} rtk)"
+        tmux set-option -t "$TMUX_SESSION" -g status-left "#(${status_script} project #{pane_current_path}) │ #(${status_script} proxy) "
+        tmux set-option -t "$TMUX_SESSION" -g status-right "#(${status_script} headroom) │ #(${status_script} rtk #{pane_current_path})"
         tmux set-option -t "$TMUX_SESSION" -g status-bg "colour235"
         tmux set-option -t "$TMUX_SESSION" -g status-fg "white"
     fi
@@ -429,7 +431,9 @@ cmd_start() {
     local all_ok=true
     while IFS='|' read -r id name cmd port health type; do
         if [ "$port" -gt 0 ]; then
-            wait_for_port "$port" 30 "$health" && ok "$name :$port" || { fail "$name :$port"; all_ok=false; }
+            wait_timeout=30
+            [ "$id" = "headroom" ] && wait_timeout="${HEADROOM_START_TIMEOUT:-120}"
+            wait_for_port "$port" "$wait_timeout" "$health" && ok "$name :$port" || { fail "$name :$port"; all_ok=false; }
         fi
     done < <(CHAIN_FILE="$CHAIN_FILE" _chain_services)
 
@@ -1659,7 +1663,9 @@ cmd_restart_service() {
 
     if [ "${port:-0}" -gt 0 ]; then
         info "Waiting for $found_name :$port..."
-        wait_for_port "$port" 30 "${health_path:-/health}" && ok "$found_name :$port healthy" || fail "$found_name :$port did not come up"
+        wait_timeout=30
+        [ "$target" = "headroom" ] && wait_timeout="${HEADROOM_START_TIMEOUT:-120}"
+        wait_for_port "$port" "$wait_timeout" "${health_path:-/health}" && ok "$found_name :$port healthy" || fail "$found_name :$port did not come up"
     else
         ok "$found_name restarted (no health endpoint)"
     fi
