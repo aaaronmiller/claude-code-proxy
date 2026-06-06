@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # ═════════════════════════════════════════════════════════════════════════════
-# install-aliases.sh — Install Claude / proxy / compression aliases
+# install-aliases.sh — Install the unified xx launcher + proxy aliases
 #
-# Single command to bootstrap a new machine. Installs:
-#   proxies         — the proxy chain lifecycle manager
-#   cld*            — Claude variants (direct / via proxy / with compression)
-#   cldo*           — Claude with OAuth token via passthrough
-#   qw / qsi*       — Qwen variants
-#   csi-codex*      — Codex variants
-#   osi* / ocl* / hsi* — OpenCode / OpenClaw / Hermes variants
+# Installs:
+#   xx        — the unified agent launcher (3-char positional encoding)
+#   proxies   — proxy chain lifecycle manager (up/down/status/logs)
+#   legacy muscle-memory aliases that map to xx commands
+#
+# What's new in v3:
+#   - One launcher to rule them all: xx <AGENT><MODE><ROUTE>[<TIER>]
+#   - Replaces 25+ broken aliases with a single 3-char encoding
+#   - Each tool gets the CORRECT flags (no more --dangerously-bypass-approvals on codex)
+#   - --session <id> works across all tools
+#   - --model <name> overrides the main model for any tool
+#   - Built-in proxy health check + auto-start (no _proxy_stack_auto_start needed)
 #
 # Usage:
 #   bash scripts/install-aliases.sh                 # install
@@ -32,12 +37,14 @@ warn() { echo -e "  ${YELLOW}⚠${NC} $*"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROXY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROXIES_BIN="$PROXY_DIR/proxies"
-CCP_BIN="$PROXY_DIR/scripts/ccp-launch.sh"
 LOCAL_BIN="$HOME/.local/bin"
+XX_BIN="$LOCAL_BIN/xx"
+XX_CONFIG_DIR="$HOME/.xx"
+XX_CONFIG="$XX_CONFIG_DIR/config.json"
 
 # Marker wrapping alias block (for idempotent install/uninstall)
-MARKER_START="# ═══ claude-code-proxy aliases START (v2) ═══"
-MARKER_END="# ═══ claude-code-proxy aliases END (v2) ═══"
+MARKER_START="# ═══ claude-code-proxy aliases START (v3) ═══"
+MARKER_END="# ═══ claude-code-proxy aliases END (v3) ═══"
 
 # ── CLI parsing ───────────────────────────────────────────────────────────────
 MODE="install"
@@ -50,7 +57,7 @@ while [ $# -gt 0 ]; do
         --dry-run)   DRY_RUN=true ;;
         --shell)     FORCE_SHELL="$2"; shift ;;
         --help|-h)
-            sed -n '3,20p' "$0"
+            sed -n '3,22p' "$0"
             exit 0
             ;;
         *) fail "Unknown argument: $1"; exit 1 ;;
@@ -66,7 +73,7 @@ detect_shell() {
     local name="${SHELL##*/}"
     case "$name" in
         zsh|bash|fish) echo "$name" ;;
-        *) echo "zsh" ;;  # default
+        *) echo "zsh" ;;
     esac
 }
 
@@ -83,7 +90,7 @@ SHELL_NAME="$(detect_shell)"
 RC_FILE="$(shell_rc_path "$SHELL_NAME")"
 
 echo ""
-echo -e "${BOLD}${CYAN}Claude / Proxy / Compression Alias Installer${NC}"
+echo -e "${BOLD}${CYAN}Unified Agent Launcher Installer (v3)${NC}"
 echo -e "  Shell: ${BOLD}$SHELL_NAME${NC}"
 echo -e "  RC file: ${BOLD}$RC_FILE${NC}"
 echo -e "  Proxy dir: ${BOLD}$PROXY_DIR${NC}"
@@ -120,21 +127,34 @@ pattern = re.compile(
     re.DOTALL,
 )
 content, n = pattern.subn('', content)
-# Collapse double blank lines
 content = re.sub(r'\n{3,}', '\n\n', content)
 with open(path, 'w') as f:
     f.write(content)
 print(f"  removed {n} alias block(s)")
 PYEOF
 
-    # Remove proxies symlink
+    # Remove proxies symlink (keep xx — it's a separate tool)
     if [ -L "$LOCAL_BIN/proxies" ]; then
         rm -f "$LOCAL_BIN/proxies"
         ok "removed $LOCAL_BIN/proxies symlink"
     fi
-    if [ -L "$LOCAL_BIN/ccp" ]; then
-        rm -f "$LOCAL_BIN/ccp"
-        ok "removed $LOCAL_BIN/ccp symlink"
+
+    # Remove old v2 marker block if present (cleanup from prior version)
+    V2_MARKER_START="# ═══ claude-code-proxy aliases START (v2) ═══"
+    V2_MARKER_END="# ═══ claude-code-proxy aliases END (v2) ═══"
+    if command grep -qF "$V2_MARKER_START" "$RC_FILE"; then
+        python3 - "$RC_FILE" "$V2_MARKER_START" "$V2_MARKER_END" <<'PYEOF'
+import sys, re
+path, start_marker, end_marker = sys.argv[1:4]
+with open(path, 'r') as f:
+    content = f.read()
+pattern = re.compile(re.escape(start_marker) + r'.*?' + re.escape(end_marker) + r'\n?', re.DOTALL)
+content = pattern.sub('', content)
+content = re.sub(r'\n{3,}', '\n\n', content)
+with open(path, 'w') as f:
+    f.write(content)
+PYEOF
+        ok "also removed legacy v2 alias block"
     fi
 
     ok "Uninstalled. Reload your shell: source $RC_FILE"
@@ -145,19 +165,29 @@ fi
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# ── 1. Ensure proxies binary is symlinked into PATH ──────────────────────────
-if [ ! -x "$PROXIES_BIN" ]; then
-    fail "proxies script not executable at $PROXIES_BIN"
-    exit 1
-fi
-
-if [ "$DRY_RUN" = true ]; then
-    info "would symlink $CCP_BIN → $LOCAL_BIN/ccp"
+# ── 0. Ensure xx launcher exists ─────────────────────────────────────────────
+XX_SOURCE="$PROXY_DIR/scripts/xx"
+if [ ! -f "$XX_SOURCE" ]; then
+    # xx may not live in this repo — check ~/.local/bin directly
+    if [ ! -x "$XX_BIN" ]; then
+        warn "xx launcher not found at $XX_BIN or $XX_SOURCE"
+        info "Run the xx installer separately, or copy xx to ~/.local/bin/ first."
+        info "Continuing with proxy aliases only..."
+    else
+        ok "xx launcher found at $XX_BIN"
+    fi
 else
-    ln -sf "$CCP_BIN" "$LOCAL_BIN/ccp"
-    ok "created/updated ccp symlink at $LOCAL_BIN/ccp"
+    if [ "$DRY_RUN" = true ]; then
+        info "would copy $XX_SOURCE → $XX_BIN"
+    else
+        mkdir -p "$LOCAL_BIN"
+        cp "$XX_SOURCE" "$XX_BIN"
+        chmod +x "$XX_BIN"
+        ok "installed xx launcher at $XX_BIN"
+    fi
 fi
 
+# ── 1. Symlink proxies lifecycle command ──────────────────────────────────────
 mkdir -p "$LOCAL_BIN"
 
 if [ "$DRY_RUN" = true ]; then
@@ -179,139 +209,69 @@ else
     fi
 fi
 
-# ── 2. Build the alias block ─────────────────────────────────────────────────
+# ── 2. Build the alias block (v3 — xx-based + crash-guard) ───────────────────
 ALIAS_BLOCK=$(cat <<EOF
 $MARKER_START
 # Managed by: $PROXY_DIR/scripts/install-aliases.sh
-# To update aliases, re-run the installer. To remove, run with --uninstall.
+# Re-run the installer to refresh. Run with --uninstall to remove.
 #
-# INVARIANT: every alias routes through:
-#   proxy :8082  → routing, cascade, logging, budget gates
-#   headroom :8787 → context compression (GPU-accelerated via proxy chain)
-#   RTK → terminal output compression
+# Every *alias below* wraps through cg_run (crash-guard tmux attach/recovery).
+# Run xx directly if you want raw subprocess launch without crash-guard.
 #
-# "Passthrough" aliases (cldo, cc-mini) still go through the proxy — the proxy
-# preserves all logging/features, just doesn't reroute the upstream endpoint.
+# ENCODING: xx <AGENT><MODE><ROUTE>[<TIER>]
+#   AGENT: c=claude  h=hermes  x=codex  o=opencode
+#          q=qwen    p=pi      a=ante   g=antigravity
+#   MODE:  i=init    c=continue  n=non-interactive  s=session  r=resume
+#   ROUTE: p=proxy   b=bypass  d=debug (direct)
+#   TIER:  d=deepseek  n=nemotron  k=kimi  q=qwen-next
+#          m=best (ms)  f=free (ms)  0-9=profile
 
-# Ensure ~/.local/bin (where proxies symlink lives) is in PATH
+# Ensure ~/.local/bin is in PATH
 case ":\$PATH:" in *":$LOCAL_BIN:"*) ;; *) export PATH="$LOCAL_BIN:\$PATH" ;; esac
 
-# ─── Proxy stack helper ──────────────────────────────────────────────────────
-# Auto-starts the full chain (proxy + headroom) if either service is down.
-_proxy_stack_auto_start() {
-  if curl -sf --max-time 1 http://127.0.0.1:8082/health >/dev/null 2>&1 \
-    && curl -sf --max-time 1 http://127.0.0.1:8787/health >/dev/null 2>&1; then
-    return 0
-  fi
-  NO_ATTACH=1 proxies up >/dev/null 2>&1
-}
+# ─── Proxy lifecycle (standalone, not wrapped in cg_run) ───────────────────
+alias proxies-up='proxies up'
+alias proxies-down='proxies down'
+alias proxies-status='proxies status'
 
-# ─── Claude CLI ──────────────────────────────────────────────────────────────
-# All aliases: proxy:8082 (routing+logs) → headroom:8787 (compression) → provider + RTK
-# Suffix -c = --continue (resume prior session)
+# ─── Primary aliases — every one goes through cg_run + xx ──────────────────
+alias cc='cg_run xx cip'           # Claude init, proxy
+alias ccc='cg_run xx ccf'          # Claude continue, proxy, free tier
+alias cc-debug='cg_run xx cid'     # Claude init, debug (direct)
 
-# DEFAULT: proxy routing → free OpenRouter cascade + headroom + RTK
-alias cc='_proxy_stack_auto_start && ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass rtk claude --dangerously-skip-permissions'
-alias ccc='_proxy_stack_auto_start && ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass rtk claude --continue --dangerously-skip-permissions'
+alias hsi='cg_run xx hip'          # Hermes init, proxy
+alias hsr='cg_run xx hcf'          # Hermes continue, proxy, free tier
 
-# ANTHROPIC PRO: proxy passthrough with OAuth → Anthropic API + headroom + RTK
-# Small/toolcall requests still cascade to free OR via proxy routing
-# Claude OAuth auto-discovery: extracts the accessToken from
-# ~/.claude/.credentials.json (where Claude Code stores it after login).
-# This eliminates the need for the user to manually export
-# CLAUDE_CODE_OAUTH_TOKEN. Stdout = token, stderr = warnings, exit 1 = missing.
-# Caches the token in a shell-local var per session to avoid re-parsing.
-_claude_oauth_token() {
-  local cred="\$HOME/.claude/.credentials.json"
-  if [ ! -r "\$cred" ]; then
-    echo "  \033[33m⚠  ~/.claude/.credentials.json not found.\033[0m" >&2
-    echo "  Run 'claude login' first to authenticate with your Anthropic Pro subscription." >&2
-    echo "  (Falling back to proxy's PROVIDERS_anthropic_API_KEY if available.)" >&2
-    return 1
-  fi
-  python3 -c "
-import json, sys, time
-try:
-    d = json.load(open('\$cred'))
-    o = d.get('claudeAiOauth', {})
-    tok = o.get('accessToken', '')
-    exp = o.get('expiresAt', 0)
-    if not tok: sys.exit(1)
-    # expiresAt is a millisecond unix timestamp; warn if expired
-    if exp and exp/1000 < time.time():
-        sys.stderr.write('  \033[33m⚠  OAuth token expired (claude CLI may auto-refresh).\033[0m\n')
-    print(tok)
-except Exception as e:
-    sys.stderr.write(f'  failed to read OAuth token: {e}\n')
-    sys.exit(1)
-" 2>&1 >&1 || return 1
-}
+alias psi='cg_run xx pip'          # Pi init, proxy
+alias psi-c='cg_run xx pcf'        # Pi continue, proxy, free tier
 
-# cldo: always routes through proxy /p/claude/v1. The 'claude' profile
-# (profiles.json) maps haiku/small-tier requests to openrouter/owl-alpha
-# transparently — opus/sonnet pass through with the user's OAuth token.
-alias cldo='_proxy_stack_auto_start && _OAUTH=\$(_claude_oauth_token) && CLAUDE_CODE_OAUTH_TOKEN="\$_OAUTH" ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --dangerously-skip-permissions'
-alias cldo-c='_proxy_stack_auto_start && _OAUTH=\$(_claude_oauth_token) && CLAUDE_CODE_OAUTH_TOKEN="\$_OAUTH" ANTHROPIC_BASE_URL=http://127.0.0.1:8082/p/claude rtk claude --continue --dangerously-skip-permissions'
+alias qw='cg_run xx qip'           # Qwen init, proxy
+alias qw-c='cg_run xx qcf'         # Qwen continue, proxy, free tier
 
-# OPENCODE GO: proxy routes BIG tier to opencode_go/minimax-m2.7, small→free OR + headroom + RTK
-alias cc-mini='_proxy_stack_auto_start && BIG_MODEL=opencode_go/minimax-m2.7 ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass rtk claude --dangerously-skip-permissions'
-alias cc-mini-c='_proxy_stack_auto_start && BIG_MODEL=opencode_go/minimax-m2.7 ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass rtk claude --continue --dangerously-skip-permissions'
+alias codex-run='cg_run xx xip'    # Codex init, proxy
+alias codex-res='cg_run xx xcf'    # Codex continue, proxy, free tier
 
-# ─── Other CLIs ──────────────────────────────────────────────────────────────
-# All route through proxy:8082 (which chains to headroom for compression).
-# RTK wraps where it helps (Claude Code tool output); for other CLIs it's a no-op pass-through.
+alias oc='cg_run xx oip'           # OpenCode init, proxy
+alias ante='cg_run xx aip'         # Ante init, proxy
+alias antigravity='cg_run xx gip'  # Antigravity init, proxy
 
-alias qw='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/codex/v1 OPENAI_API_KEY=pass rtk qwen --auth-type openai'
-alias qw-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/codex/v1 OPENAI_API_KEY=pass rtk qwen --auth-type openai --continue'
+# ─── Quick tier variants ──────────────────────────────────────────────────
+alias cc-ds='cg_run xx cipd'       # Claude init, proxy, deepseek
+alias cc-free='cg_run xx cipf'     # Claude init, proxy, free tier
+alias psi-ds='cg_run xx pipd'      # Pi init, proxy, deepseek
+alias psi-free='cg_run xx pipf'    # Pi init, proxy, free tier
+alias hsi-ds='cg_run xx hipd'      # Hermes init, proxy, deepseek
 
-alias codex-run='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/codex/v1 OPENAI_API_KEY=pass rtk codex --dangerously-bypass-approvals-and-sandbox'
-alias codex-res='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/codex/v1 OPENAI_API_KEY=pass rtk codex resume'
+# ─── Direct (no proxy) ────────────────────────────────────────────────────
+alias cc-direct='cg_run xx cid'
+alias psi-direct='cg_run xx pid'
+alias hsi-direct='cg_run xx hid'
+alias qw-direct='cg_run xx qid'
+alias ante-direct='cg_run xx aid'
 
-alias oc='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/opencode/v1 OPENAI_API_KEY=pass rtk opencode'
-alias oc-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/opencode/v1 OPENAI_API_KEY=pass rtk opencode --resume'
-
-alias ocl='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/opencode/v1 OPENAI_API_KEY=pass rtk openclaw'
-alias ocl-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/opencode/v1 OPENAI_API_KEY=pass rtk openclaw --resume'
-
-# Hermes: routes through proxy → headroom for context compression.
-# RTK wraps the launch so hermes output is also compressed if used inside Claude Code.
-alias hsi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/hermes/v1 OPENAI_API_KEY=pass rtk hermes --dangerously-skip-permissions'
-alias hsr='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/hermes/v1 OPENAI_API_KEY=pass rtk hermes --resume --dangerously-skip-permissions'
-
-# Hermes bypass: main model unchanged (caller decides), tool calls → owl-alpha cascade.
-# Use when you want hermes to keep its own model choice but still benefit from the
-# proxy's tool-call routing + headroom compression + RTK output filtering.
-alias hsi-bp='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/hermes-bypass/v1 OPENAI_API_KEY=pass rtk hermes --dangerously-skip-permissions'
-alias hsr-bp='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/hermes-bypass/v1 OPENAI_API_KEY=pass rtk hermes --resume --dangerously-skip-permissions'
-
-# Pi: AI coding assistant. Routes through proxy → headroom + RTK.
-# Main model: NOT pinned — pass --model at runtime to choose per-session.
-# Tool calls: auto-routed by the proxy to TOOLCALL_MODELS (.env) regardless of main.
-# Usage examples:
-#   psi --model qwen/qwen3-next-80b "build an http server"
-#   psi --model anthropic/claude-opus-4-20250514 "complex refactor"
-#   psi --tools read,grep -p "review the code in src/"
-alias psi='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi/v1 OPENAI_API_KEY=pass rtk pi --provider openai'
-alias psi-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi/v1 OPENAI_API_KEY=pass rtk pi --provider openai --continue'
-
-# Pi bypass: main model unchanged (pi/agent decides), tool calls → owl-alpha cascade.
-# Use when you want pi to keep its default model choice but still benefit from the
-# proxy's tool-call routing + headroom compression + RTK output filtering.
-alias psi-bp='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi-bypass/v1 OPENAI_API_KEY=pass rtk pi --provider openai'
-alias psi-bp-c='_proxy_stack_auto_start && OPENAI_BASE_URL=http://127.0.0.1:8082/p/pi-bypass/v1 OPENAI_API_KEY=pass rtk pi --provider openai --continue'
-
-# ccp launcher presets: create per-session profiles and clean them up on exit.
-alias ante='ccp ante --preset ante'
-alias ante-c='ccp ante --preset ante --continue'
-alias antigravity='ccp antigravity --preset antigravity'
-alias antigravity-c='ccp antigravity --preset antigravity --continue'
-
-# ─── Legacy muscle-memory ────────────────────────────────────────────────────
-alias car='cc'
-alias carc='ccc'
-alias cproxy-init='cc'
-alias cproxy-continue='ccc'
-alias oc-direct='opencode'
+# ─── Bypass (proxy features on, model reroute off) ────────────────────────
+alias hsi-bp='cg_run xx hib'
+alias psi-bp='cg_run xx pib'
 
 $MARKER_END
 EOF
@@ -327,10 +287,28 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
+# Remove any old v2 block before installing v3
+V2_MARKER_START="# ═══ claude-code-proxy aliases START (v2) ═══"
+V2_MARKER_END="# ═══ claude-code-proxy aliases END (v2) ═══"
+if command grep -qF "$V2_MARKER_START" "$RC_FILE" 2>/dev/null; then
+    python3 - "$RC_FILE" "$V2_MARKER_START" "$V2_MARKER_END" <<'PYEOF'
+import sys, re
+path, start_marker, end_marker = sys.argv[1:4]
+with open(path, 'r') as f:
+    content = f.read()
+pattern = re.compile(re.escape(start_marker) + r'.*?' + re.escape(end_marker) + r'\n?', re.DOTALL)
+content = pattern.sub('', content)
+content = re.sub(r'\n{3,}', '\n\n', content)
+with open(path, 'w') as f:
+    f.write(content)
+PYEOF
+    info "purged old v2 alias block before installing v3"
+fi
+
 touch "$RC_FILE"
 
 if command grep -qF "$MARKER_START" "$RC_FILE"; then
-    # Replace existing block
+    # Replace existing v3 block
     python3 - "$RC_FILE" "$MARKER_START" "$MARKER_END" <<PYEOF
 import sys, re
 path, start_marker, end_marker = sys.argv[1:4]
@@ -347,7 +325,6 @@ with open(path, 'w') as f:
 PYEOF
     ok "replaced existing alias block in $RC_FILE"
 else
-    # Append
     {
         echo ""
         echo "$ALIAS_BLOCK"
@@ -359,30 +336,56 @@ fi
 echo ""
 echo -e "${BOLD}${GREEN}Installed.${NC} Reload your shell or run:  ${CYAN}source $RC_FILE${NC}"
 echo ""
+echo -e "${BOLD}The xx encoding system${NC}"
+echo ""
+echo "  xx <AGENT><MODE><ROUTE>[<TIER>]"
+echo ""
+echo "  AGENT  MODE          ROUTE          TIER"
+echo "  ─────  ────────────  ─────────────  ─────────────────"
+echo "  c      i = init      p = proxy      m = best (ms)"
+echo "  h      n = non-int.  b = bypass     f = free (ms)"
+echo "  x      c = continue  d = debug      d = deepseek"
+echo "  o      s = session                  n = nemotron"
+echo "  q      r = resume                   k = kimi"
+echo "  p                                   0-9 = profile"
+echo "  a"
+echo "  g"
+echo ""
 echo -e "${BOLD}Quick reference:${NC}"
 cat <<'EOFQR'
-  proxies up / down / status   — proxy chain lifecycle (starts headroom+proxy in tmux)
-  ccp <tool> [--policy P]      — temporary-profile launcher
+  ── Claude ─────────────────────────────────────────────────────
+  cc                     cg_run xx cip     Init, proxy
+  ccc                    cg_run xx ccf     Continue, free tier
+  cc-debug               cg_run xx cid     Init, direct
 
-  ALL aliases: proxy:8082 (routing+logs) → headroom:8787 (compression) → provider + RTK
+  ── Hermes ─────────────────────────────────────────────────────
+  hsi                    cg_run xx hip     Init, proxy
+  hsr                    cg_run xx hcf     Continue, free tier
 
-  ── Claude CLI ────────────────────────────────────────────────────
-  cc / ccc             — default: OR cascade, new/continue
-  cldo / cldo-c        — Anthropic Pro OAuth passthrough, new/continue
-  cc-mini / cc-mini-c  — opencode_go/minimax-m2.7 big tier, new/continue
+  ── Pi ─────────────────────────────────────────────────────────
+  psi                    cg_run xx pip     Init, proxy
+  psi-c                  cg_run xx pcf     Continue, free tier
 
-  ── Other CLIs (all via proxy→headroom) ──────────────────────────
-  qw / qw-c            — Qwen (rtk)
-  codex-run / codex-res — Codex (rtk)
-  oc / oc-c            — OpenCode (rtk)
-  ocl / ocl-c          — OpenClaw (rtk)
-  hsi / hsr            — Hermes (rtk, proxy cascade for aux roles)
-  psi / psi-c          — pi (no main pinned, toolcalls via TOOLCALL_MODELS, rtk)
-  ante / antigravity   — ccp launcher presets
-                         use: psi --model X "prompt"  to pick main per session
+  ── Others ─────────────────────────────────────────────────────
+  qw                     cg_run xx qip     Qwen init, proxy
+  codex-run              cg_run xx xip     Codex init, proxy
+  antigravity            cg_run xx gip     Antigravity init, proxy
+  ante                   cg_run xx aip     Ante init, proxy
+  oc                     cg_run xx oip     OpenCode init, proxy
 
-  ── Legacy muscle-memory ──────────────────────────────────────────
-  car / carc           → cc / ccc
-  cproxy-init / cproxy-continue → cc / ccc
+  ── Any tool, any mode, raw ────────────────────────────────────
+  xx cip                 Claude init proxy         (no cg_run)
+  xx hif                 Hermes init free tier
+  xx xcd                 Codex continue debug
+  xx qcpd                Qwen continue proxy deepseek
+
+  ── Proxy lifecycle ────────────────────────────────────────────
+  proxies up / down / status
+
+  ── Learn the encoding ────────────────────────────────────────
+  xx -h
 EOFQR
+echo ""
+echo -e "  ${YELLOW}Tip:${NC} All aliases wrap through ${CYAN}c g _ r u n${NC} for tmux attach + crash recovery."
+echo -e "  ${YELLOW}Tip:${NC} Run ${CYAN}xx -h${NC} for the full encoding reference."
 echo ""
