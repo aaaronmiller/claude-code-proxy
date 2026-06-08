@@ -11,7 +11,8 @@ from subprocess import Popen, PIPE
 
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 PROXY_URL = os.environ.get("PROXY_URL", "http://127.0.0.1:8082")
-USAGE_DB = Path(os.environ.get("PROXY_USAGE_DB", "/home/cheta/code/claude-code-proxy/usage_tracking.db"))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+USAGE_DB = Path(os.environ.get("PROXY_USAGE_DB", str(PROJECT_ROOT / "usage_tracking.db")))
 TOOL_LIST = ",".join(
     [
         "Write",

@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-REPO_ROOT = Path("/home/cheta/code/claude-code-proxy")
-PROJECT_DIR = Path.home() / ".claude" / "projects" / "-home-cheta-code-claude-code-proxy"
+REPO_ROOT = Path(__file__).resolve().parent
+PROJECT_DIR = Path.home() / ".claude" / "projects" / str(REPO_ROOT).replace("/", "-")
 OUTPUT_DIR = REPO_ROOT / "archive" / "session-prompts"
 OUTPUT_FILE = OUTPUT_DIR / "USERPROMPTS.md"
 OUTPUT_FILE_V2 = OUTPUT_DIR / "USERPROMPTS-v2.md"

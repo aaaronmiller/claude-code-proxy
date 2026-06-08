@@ -4,10 +4,10 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/home/cheta/code/claude-code-proxy/.venv/bin/headroom proxy --port 8787 --mode token_headroom --openai-api-url https://openrouter.ai/api/v1 --backend openrouter --no-telemetry
+ExecStart=%h/code/claude-code-proxy/.venv/bin/headroom proxy --port 8787 --mode token_headroom --openai-api-url https://openrouter.ai/api/v1 --backend openrouter --no-telemetry
 Restart=on-failure
 RestartSec=5
-Environment="PATH=/home/cheta/code/claude-code-proxy/.venv/bin:/home/cheta/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=%h/code/claude-code-proxy/.venv/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONUNBUFFERED=1"
 Environment="CUDA_VISIBLE_DEVICES=0"
 

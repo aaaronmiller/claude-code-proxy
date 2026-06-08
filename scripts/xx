@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════════════════
+# xx — unified agent launcher
+#
+#   xx <AGENT><MODE><ROUTE>[<TIER>] [extra args...]
+#
+#   AGENT : c=claude  h=hermes  x=codex  q=qwen  p=pi  o=opencode  a=ante  g=antigravity
+#   MODE  : i=init     c=continue  n=non-interactive  s=session  r=resume
+#   ROUTE : p=proxy    b=bypass    d=debug (direct, no proxy)
+#   TIER  : (optional) d=deepseek n=nemotron k=kimi q=qwen-next m=best f=free 0-9=named profile
+#
+# Common flags (normalised across every tool):
+#   -s, --session <id>   resume/continue a specific session
+#   -m, --model   <id>   override the main model (beats TIER)
+#   -p, --prompt  <txt>  non-interactive prompt
+#   everything else is passed straight through to the underlying CLI.
+#
+# Per-tool flags are baked in (verified against each CLI's --help). Model/route
+# tables live in ~/.xx/config.json — edit there, not here.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+set -euo pipefail
+
+XX_CONFIG="${XX_CONFIG:-$HOME/.xx/config.json}"
+PROXY_BASE="http://127.0.0.1:8082"
+PROXY_HEALTH="http://127.0.0.1:8082/health"
+HEADROOM_HEALTH="http://127.0.0.1:8787/health"
+AUTO_START=1
+
+RED='\033[0;31m'; CYAN='\033[0;36m'; YELLOW='\033[0;33m'; NC='\033[0m'
+die()  { echo -e "${RED}xx:${NC} $*" >&2; exit 1; }
+note() { echo -e "${CYAN}xx:${NC} $*" >&2; }
+warn() { echo -e "${YELLOW}xx:${NC} $*" >&2; }
+
+usage() {
+    sed -n '3,18p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+# ── Read a value out of ~/.xx/config.json (best-effort, no jq dependency) ──────
+_cfg() {
+    # _cfg <python-expression-on-`d`>  -> prints result or empty
+    [ -f "$XX_CONFIG" ] || return 0
+    python3 - "$XX_CONFIG" "$1" <<'PYEOF' 2>/dev/null || true
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+try:
+    v = eval(sys.argv[2], {"d": d})
+except Exception:
+    v = None
+if v is not None:
+    print(v)
+PYEOF
+}
+
+# Load proxy settings from config if present (env/defaults otherwise)
+_v=$(_cfg "d['proxy']['base_url']");      [ -n "$_v" ] && PROXY_BASE="$_v"
+_v=$(_cfg "d['proxy']['health_url']");    [ -n "$_v" ] && PROXY_HEALTH="$_v"
+_v=$(_cfg "d['proxy']['headroom_health_url']"); [ -n "$_v" ] && HEADROOM_HEALTH="$_v"
+_v=$(_cfg "d['proxy']['auto_start']");    [ "$_v" = "False" ] && AUTO_START=0
+
+[ $# -ge 1 ] || usage 1
+case "$1" in -h|--help|help) usage 0 ;; esac
+
+CODE="$1"; shift
+[ ${#CODE} -ge 3 ] || die "code '$CODE' too short — need <AGENT><MODE><ROUTE>[<TIER>] (e.g. cip)"
+[ ${#CODE} -le 4 ] || die "code '$CODE' too long — max 4 chars (e.g. cipd)"
+
+AGENT="${CODE:0:1}"; MODE="${CODE:1:1}"; ROUTE="${CODE:2:1}"; TIER="${CODE:3:1}"
+
+# ── Parse normalised flags; collect the rest as passthrough ────────────────────
+SESSION=""; MODEL=""; PROMPT=""; EXTRA=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -s|--session) SESSION="${2:-}"; shift 2 ;;
+        -m|--model)   MODEL="${2:-}";   shift 2 ;;
+        -p|--prompt)  PROMPT="${2:-}";  shift 2 ;;
+        *)            EXTRA+=("$1");    shift ;;
+    esac
+done
+
+# ── Resolve model from TIER (explicit -m always wins) ──────────────────────────
+if [ -z "$MODEL" ] && [ -n "$TIER" ]; then
+    case "$TIER" in
+        [0-9]) MODEL=$(_cfg "d['profiles'].get('$TIER')") ;;
+        *)     MODEL=$(_cfg "d['tiers'].get('$TIER')") ;;
+    esac
+    [ -n "$MODEL" ] || warn "tier '$TIER' has no model in $XX_CONFIG — ignoring"
+fi
+
+# ── Agent → profile name (used for /p/<profile> path-prefix routing) ───────────
+case "$AGENT" in
+    c) AGENT_NAME=claude;  PROFILE=claude;      PROTO=anthropic ;;
+    h) AGENT_NAME=hermes;  PROFILE=hermes;      PROTO=openai ;;
+    x) AGENT_NAME=codex;   PROFILE=codex;       PROTO=openai ;;
+    q) AGENT_NAME=qwen;    PROFILE=default;     PROTO=openai ;;
+    p) AGENT_NAME=pi;      PROFILE=pi;          PROTO=openai ;;
+    o) AGENT_NAME=opencode;PROFILE=opencode;    PROTO=openai ;;
+    a) AGENT_NAME=ante;    PROFILE=ante;        PROTO=openai ;;
+    g) AGENT_NAME=antigravity; PROFILE=antigravity; PROTO=openai ;;
+    *) die "unknown agent '$AGENT' (c h x q p o a g)" ;;
+esac
+
+case "$MODE" in i|c|n|s|r) ;; *) die "unknown mode '$MODE' (i c n s r)" ;; esac
+case "$ROUTE" in p|b|d) ;; *) die "unknown route '$ROUTE' (p b d)" ;; esac
+
+# ── Bypass route → <profile>-bypass when one exists ────────────────────────────
+if [ "$ROUTE" = "b" ]; then
+    case "$AGENT" in
+        h) PROFILE=hermes-bypass ;;
+        p) PROFILE=pi-bypass ;;
+        *) warn "no dedicated bypass profile for $AGENT_NAME — using '$PROFILE'" ;;
+    esac
+fi
+
+# ── Health check + auto-start for proxy/bypass routes ──────────────────────────
+_healthy() { curl -sf --max-time 1 "$1" >/dev/null 2>&1; }
+if [ "$ROUTE" != "d" ] && [ "$AUTO_START" = 1 ]; then
+    if ! _healthy "$PROXY_HEALTH" || ! _healthy "$HEADROOM_HEALTH"; then
+        note "proxy chain down — starting it (proxies up)…"
+        PROXIES_NO_ATTACH=1 proxies up >/dev/null 2>&1 || warn "proxies up failed — continuing anyway"
+    fi
+fi
+
+# ── Routing env ────────────────────────────────────────────────────────────────
+declare -a ENVV=()
+if [ "$ROUTE" = "d" ]; then
+    note "debug route: direct to provider, no proxy (profile/tier routing off)"
+else
+    if [ "$PROTO" = "anthropic" ]; then
+        ENVV+=("ANTHROPIC_BASE_URL=$PROXY_BASE/p/$PROFILE" "ANTHROPIC_API_KEY=pass")
+    else
+        ENVV+=("OPENAI_BASE_URL=$PROXY_BASE/p/$PROFILE/v1" "OPENAI_API_KEY=pass")
+    fi
+fi
+
+# ── Tool availability ──────────────────────────────────────────────────────────
+command -v "$AGENT_NAME" >/dev/null 2>&1 || die "'$AGENT_NAME' is not installed / not on PATH"
+
+# ── Build the command (verified per-tool flags) ────────────────────────────────
+declare -a CMD=(rtk "$AGENT_NAME")
+
+# model override (Hermes has no --model flag — model is profile-driven)
+_add_model() { if [ -n "$MODEL" ]; then CMD+=(--model "$MODEL"); fi; }
+
+case "$AGENT_NAME" in
+    claude)
+        CMD+=(--dangerously-skip-permissions)
+        _add_model
+        case "$MODE" in
+            c) CMD+=(--continue) ;;
+            r) CMD+=(--resume) ;;
+            s) [ -n "$SESSION" ] && CMD+=(--resume "$SESSION") ;;
+            n) [ -n "$PROMPT" ] && CMD+=(-p "$PROMPT") ;;
+        esac
+        ;;
+    qwen)
+        CMD+=(--auth-type openai -y)
+        _add_model
+        case "$MODE" in
+            c) CMD+=(--continue) ;;
+            r) CMD+=(--resume) ;;
+            s) [ -n "$SESSION" ] && CMD+=(--resume "$SESSION") ;;
+            n) [ -n "$PROMPT" ] && CMD+=(--prompt "$PROMPT") ;;
+        esac
+        ;;
+    codex)
+        case "$MODE" in
+            c) CMD+=(resume --last) ;;
+            r) CMD+=(resume) ;;
+            s) [ -n "$SESSION" ] && CMD+=(resume "$SESSION") ;;
+            *) CMD+=(--dangerously-bypass-approvals-and-sandbox); _add_model
+               [ "$MODE" = n ] && [ -n "$PROMPT" ] && CMD+=("$PROMPT") ;;
+        esac
+        ;;
+    opencode)
+        _add_model
+        case "$MODE" in
+            c) CMD+=(--continue) ;;
+            s) [ -n "$SESSION" ] && CMD+=(--session "$SESSION") ;;
+            r) CMD+=(--continue) ;;
+            n) [ -n "$PROMPT" ] && CMD+=(--prompt "$PROMPT") ;;
+        esac
+        ;;
+    hermes)
+        [ -n "$MODEL" ] && warn "hermes has no --model flag; model is set by the '$PROFILE' profile — ignoring -m"
+        case "$MODE" in
+            c) CMD+=(--yolo --continue) ;;
+            r) CMD+=(--yolo --resume "${SESSION:-}") ;;
+            s) CMD+=(--yolo --resume "${SESSION:-}") ;;
+            n) CMD+=(--yolo chat -q "${PROMPT:-}") ;;
+            i) CMD+=(--yolo) ;;
+        esac
+        ;;
+    pi)
+        _add_model
+        case "$MODE" in
+            c) CMD+=(--continue) ;;
+            s) [ -n "$SESSION" ] && CMD+=(--session "$SESSION") ;;
+            n) [ -n "$PROMPT" ] && CMD+=(--prompt "$PROMPT") ;;
+        esac
+        ;;
+    *)  # ante / antigravity — pass model + prompt best-effort
+        _add_model
+        [ "$MODE" = n ] && [ -n "$PROMPT" ] && CMD+=("$PROMPT")
+        ;;
+esac
+
+# Append any remaining passthrough args
+[ ${#EXTRA[@]} -gt 0 ] && CMD+=("${EXTRA[@]}")
+
+note "→ ${ENVV[*]:-(direct)} ${CMD[*]}"
+exec env "${ENVV[@]}" "${CMD[@]}"

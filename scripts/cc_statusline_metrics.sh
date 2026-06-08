@@ -6,7 +6,7 @@
 # Code status line. Each function outputs a single formatted segment.
 #
 # Usage in ~/.claude/status-line.sh:
-#   source /home/cheta/code/claude-code-proxy/scripts/cc_statusline_metrics.sh
+#   source ~/code/claude-code-proxy/scripts/cc_statusline_metrics.sh
 #   local ph; ph=$(get_proxy_health); [ -n "$ph" ] && metrics+=("$ph")
 #   local hr; hr=$(get_headroom_compression); [ -n "$hr" ] && metrics+=("$hr")
 #   ...
@@ -256,7 +256,10 @@ get_fixed_width_model() {
 
 # ── Active routing mode ──
 get_routing_mode() {
-    local chain_file="/home/cheta/code/claude-code-proxy/config/proxy_chain.json"
+    local script_dir repo_dir chain_file
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo_dir="$(cd "$script_dir/.." && pwd)"
+    chain_file="$repo_dir/config/proxy_chain.json"
     [ -f "$chain_file" ] || return
     local mode
     mode=$(python3 -c "

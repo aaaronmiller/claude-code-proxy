@@ -7,13 +7,14 @@ from scripts.status.rtk_status import DEFAULT_CACHE_PATH, get_stats
 
 
 router = APIRouter(prefix="/api/rtk", tags=["rtk"])
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 @router.get("/stats")
 async def rtk_stats(
     scope: Literal["project", "global"] = Query("project"),
     refresh: bool = Query(False),
-    cwd: str = Query("/home/cheta/code/claude-code-proxy"),
+    cwd: str = Query(str(PROJECT_ROOT)),
     ttl: int = Query(10, ge=0, le=3600),
 ):
     """Return cached RTK token savings stats."""

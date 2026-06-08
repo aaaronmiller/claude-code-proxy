@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Claude Code Proxy Fork — Audit Report Index</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; background: #0d1117; color: #c9d1d9; }
+    h1 { color: #58a6ff; border-bottom: 2px solid #30363d; padding-bottom: 16px; }
+    h2 { color: #f0883e; margin-top: 32px; }
+    h3 { color: #7ee787; }
+    .box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin: 20px 0; }
+    .stat { display: inline-block; background: #21262d; padding: 4px 12px; border-radius: 16px; font-size: 14px; margin: 4px; }
+    .badge { background: #1f6feb; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+    .badge-green { background: #238636; }
+    .badge-red { background: #da3633; }
+    .badge-yellow { background: #d29922; }
+    a { color: #58a6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: #21262d; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', monospace; }
+    pre { background: #161b22; padding: 16px; border-radius: 8px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th { background: #21262d; text-align: left; padding: 12px; border-bottom: 2px solid #30363d; }
+    td { padding: 12px; border-bottom: 1px solid #30363d; }
+    tr:hover { background: #161b22; }
+  </style>
+</head>
+<body>
+
+<h1>🎯 Claude Code Proxy Fork — Audit Report</h1>
+
+<div class="box">
+  <h2>📋 Quick Stats</h2>
+  <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px;">
+    <span class="stat">Upstream: <strong>29 files</strong></span>
+    <span class="stat">Fork: <strong>618 files</strong></span>
+    <span class="stat">Growth: <strong>+25×</strong></span>
+    <span class="stat">LOC: <strong>~3K → ~50K+</strong></span>
+    <span class="stat">Features: <strong>64 total</strong></span>
+    <span class="stat badge badge-green">62 Complete</span>
+    <span class="stat badge-yellow">2 Incomplete</span>
+    <span class="stat badge-red">1 Deprecated</span>
+  </div>
+</div>
+
+<h2>📖 Start Here (5-Minute Read)</h2>
+
+<div class="box">
+  <ol>
+    <li><a href="EXECUTIVE-SUMMARY.txt"><strong>EXECUTIVE-SUMMARY.txt</strong></a> (6 KB, 202 lines)
+      <br><small>TL;DR — top 10 systems, metrics, verdict. Read this first.</small>
+    </li>
+    <li><a href="AUDIT.md"><strong>AUDIT.md</strong></a> (25 KB, 570 lines)
+      <br><small>Executive summary, risk assessment, top 15 functional changes</small>
+    </li>
+    <li><a href="FEATURES.md"><strong>FEATURES.md</strong></a> (18 KB, 322 lines)
+      <br><small>Categorized feature inventory — 64 features across 14 categories</small>
+    </li>
+  </ol>
+</div>
+
+<h2>📂 Full Document Catalog</h2>
+
+<table>
+  <tr><th>Document</th><th>Size</th><th>Lines</th><th>Purpose</th><th>Read Time</th></tr>
+  <tr>
+    <td><a href="00-TABLE-OF-CONTENTS.md">00-TABLE-OF-CONTENTS.md</a></td>
+    <td>8.6K</td>
+    <td>—</td>
+    <td>Navigation index, reading paths by role</td>
+    <td>5 min</td>
+  </tr>
+  <tr>
+    <td><a href="EXECUTIVE-SUMMARY.txt">EXECUTIVE-SUMMARY.txt</a></td>
+    <td>12K</td>
+    <td>202</td>
+    <td>One-page TL;DR, top features, metrics, verdict</td>
+    <td>5 min</td>
+  </tr>
+  <tr>
+    <td><a href="AUDIT.md">AUDIT.md</a></td>
+    <td>25K</td>
+    <td>570</td>
+    <td>Executive summary, risk, top 15 changes, recommendations</td>
+    <td>15 min</td>
+  </tr>
+  <tr>
+    <td><a href="FEATURES.md">FEATURES.md</a></td>
+    <td>18K</td>
+    <td>322</td>
+    <td>64 features organized by subsystem (complete/incomplete/deprecated)</td>
+    <td>10 min</td>
+  </tr>
+  <tr>
+    <td><a href="FILE-CHANGES.md">FILE-CHANGES.md</a></td>
+    <td>14K</td>
+    <td>347</td>
+    <td>File-level diff manifest, new directories, deleted files</td>
+    <td>10 min</td>
+  </tr>
+  <tr>
+    <td><a href="COMPLETE-AUDIT-REPORT.md">COMPLETE-AUDIT-REPORT.md</a></td>
+    <td>32K</td>
+    <td>634</td>
+    <td>Comprehensive deep-dive, all sections integrated</td>
+    <td>20 min</td>
+  </tr>
+  <tr>
+    <td><a href="INDEX.md">INDEX.md</a></td>
+    <td>6.1K</td>
+    <td>—</td>
+    <td>Navigation hub, cross-references, quick answers</td>
+    <td>5 min</td>
+  </tr>
+  <tr>
+    <td><a href="README.md">README.md</a></td>
+    <td>7.7K</td>
+    <td>—</td>
+    <td>Booger directory overview</td>
+    <td>5 min</td>
+  </tr>
+</table>
+
+<h3>Raw / Scratch Files (for contributors)</h3>
+<table>
+  <tr><th>File</th><th>Size</th><th>Lines</th><th>Contents</th></tr>
+  <tr><td>scratch-1.md</td><td>338 B</td><td>7</td><td>Audit setup, upstream identification</td></tr>
+  <tr><td>scratch-2.md</td><td>22K</td><td>563</td><td>Raw source code diffs (src/ files)</td></tr>
+  <tr><td>scratch-3.md</td><td>32K</td><td>696</td><td>Raw config/infra file diffs</td></tr>
+  <tr><td>SCRATCH-4-FEATURE-INVENTORY.md</td><td>9.0K</td><td>247</td><td>Detailed feature inventory by subsystem</td></tr>
+  <tr><td>file-inventory.txt</td><td>36K</td><td>—</td><td>Complete file list for both repos (sorted)</td></tr>
+  <tr><td>file-diff-inventory.txt</td><td>37K</td><td>—</td><td>New / deleted / modified classification</td></tr>
+</table>
+
+<h2>🔍 Finding Specific Information</h2>
+
+<div class="box">
+  <table>
+    <tr><th>Question</th><th>Go To</th></tr>
+    <tr>
+      <td>"What new features were added?"</td>
+      <td><a href="FEATURES.md">FEATURES.md</a> (all 14 categories) OR <a href="COMPLETE-AUDIT-REPORT.md">COMPLETE-AUDIT-REPORT.md</a> § "Top 10 New Systems"</td>
+    </tr>
+    <tr>
+      <td>"Which files were modified?"</td>
+      <td><a href="FILE-CHANGES.md">FILE-CHANGES.md</a> "Files Modified" table OR <a href="file-diff-inventory.txt">file-diff-inventory.txt</a></td>
+    </tr>
+    <tr>
+      <td>"Is feature X complete?"</td>
+      <td><a href="FEATURES.md">FEATURES.md</a> — check ✅/⚠️/🚫 badges</td>
+    </tr>
+    <tr>
+      <td>"Can I merge upstream?"</td>
+      <td><a href="AUDIT.md">AUDIT.md</a> § "Upgrade Notes" — <strong style="color:#da3633">NO</strong></td>
+    </tr>
+    <tr>
+      <td>"What are the security concerns?"</td>
+      <td><a href="AUDIT.md">AUDIT.md</a> § "Security Concerns"</td>
+    </tr>
+    <tr>
+      <td>"How much did codebase grow?"</td>
+      <td><a href="COMPLETE-AUDIT-REPORT.md">COMPLETE-AUDIT-REPORT.md</a> § "Codebase Metrics" table</td>
+    </tr>
+    <tr>
+      <td>"What are the dependencies?"</td>
+      <td><a href="FILE-CHANGES.md">FILE-CHANGES.md</a> § "New Dependencies Added"</td>
+    </tr>
+    <tr>
+      <td>"Database schema?"</td>
+      <td><a href="COMPLETE-AUDIT-REPORT.md">COMPLETE-AUDIT-REPORT.md</a> § "Database Schema (NEW)"</td>
+    </tr>
+    <tr>
+      <td>"Installation differences?"</td>
+      <td><a href="COMPLETE-AUDIT-REPORT.md">COMPLETE-AUDIT-REPORT.md</a> § "Installation Differences"</td>
+    </tr>
+  </table>
+</div>
+
+<h2>📊 Key Metrics at a Glance</h2>
+
+<div class="box">
+  <h3>Growth</h3>
+  <p>Upstream: <code>29 files, ~3K LOC</code> → Fork: <code>618 files, ~50K+ LOC</code> (<strong>+589 files, +47K LOC</strong>)</p>
+  
+  <h3>Completeness</h3>
+  <p><span class="badge badge-green">62 Complete</span> <span class="badge badge-yellow">2 Incomplete</span> <span class="badge badge-red">1 Deprecated</span> = 64 total features</p>
+  
+  <h3>Top New Systems</h3>
+  <ol>
+    <li><strong>Compression Stack</strong> — 97% token savings, GPU-accelerated</li>
+    <li><strong>Web Dashboard</strong> — Svelte realtime UI at :8899</li>
+    <li><strong>Crosstalk</strong> — 2-8 model multi-AI conversations</li>
+    <li><strong>Usage Tracking</strong> — SQLite DB, cost analytics, quotas</li>
+    <li><strong>Circuit Breakers</strong> — Resilient cascade fallback</li>
+  </ol>
+</div>
+
+<h2>⚠️ Critical Issues</h2>
+
+<div class="box" style="border-color: #da3633;">
+  <h3 style="color: #f85149;">🔴 CRITICAL GAPS</h3>
+  <ul>
+    <li><strong>No tests:</strong> 50K LOC with almost zero test coverage. Unit/integration tests missing for all new systems.</li>
+    <li><strong>No DB migrations:</strong> Usage DB created inline, no Alembic. Schema changes require manual SQL.</li>
+    <li><strong>Docker not published:</strong> Dockerfile exists but no images on Docker Hub.</li>
+  </ul>
+  
+  <h3 style="color: #d29922;">🟡 INCOMPLETE (2 features)</h3>
+  <ul>
+    <li><strong>VibeProxy token refresh:</strong> Manual browser re-auth required on expiry</li>
+    <li><strong>Free model rankings:</strong> Cached JSON stale after 7d, needs manual <code>--update-models</code></li>
+  </ul>
+</div>
+
+<h2>🚀 Getting Started with Fork</h2>
+
+<div class="box">
+  <pre><code># Install (one command, GPU auto-detected)
+curl -fsSL https://raw.githubusercontent.com/aaaronmiller/claude-code-proxy/main/install-all.sh | bash
+
+# Start compression stack (for 97% token savings)
+cs-start
+
+# Or start proxy only (no compression)
+python start_proxy.py
+
+# First-time configuration wizard
+python start_proxy.py --setup
+
+# Unified settings TUI
+python start_proxy.py --settings
+
+# Health check + auto-fix
+python start_proxy.py --doctor
+
+# Access URLs:
+#   Proxy:  http://localhost:8082
+#   Dashboard: http://localhost:8899
+#   Compression monitor: http://localhost:8899
+</code></pre>
+</div>
+
+<h2>📚 Project Documentation</h2>
+
+<div class="box">
+  <p>Beyond this audit, the project includes extensive documentation:</p>
+  <ul>
+    <li><code>README.md</code> — Project overview, quick start, features</li>
+    <li><code>QUICKSTART.md</code> — 5-minute getting started guide</li>
+    <li><code>CHANGELOG.md</code> — Version history</li>
+    <li><code>ROADMAP.md</code> — Phase 1/2/3 future plans</li>
+    <li><code>compression/docs/COMPRESSION-STACK.md</code> — Full compression guide</li>
+    <li><code>compression/docs/GPU-OPTIMIZATION.md</code> — CUDA/ROCm/Level Zero setup</li>
+    <li><code>docs/crosstalk.md</code> — Multi-model conversation usage</li>
+    <li><code>docs/api/reference.md</code> — Complete API documentation</li>
+    <li><code>docs/troubleshooting/</code> — Common issues, 401 errors, fixes</li>
+    <li><code>CHEATSHEET.md</code>, <code>CLIPproxy-cheatsheet.md</code> — CLI command references</li>
+  </ul>
+</div>
+
+<h2>🎓 Who Should Use This Fork?</h2>
+
+<div class="box">
+  <h3>✅ USE THE FORK if you:</h3>
+  <ul>
+    <li>Spend &gt;$50/month on Claude/OpenAI API (compression pays for itself in ~1 month)</li>
+    <li>Need multi-model conversations (crosstalk feature)</li>
+    <li>Want usage analytics + quotas (billing, team cost tracking)</li>
+    <li>Require production reliability (circuit breakers prevent cascade failures)</li>
+    <li>Prefer GUI dashboard over CLI-only management</li>
+    <li>Run GPU locally (CUDA/ROCm acceleration for compression)</li>
+    <li>Need free tier optimization (SCOUT tier with ranked free models)</li>
+  </ul>
+  
+  <h3>❌ STICK WITH UPSTREAM if you:</h3>
+  <ul>
+    <li>Want minimal single-file proxy (300 LOC, zero deps)</li>
+    <li>Don't need compression (already on free tier or low usage)</li>
+    <li>Cannot accept test coverage gap (fork has almost none)</li>
+    <li>Need easy mergeability with upstream (impossible now — different architectures)</li>
+    <li>Prefer zero-maintenance (fork has manual steps, no auto-updates yet)</li>
+  </ul>
+</div>
+
+<h2>🔗 Cross-References</h2>
+
+<div class="box">
+  <table>
+    <tr><td><strong>Upstream repo</strong></td><td><a href="https://github.com/fuergaosi233/claude-code-proxy">fuergaosi233/claude-code-proxy</a> (2.4K stars, minimal proxy)</td></tr>
+    <tr><td><strong>Fork repo</strong></td><td><a href="https://github.com/aaaronmiller/claude-code-proxy">aaaronmiller/claude-code-proxy</a> (feature-rich platform)</td></tr>
+    <tr><td><strong>Local upstream</strong></td><td><code>/home/misscheta/code/claude-code-proxy-upstream/</code></td></tr>
+    <tr><td><strong>Local fork</strong></td><td><code>/home/misscheta/code/claude-code-proxy/</code></td></tr>
+    <tr><td><strong>Audit directory</strong></td><td><code>/home/misscheta/code/claude-code-proxy/booger/</code></td></tr>
+  </table>
+</div>
+
+<h2>📈 Summary Verdict</h2>
+
+<div class="box" style="border-color: #1f6feb;">
+  <h3>Feature Set: A+</h3>
+  <p>Compression (97% savings), dashboard, crosstalk, analytics, circuit breakers — all there, all working.</p>
+  
+  <h3>Engineering Rigor: C+</h3>
+  <p>Zero tests, no DB migrations, some manual steps. Code works but needs test suite before v1.0.</p>
+  
+  <h3>Documentation: A</h3>
+  <p>50+ guides, APIs documented, troubleshooting, installation — better than most OSS.</p>
+  
+  <h3>Production Readiness: B+</h3>
+  <p>Ready for small teams (3-5 users). Large deployments need Redis clustering, PostgreSQL, audit logging.</p>
+  
+  <h2>🎯 Final Score: <strong style="color:#f0883e;">A-</strong></h2>
+  <p>Excellent feature set let down by lack of tests. Use it, but add tests before critical workloads.</p>
+</div>
+
+<hr>
+<p style="text-align: center; color: #8b949e;">
+  Audit completed: 2026-04-21 | Total docs: 14 files, 276 KB | Lines: ~2,750<br>
+  <a href="mailto:noreply@example.com">Questions?</a> — see <a href="INDEX.md">INDEX.md</a> for navigation
+</p>
+
+</body>
+</html>

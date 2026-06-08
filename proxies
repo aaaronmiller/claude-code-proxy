@@ -17,7 +17,17 @@
 
 set -euo pipefail
 
-PROXY_DIR="/home/cheta/code/claude-code-proxy"
+# Resolve PROXY_DIR from the script's real location (handles being invoked via
+# the ~/.local/bin/proxies symlink). No hardcoded home — works for any user.
+_SELF="${BASH_SOURCE[0]}"
+while [ -L "$_SELF" ]; do
+    _link="$(readlink "$_SELF")"
+    case "$_link" in
+        /*) _SELF="$_link" ;;
+        *)  _SELF="$(dirname "$_SELF")/$_link" ;;
+    esac
+done
+PROXY_DIR="$(cd "$(dirname "$_SELF")" && pwd)"
 LOG_DIR="/tmp/proxy-logs"
 TMUX_SESSION="proxies"
 CHAIN_FILE="$PROXY_DIR/config/proxy_chain.json"
@@ -330,6 +340,109 @@ _launch_chain_tmux() {
     fi
 }
 
+# ── Create tmux session showing already-running (adopted) services ──
+_launch_chain_tmux_adopted() {
+    mapfile -t entries < <(CHAIN_FILE="$CHAIN_FILE" _chain_services_reversed)
+
+    if [ ${#entries[@]} -eq 0 ]; then
+        warn "No enabled chain services with service_cmd found in $CHAIN_FILE"
+        return 1
+    fi
+
+    local gpu_env
+    gpu_env=$(_detect_gpu_env)
+    local headroom_env_prefix=""
+    if [[ "$gpu_env" != "#"* ]]; then
+        headroom_env_prefix="$gpu_env "
+    fi
+
+    local first_entry="${entries[0]}"
+    IFS='|' read -r id name cmd port health <<< "$first_entry"
+
+    # Show the existing process in the first pane
+    local pid
+    pid=$(ss -tlnp 2>/dev/null | awk -v p=":$port" '$4 ~ p {print $NF}' | grep -oE 'pid=[0-9]+' | cut -d= -f2 | head -1)
+
+    tmux new-session -d -s "$TMUX_SESSION" -n "chain"
+    if [ -n "$pid" ]; then
+        tmux send-keys -t "${TMUX_SESSION}:0.0" \
+            "echo -e \"\\033[1;33m── $name (:$port) ── [ADOPTED pid:$pid] ──\\033[0m\"" C-m
+        tmux send-keys -t "${TMUX_SESSION}:0.0" \
+            "echo \"Attached to existing process $pid. Ctrl+B Q to kill session.\"" C-m
+        tmux send-keys -t "${TMUX_SESSION}:0.0" \
+            "cd \"$PROXY_DIR\" && tail -f /proc/$pid/fd/1 2>/dev/null || tail -f /proc/$pid/fd/2 2>/dev/null || echo 'No direct log access. Use: curl localhost:$port/health'" C-m
+    else
+        tmux send-keys -t "${TMUX_SESSION}:0.0" \
+            "echo -e \"\\033[1;33m── $name (:$port) ── [ADOPTED] ──\\033[0m\"" C-m
+        tmux send-keys -t "${TMUX_SESSION}:0.0" \
+            "cd \"$PROXY_DIR\" && curl -s localhost:$port/health | jq . 2>/dev/null || curl -s localhost:$port/health" C-m
+    fi
+
+    local pane=1
+    for entry in "${entries[@]:1}"; do
+        IFS='|' read -r id name cmd port health <<< "$entry"
+
+        # For headroom: show the adopted process
+        if [[ "$id" == "headroom" ]]; then
+            cmd="${headroom_env_prefix}${cmd}"
+        fi
+
+        pid=$(ss -tlnp 2>/dev/null | awk -v p=":$port" '$4 ~ p {print $NF}' | grep -oE 'pid=[0-9]+' | cut -d= -f2 | head -1)
+
+        tmux split-window -v -t "${TMUX_SESSION}:0.$((pane-1))"
+        if [ -n "$pid" ]; then
+            tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+                "echo -e \"\\033[1;33m── $name (:$port) ── [ADOPTED pid:$pid] ──\\033[0m\"" C-m
+            tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+                "cd \"$PROXY_DIR\" && tail -f /proc/$pid/fd/1 2>/dev/null || tail -f /proc/$pid/fd/2 2>/dev/null || echo 'No direct log access. Use: curl localhost:$port/health'" C-m
+        else
+            tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+                "echo -e \"\\033[1;33m── $name (:$port) ── [ADOPTED] ──\\033[0m\"" C-m
+            tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+                "cd \"$PROXY_DIR\" && curl -s localhost:$port/health | jq . 2>/dev/null || curl -s localhost:$port/health" C-m
+        fi
+        pane=$((pane+1))
+    done
+
+    # Watchdog and layout same as normal launch
+    if [ "${PROXY_WATCHDOG:-}" = "true" ] || [ "${PROXY_WATCHDOG:-}" = "1" ]; then
+        local watchdog_script="$PROXY_DIR/scripts/watchdog.sh"
+        if [ -x "$watchdog_script" ]; then
+            tmux split-window -v -t "${TMUX_SESSION}:0.$((pane-1))"
+            tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+                "echo -e \"\\033[1;33m── Watchdog ──\\033[0m\"" C-m
+            tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+                "PROXY_DIR=\"$PROXY_DIR\" CHAIN_FILE=\"$CHAIN_FILE\" \"$watchdog_script\"" C-m
+            tmux resize-pane -t "${TMUX_SESSION}:0.${pane}" -y 6
+            info "Watchdog started (PROXY_WATCHDOG=true)"
+        else
+            warn "PROXY_WATCHDOG=true but scripts/watchdog.sh not found"
+        fi
+    fi
+
+    tmux select-layout -t "$TMUX_SESSION" even-vertical
+    tmux rename-window -t "$TMUX_SESSION" "chain"
+
+    # Same key bindings
+    tmux set-option -t "$TMUX_SESSION" -g prefix C-b
+    tmux bind-key -T prefix Q kill-session
+    tmux bind-key -T prefix X kill-session
+    tmux set-option -t "$TMUX_SESSION" -g status-justify centre
+
+    local status_script="$PROXY_DIR/scripts/tmux_status.sh"
+    if [ -x "$status_script" ]; then
+        tmux set-option -t "$TMUX_SESSION" -g pane-border-status top
+        tmux set-option -t "$TMUX_SESSION" -g pane-border-format "#{pane_title}"
+        tmux set-option -t "$TMUX_SESSION" -g status-interval 5
+        tmux set-option -t "$TMUX_SESSION" -g status-left-length 300
+        tmux set-option -t "$TMUX_SESSION" -g status-right-length 200
+        tmux set-option -t "$TMUX_SESSION" -g status-left "#(${status_script} project #{pane_current_path}) │ #(${status_script} proxy) "
+        tmux set-option -t "$TMUX_SESSION" -g status-right "#(${status_script} headroom) │ #(${status_script} rtk #{pane_current_path})"
+        tmux set-option -t "$TMUX_SESSION" -g status-bg "colour235"
+        tmux set-option -t "$TMUX_SESSION" -g status-fg "white"
+    fi
+}
+
 # ── Main start command ──
 cmd_start() {
     # ── Idempotent: always results in all services UP, regardless of current state ──
@@ -395,32 +508,40 @@ cmd_start() {
         return 0
     fi
 
-    # ── Orphan detection: ports answer but tmux is dead ──
-    # Common cause: user hit Ctrl+B Q (now kills tmux cleanly) but uvicorn
-    # workers / python interpreters survived. They'd answer health checks but
-    # not be controllable by our tmux session.
-    if [ "$tmux_alive" = false ] && [ ${#healthy_services[@]} -gt 0 ]; then
-        warn "Found orphaned services running outside tmux — killing them first:"
+    # ── Orphan handling: services running outside tmux ──
+    # If all services are healthy but tmux is dead, just report them as up
+    # and optionally adopt them into a new tmux session without restarting.
+    if [ "$tmux_alive" = false ] && [ ${#healthy_services[@]} -gt 0 ] && [ ${#dead_services[@]} -eq 0 ]; then
+        ok "All services already running (outside tmux)"
         for svc in "${healthy_services[@]}"; do
-            warn "  orphan: $svc"
+            ok "$svc"
         done
+        echo ""
+        info "Creating tmux session to adopt existing services..."
+        # Create tmux session with "adopted" panes showing existing processes
+        _launch_chain_tmux_adopted || return 1
+        echo ""
+        if [ -t 1 ] && [ "$NO_ATTACH" != "1" ]; then
+            info "Attaching to tmux session..."
+            tmux attach -t "$TMUX_SESSION"
+        fi
+        return 0
     fi
 
-    # Print final plan
-    for svc in "${healthy_services[@]}"; do
-        [ "$tmux_alive" = true ] && ok "$svc (already up)"
-    done
-    for id in "${dead_services[@]}"; do
-        warn "Down: $id — will restart"
-    done
-    echo ""
+    # ── Mixed state: some healthy, some dead ──
+    if [ ${#healthy_services[@]} -gt 0 ] || [ ${#dead_services[@]} -gt 0 ]; then
+        for svc in "${healthy_services[@]}"; do
+            ok "$svc (already up)"
+        done
+        for id in "${dead_services[@]}"; do
+            warn "Down: $id — will restart"
+        done
+        echo ""
 
-    # ── Always perform a full clean stop before restart ──
-    # cmd_stop is now port-aware and blocks until ports are free. This single
-    # invocation handles all three cases: stale tmux session, dead session +
-    # orphan processes, partial failure.
-    cmd_stop 2>&1 | grep -v "^$" | head -10
-    sleep 0.3
+        # Only stop the dead ones, don't kill healthy orphans
+        cmd_stop 2>&1 | grep -v "^$" | head -10
+        sleep 0.3
+    fi
 
     info "Launching chain in tmux..."
     _launch_chain_tmux || return 1

@@ -1,5 +1,6 @@
-#!/bin/bash
-cd /home/cheta/code/claude-code-proxy
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 source .venv/bin/activate
 echo "=== Python version ==="
 python --version
@@ -18,5 +19,8 @@ except Exception as e:
     print(f'App import FAILED: {e}')
 "
 echo "=== Starting proxy with 15s timeout ==="
+set +e
 timeout 15 python start_proxy.py --skip-validation 2>&1
-echo "=== Exit code: $? ==="
+exit_code=$?
+set -e
+echo "=== Exit code: $exit_code ==="

@@ -74,6 +74,8 @@ All notable changes to this project will be documented in this file.
 - **Identifier mappings for gemini models** — `gemini-3-flash`, `google/gemini-3-flash`, `google/gemini-3-flash-preview` → `small` tier. `gemini-3-pro-preview` → `big` tier. Prevents "Invalid API key" errors when clients request these non-free models.
 
 ### Fixed
+- **User-home path portability** (`proxies`, `config/proxy_chain.json`, status scripts, systemd units, RTK stats, tests) — Removed live `/home/cheta` assumptions from launch/status/default paths; proxy scripts now derive paths from the script or project root and CLIProxyAPI commands use `$HOME`.
+- **Git remote credential leak in tmux status** (`scripts/tmux_status.sh`) — Project status now strips embedded HTTPS credentials before rendering the remote name.
 - **`proxies up` broken** (`config/proxy_chain.json`) — `entries` array was emptied during a config write operation. Restored `claude_code_proxy` (:8082), `headroom` (:8787), and `rtk` (disabled) entries. Also fixed: pipe character (`|`) in headroom `service_cmd` broke `IFS='|'` parsing in the proxies script — removed the `tee` redirection from the stored service_cmd.
 
 ### Changed (Alias cleanup, hermes routing, model data in startup)

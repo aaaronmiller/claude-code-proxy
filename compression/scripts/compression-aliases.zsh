@@ -14,7 +14,7 @@
 if command -v proxies > /dev/null 2>&1 && [[ "$(command -v proxies)" == *"claude-code-proxy"* ]]; then
     alias proxies="$(command -v proxies)"
 else
-    alias proxies='/home/cheta/code/claude-code-proxy/proxies'
+    alias proxies="$HOME/code/claude-code-proxy/proxies"
 fi
 
 # ── Auto-start helper ─────────────────────────────────────────────

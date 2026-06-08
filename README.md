@@ -383,7 +383,7 @@ The gateway integrates with [model-scan](https://github.com/aaaronmiller/model-s
 
 ```bash
 # Scan all providers and update model rankings
-cd /home/cheta/code/model-scan
+cd ~/code/model-scan
 ./model-scan --refresh-all
 
 # Apply the best-rated free model
@@ -451,7 +451,7 @@ curl http://127.0.0.1:8082/health
 
 ### Model not found in cascade
 
-Check `.env` for `BIG_MODEL`, `TOOLCALL_MODELS`, and run `cd /home/cheta/code/model-scan && ./model-scan --refresh-all` to update rankings.
+Check `.env` for `BIG_MODEL`, `TOOLCALL_MODELS`, and run `cd ~/code/model-scan && ./model-scan --refresh-all` to update rankings.
 
 ---
 

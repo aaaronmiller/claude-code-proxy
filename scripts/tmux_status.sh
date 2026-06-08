@@ -22,7 +22,7 @@ HEADROOM_URL="http://127.0.0.1:8787"
 
 # ── Python helper (use venv if available) ──
 _python() {
-    local venv="/home/cheta/code/claude-code-proxy/.venv/bin/python"
+    local venv="$PROXY_DIR/.venv/bin/python"
     if [ -f "$venv" ]; then
         "$venv" "$@"
     else
@@ -46,6 +46,7 @@ status_project() {
     remote_short="$repo"
     if [ -n "$remote" ]; then
         remote_short=$(printf "%s" "$remote" | sed -E \
+            -e 's#^https://[^/@]+@#https://#' \
             -e 's#^git@github.com:##' \
             -e 's#^https://github.com/##' \
             -e 's#\.git$##')

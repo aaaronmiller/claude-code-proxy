@@ -511,8 +511,8 @@ class ProxyChain:
                 port=8317,
                 health_path="/v1/models",
                 service_cmd=(
-                    "/home/cheta/code/cliproxyapi/cli-proxy-api-plus"
-                    " --config /home/cheta/code/cliproxyapi/config.yaml"
+                    f"{Path.home()}/code/cliproxyapi/cli-proxy-api-plus"
+                    f" --config {Path.home()}/code/cliproxyapi/config.yaml"
                 ),
                 type="http",
             ),

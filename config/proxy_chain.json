@@ -31,7 +31,7 @@
       "health_path": "/v1/models",
       "enabled": false,
       "order": 2,
-      "service_cmd": "/home/cheta/code/cliproxyapi/cli-proxy-api-plus --config /home/cheta/code/cliproxyapi/config.yaml",
+      "service_cmd": "$HOME/code/cliproxyapi/cli-proxy-api-plus --config $HOME/code/cliproxyapi/config.yaml",
       "url": "http://127.0.0.1:8317/v1"
     }
   ],
@@ -81,44 +81,36 @@
     {
       "id": "big",
       "kind": "tier",
-      "model": "moonshotai/kimi-k2.6:free",
-      "provider": "openrouter",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "model": "minimax-m3-free",
+      "provider": "opencode-zen",
+      "base_url": "https://opencode.ai/zen/v1",
+      "api_key": "${OPENCODE_API_KEY}",
       "enabled": true,
       "cascade": [
-        "openai/gpt-oss-120b:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "z-ai/glm-4.5-air:free"
+        "deepseek-v4-flash-free"
       ]
     },
     {
       "id": "middle",
       "kind": "tier",
-      "model": "nvidia/nemotron-3-super-120b-a12b:free",
-      "provider": "openrouter",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "model": "minimax-m3-free",
+      "provider": "opencode-zen",
+      "base_url": "https://opencode.ai/zen/v1",
+      "api_key": "${OPENCODE_API_KEY}",
       "enabled": true,
       "cascade": [
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "z-ai/glm-4.5-air:free",
-        "openai/gpt-oss-120b:free"
+        "deepseek-v4-flash-free"
       ]
     },
     {
       "id": "small",
       "kind": "tier",
-      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-      "provider": "openrouter",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "model": "deepseek-v4-flash-free",
+      "provider": "opencode-zen",
+      "base_url": "https://opencode.ai/zen/v1",
+      "api_key": "${OPENCODE_API_KEY}",
       "enabled": true,
-      "cascade": [
-        "openai/gpt-oss-120b:free",
-        "inclusionai/ling-2.6-flash:free",
-        "nvidia/nemotron-3-super-120b-a12b:free"
-      ]
+      "cascade": []
     },
     {
       "id": "background",
