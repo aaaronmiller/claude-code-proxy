@@ -19,6 +19,10 @@ Profile schema (flat dict; unknown keys ignored for forward compat):
                                     "middle": "...", "big": "..."}. Lets a
                                     profile route haiku→cheap-model invisibly
                                     while preserving opus/sonnet routing.
+  - tier_providers:         dict — per-tier provider swap applied with
+                                    tier_overrides. Format:
+                                    {"big": "cliproxyapi", "middle": "openrouter"}.
+                                    Provider names resolve through PROVIDERS_*.
   - slot_bindings:          dict — model-scan role bindings by assignment id.
                                     Format: {"big": "R1_primary"}.
   - spoof_response_model:   bool — when tier_overrides (or future force_main)

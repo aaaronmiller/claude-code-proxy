@@ -264,34 +264,49 @@ class CircuitBreaker:
         msg = c.get("message", {}) or {}
         has_tool_calls = bool(msg.get("tool_calls"))
         has_content = bool((msg.get("content") or "").strip())
+        # Reasoning models (e.g. gpt-oss-120b) can spend the whole token budget on reasoning,
+        # returning reasoning tokens but empty visible content + finish_reason=length. The model
+        # IS responsive; the empty answer is a settings issue (max_tokens too low), not model
+        # unreliability — so it must NOT count against the circuit breaker (verified live on Groq).
+        details = (response.get("usage") or {}).get("completion_tokens_details") or {}
+        has_reasoning = bool(
+            msg.get("reasoning") or msg.get("reasoning_content") or details.get("reasoning_tokens")
+        )
 
         # finish_reason: length means truncation — unreliable for tool use
         if finish_reason == "length" and not has_tool_calls:
-            self.record_soft_failure()
-            logger.debug(f"[CB] {self.name}: parse_ok=False (finish_reason=length, no tool_calls)")
+            if not has_reasoning:
+                self.record_soft_failure()
+            logger.debug(f"[CB] {self.name}: parse_ok=False (finish_reason=length; reasoning={has_reasoning})")
             return False
 
         if not has_tool_calls and not has_content:
-            self.record_soft_failure()
-            logger.debug(f"[CB] {self.name}: parse_ok=False (empty content and no tool_calls)")
+            if not has_reasoning:
+                self.record_soft_failure()
+            logger.debug(f"[CB] {self.name}: parse_ok=False (empty content; reasoning={has_reasoning})")
             return False
 
         return True
 
-    def record_stream_finish(self, finish_reason: Optional[str], had_tool_calls: bool, had_content: bool) -> bool:
+    def record_stream_finish(self, finish_reason: Optional[str], had_tool_calls: bool,
+                             had_content: bool, had_reasoning: bool = False) -> bool:
         """
         Record parse result for a completed streaming response.
 
-        Call this at stream end (after the last SSE chunk).
+        Call this at stream end (after the last SSE chunk). `had_reasoning` (optional, default
+        False for backward compat) signals the stream produced reasoning tokens — a reasoning
+        model that truncated on budget is responsive, so it is NOT penalized (see record_parse_ok).
         Returns True if the stream output is structurally valid.
         """
         if finish_reason == "length" and not had_tool_calls:
-            self.record_soft_failure()
-            logger.debug(f"[CB] {self.name}: stream parse_ok=False (finish_reason=length)")
+            if not had_reasoning:
+                self.record_soft_failure()
+            logger.debug(f"[CB] {self.name}: stream parse_ok=False (finish_reason=length; reasoning={had_reasoning})")
             return False
         if not had_tool_calls and not had_content:
-            self.record_soft_failure()
-            logger.debug(f"[CB] {self.name}: stream parse_ok=False (empty stream)")
+            if not had_reasoning:
+                self.record_soft_failure()
+            logger.debug(f"[CB] {self.name}: stream parse_ok=False (empty stream; reasoning={had_reasoning})")
             return False
         return True
 

@@ -306,6 +306,15 @@ SETTINGS: List[Setting] = [
             "Suppress deprecated env-var warnings on startup", "usage_tracking",
             cli_flag="--silence-deprecation-warnings",
             tui_widget="toggle", web_component="switch"),
+
+    # ════════════════════════════════════════════════════════════════════════
+    # GROUP: allocator (F18 global quota-aware allocator)
+    # ════════════════════════════════════════════════════════════════════════
+    Setting("ALLOCATOR_ENABLED", bool, False,
+            "Enable the F18 global quota-aware allocator (OFF by default). When off, routing "
+            "is unchanged. When on, re-ranks routing per session/role under quota meters.",
+            "allocator",
+            cli_flag="--allocator-enabled", tui_widget="toggle", web_component="switch"),
 ]
 
 

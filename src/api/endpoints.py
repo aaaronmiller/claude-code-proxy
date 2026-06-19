@@ -659,6 +659,38 @@ async def create_message(
                                 f"({assignment_id}): {_orig_model} → {_new}"
                             )
                             openai_request["model"] = _new
+                # 3.5b. tier_providers: pair tier_overrides with per-tier endpoint
+                #      routing. This keeps profile overlays precise: e.g. BIG can use
+                #      local Codex OAuth while MIDDLE/SMALL stay on OpenRouter.
+                if _profile.has("tier_providers") and assignment_id:
+                    _tp = _profile.get("tier_providers") or {}
+                    if isinstance(_tp, dict) and assignment_id in _tp:
+                        _provider_name = _tp[assignment_id]
+                        _provider_url = config.get_provider_endpoint(_provider_name)
+                        _provider_key = config.get_provider_api_key(_provider_name)
+                        if _provider_url:
+                            endpoint = _provider_url
+                            provider = _provider_name
+                            if _provider_key:
+                                active_api_key = _provider_key
+                            custom_client = OpenAIClient(
+                                active_api_key,
+                                endpoint,
+                                config.request_timeout,
+                                api_version=config.azure_api_version,
+                                custom_headers=custom_headers,
+                            )
+                            custom_client.configure_per_model_clients(config)
+                            logger.info(
+                                f"[profile={_profile.name}] tier_provider "
+                                f"({assignment_id}): {_provider_name} → {_provider_url}"
+                            )
+                        else:
+                            logger.warning(
+                                f"[profile={_profile.name}] tier_provider "
+                                f"'{_provider_name}' for '{assignment_id}' not in "
+                                "PROVIDERS_* registry — ignored"
+                            )
                 # 3.6. model-scan slot_bindings: request-time profile overlay.
                 #      The binder resolves this at reload time; the hot path only
                 #      reads the in-memory overlay and applies its cascade.

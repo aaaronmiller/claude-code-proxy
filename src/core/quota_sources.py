@@ -118,3 +118,78 @@ def merge_quota_samples(samples: Iterable[QuotaSample]) -> dict[str, QuotaSample
         if score >= cur_score:
             merged[sample.provider] = sample
     return merged
+
+
+# ---------------------------------------------------------------------------
+# Multi-dimensional quota meters (additive; see ai-gateway plan F06 / 04-DATA-CONTRACTS).
+# A provider/model can be constrained by several meters at once (e.g. a 5h token
+# window AND a per-model daily call cap). QuotaSample stays the provider-level view
+# that rotation.py consumes; QuotaMeter is the finer-grained constraint the global
+# allocator (F18) needs. meters_to_samples() collapses meters back to QuotaSample so
+# existing rotation logic keeps working unchanged.
+# ---------------------------------------------------------------------------
+
+# Unit of a meter: calls | tokens | credits | dollars | search_calls
+# Scope: provider | provider_model | key
+
+
+@dataclass(frozen=True)
+class QuotaMeter:
+    id: str                      # e.g. "groq:calls:86400:per_model:<model>"
+    provider: str
+    unit: str
+    window_seconds: int
+    limit: float
+    remaining: float
+    scope: str = "provider"
+    model: str | None = None
+    key_id: str | None = None
+    reset_at: str = ""
+    source: str = ""
+    observed_at: float = 0.0
+
+    @property
+    def remaining_fraction(self) -> float:
+        if self.limit <= 0:
+            return 1.0
+        return max(0.0, min(1.0, self.remaining / self.limit))
+
+
+class QuotaMeterSource(Protocol):
+    name: str
+
+    def meters(self) -> list[QuotaMeter]:
+        ...
+
+
+class StaticQuotaMeterSource:
+    """Test/seed source for fixed meters."""
+
+    def __init__(self, name: str, meters: Iterable[QuotaMeter]) -> None:
+        self.name = name
+        self._meters = list(meters)
+
+    def meters(self) -> list[QuotaMeter]:
+        return list(self._meters)
+
+
+def meters_to_samples(meters: Iterable[QuotaMeter]) -> dict[str, QuotaSample]:
+    """Collapse per-meter granularity to one provider-level QuotaSample, taking the
+    TIGHTEST (lowest remaining_fraction) meter per provider so rotation never
+    overestimates available headroom."""
+    by_provider: dict[str, QuotaMeter] = {}
+    for m in meters:
+        cur = by_provider.get(m.provider)
+        if cur is None or m.remaining_fraction < cur.remaining_fraction:
+            by_provider[m.provider] = m
+    return {
+        provider: QuotaSample(
+            provider=provider,
+            remaining_fraction=m.remaining_fraction,
+            reset_at=m.reset_at,
+            unit=m.unit,
+            source=m.source or "meter",
+            observed_at=m.observed_at or time.time(),
+        )
+        for provider, m in by_provider.items()
+    }

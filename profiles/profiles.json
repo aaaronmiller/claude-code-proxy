@@ -78,6 +78,25 @@
       "small": "openrouter/owl-alpha"
     }
   },
+  "gpt55": {
+    "notes": "Claude Code profile: BIG routes to OpenAI GPT-5.5 through local CLIProxyAPI Codex OAuth; MIDDLE and SMALL stay on free OpenRouter models.",
+    "lane": "interactive",
+    "toolcall_models": [
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "openai/gpt-oss-120b:free"
+    ],
+    "web_search": "nvidia/nemotron-nano-9b-v2:free",
+    "tier_overrides": {
+      "big": "gpt-5.5",
+      "middle": "nvidia/nemotron-3-super-120b-a12b:free",
+      "small": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+    },
+    "tier_providers": {
+      "big": "cliproxyapi",
+      "middle": "openrouter",
+      "small": "openrouter"
+    }
+  },
   "codex": {
     "notes": "codex CLI — measured model-scan bindings when model_scan.enabled is true.",
     "lane": "interactive",
