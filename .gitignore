@@ -301,7 +301,10 @@ SECURITY*.md
 PUSH.sh
 
 # Development/testing files
-test_*.py
+# (anchored to repo root so the tracked tests/ suite is NOT ignored)
+/test_*.py
+# retired one-off scripts live in the cleanup archive; keep them out of git
+archive/**/root-ad-hoc-tests/
 .env.test
 .env.gemini
 switch_provider.sh
@@ -342,8 +345,9 @@ tests/integration/session_logs/
 .checkpoints/
 
 # Root clutter files that should be in build-artifacts
-test_*.py
-validate_*.py
+# (anchored to repo root so the tracked tests/ suite is NOT ignored)
+/test_*.py
+/validate_*.py
 setup_kiro.py
 verify_bash_tool_fix.py
 models.txt

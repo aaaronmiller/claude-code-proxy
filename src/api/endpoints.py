@@ -344,10 +344,11 @@ async def reload_model_scan_bindings():
 @router.get("/api/model-scan/dashboard")
 async def model_scan_dashboard(limit: int = 25):
     """Return model-scan provenance, compression stats, and recent CCP errors."""
-    from src.core.model_scan_runtime import get_active_binding
+    from src.core.model_scan_runtime import get_active_allocation, get_active_binding
     from src.services.observability.error_sink import tail_errors
 
     active = get_active_binding()
+    allocation = get_active_allocation()
     compression: dict[str, Any] = {}
     try:
         from pathlib import Path
@@ -366,9 +367,35 @@ async def model_scan_dashboard(limit: int = 25):
             "overlay_profiles": sorted(active.overlay.keys()) if active else [],
             "provenance": dict(active.provenance) if active else {},
         },
+        "allocator": allocation,
         "compression": compression,
         "errors": tail_errors(limit),
     }
+
+
+@router.post("/api/model-scan/probe")
+async def model_scan_probe():
+    """On-demand latency/availability probe of the live per-profile allocation picks (F03/F11).
+
+    Probes whatever the request path would currently route to (the active overlay). Endpoint/key
+    are gap-filled from the provider registry; missing providers are reported, not probed.
+    """
+    import asyncio
+
+    from src.core.model_scan_runtime import get_active_binding
+    from src.services.probe_runtime import probe_targets, targets_from_binding
+
+    targets = targets_from_binding(get_active_binding())
+    if not targets:
+        return {"probed": 0, "results": []}
+
+    def _resolve(provider: str, advisory: str) -> tuple[str, str]:
+        base = advisory or config.get_provider_endpoint(provider) or ""
+        key = config.get_provider_api_key(provider) or ""
+        return base, key
+
+    results = await asyncio.to_thread(probe_targets, targets, _resolve)
+    return {"probed": len(results), "results": results}
 
 
 async def validate_and_extract_api_key(

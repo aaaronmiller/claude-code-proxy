@@ -150,6 +150,20 @@ class ModelScanConfig:
     staleness_limit_s: int = 86400
     lanes: dict = field(default_factory=lambda: {"interactive": {"allow_paid": True}, "standby": {"allow_paid": False}})
 
+    # ── F18 global quota-aware allocator (OFF by default) ──────────────────────
+    # When allocator_enabled and session_profiles are set, reload runs the allocator
+    # over the routing snapshot and writes per-profile overlays the request path
+    # already consumes via resolve_profile_binding(). Disabled or empty => no-op.
+    allocator_enabled: bool = False
+    # {profile_name: {"roles": {assignment_id: {floor:{...}, value_sensitivity, ...}}}}
+    session_profiles: dict = field(default_factory=dict)
+    # optional role_id -> snapshot slot id (defaults to the role/base-role name)
+    allocator_slot_map: dict = field(default_factory=dict)
+    # provider -> remaining_fraction (0..1) operator override for quota meters
+    static_quota: dict = field(default_factory=dict)
+    # nominal per-window call budget used to turn a remaining_fraction into a meter
+    quota_nominal_calls: float = 1000.0
+
     @classmethod
     def from_any(cls, val: Any) -> "ModelScanConfig":
         if isinstance(val, cls):
