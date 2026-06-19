@@ -12,6 +12,7 @@
 # Common flags (normalised across every tool):
 #   -s, --session <id>   resume/continue a specific session
 #   -m, --model   <id>   override the main model (beats TIER)
+#       --profile <name> override proxy profile path (/p/<name>)
 #   -p, --prompt  <txt>  non-interactive prompt
 #   everything else is passed straight through to the underlying CLI.
 #
@@ -72,11 +73,12 @@ CODE="$1"; shift
 AGENT="${CODE:0:1}"; MODE="${CODE:1:1}"; ROUTE="${CODE:2:1}"; TIER="${CODE:3:1}"
 
 # ── Parse normalised flags; collect the rest as passthrough ────────────────────
-SESSION=""; MODEL=""; PROMPT=""; EXTRA=()
+SESSION=""; MODEL=""; PROMPT=""; PROFILE_OVERRIDE=""; EXTRA=()
 while [ $# -gt 0 ]; do
     case "$1" in
         -s|--session) SESSION="${2:-}"; shift 2 ;;
         -m|--model)   MODEL="${2:-}";   shift 2 ;;
+        --profile)    PROFILE_OVERRIDE="${2:-}"; shift 2 ;;
         -p|--prompt)  PROMPT="${2:-}";  shift 2 ;;
         *)            EXTRA+=("$1");    shift ;;
     esac
@@ -114,6 +116,10 @@ if [ "$ROUTE" = "b" ]; then
         p) PROFILE=pi-bypass ;;
         *) warn "no dedicated bypass profile for $AGENT_NAME — using '$PROFILE'" ;;
     esac
+fi
+
+if [ -n "$PROFILE_OVERRIDE" ]; then
+    PROFILE="$PROFILE_OVERRIDE"
 fi
 
 # ── Health check + auto-start for proxy/bypass routes ──────────────────────────

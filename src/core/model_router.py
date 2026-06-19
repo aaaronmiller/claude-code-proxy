@@ -166,18 +166,23 @@ def _model_supports_tools(model_id: str) -> bool:
     """Return True if the given model is known to support tool calling."""
     if not model_id:
         return False
-    # Claude, GPT, Gemini, and Llama families inherently support tools.
-    if model_id.startswith(("claude-", "gpt-", "gemini", "llama", "mistral")):
-        return True
-    # Check model family after provider prefix (e.g. opencode_go/qwen3.6-plus)
-    family = model_id.split("/")[-1].lower()
-    if family.startswith(
-        ("qwen", "gpt", "claude", "gemini", "llama", "mistral", "nemotron", "minimax")
-    ):
-        return True
+    # Capability comes from the models.dev-backed registry, NOT hardcoded family
+    # names. Hardcoded model/family lists are a known source of routing bugs as the
+    # free-model landscape changes; an unknown model must be resolved from data.
+    try:
+        from src.services.usage.model_limits import (
+            supports_tool_call as _registry_supports_tools,
+        )
 
+        if _registry_supports_tools(model_id):
+            return True
+    except Exception:
+        pass
+
+    # Dynamic signals: free-model rankings (supports_tools) + TOOLCALL_MODELS env.
+    # Match the full id and the bare family id after any provider prefix.
     capable = _get_tool_capable_models()
-    return model_id in capable
+    return model_id in capable or model_id.split("/")[-1] in capable
 
 
 def _detect_think_mode(request: dict) -> bool:
@@ -308,7 +313,7 @@ class ModelRouter:
             from src.core.assignments import get_registry as get_assignment_registry
             from src.core.proxy_chain import RouteTarget
 
-            incoming = request.get("model") or ""
+            incoming = request.get("_original_model") or request.get("model") or ""
             if incoming:
                 mapping = get_im_registry().lookup_by_incoming_identifier(incoming)
                 if mapping is not None:
