@@ -95,6 +95,55 @@ tokscale > ccusage > model_scan_quota > billing > rate_limiter > usage_tracker
 `src/core/rotation.py` handles free floor fallback, cooldown, drained-provider avoidance, and standby
 lane protection. The `standby` lane never selects paid quota.
 
+## Quota-Aware Allocator (F18, OFF by default)
+
+The global allocator re-ranks routing per session-role under finite quota: high `value_sensitivity`
+roles maximize (highest-fitness affordable model), low ones satisfice (most abundant floor-clearing
+model, preserving scarce smart capacity). It is wired into `reload_model_scan` and writes per-profile
+overlays the request path already consumes via `resolve_profile_binding` — **no registry writes, no
+new request-path code**. Disabled or unconfigured, it is a verified no-op.
+
+Enable it in the `model_scan` block of the proxy chain (e.g. `config/proxy_chain.json`):
+
+```json
+{
+  "model_scan": {
+    "enabled": true,
+    "snapshot_path": "~/.config/model-scan/routing_snapshot.json",
+    "allocator_enabled": true,
+    "allocator_slot_map": { "big": "R1_primary", "middle": "R_curator" },
+    "static_quota": { "anthropic": 0.20, "openrouter": 1.0 },
+    "quota_nominal_calls": 1000,
+    "session_profiles": {
+      "rich": { "roles": { "big": { "value_sensitivity": 0.9, "importance": 0.9,
+                                     "floor": { "needs_tools": true } } } },
+      "econ": { "roles": { "big": { "value_sensitivity": 0.1, "importance": 0.4,
+                                    "floor": { "needs_tools": true } } } }
+    }
+  }
+}
+```
+
+- `session_profiles[<profile>].roles[<assignment_id>]` — a role per tier the profile routes. `floor`
+  gates candidates (`needs_tools`, `needs_vision`, `min_ctx`, or `min_value` as a number **or** a model
+  name resolved to that model's snapshot fitness). `count > 1` expands one role into `<id>-1..N`.
+- `allocator_slot_map` — role → snapshot slot id (defaults to the role name). Each role pulls its
+  candidate pool from that slot.
+- `static_quota` — operator override of provider remaining-fraction (0..1). Live `tokscale`/`ccusage`
+  fractions take precedence; with no quota data the allocator falls back to pure floor+fitness routing.
+- `quota_nominal_calls` — per-window call budget a fraction is scaled against, so scarcity has teeth.
+
+The picks apply at reload (startup / SIGHUP / `POST /api/proxy/reload-models`). A request on profile
+`rich` then routes its `big` tier to the maximized model; profile `econ` to the satisficed one.
+
+Measure the live picks on demand:
+
+```bash
+curl -X POST http://127.0.0.1:8082/api/model-scan/probe
+```
+
+Each result carries latency, completion tokens, tokens/s, and a normalized `error_class`.
+
 ## Observability
 
 Standard Python logs include `session=<profile-id>`. Structured errors append to:
@@ -109,7 +158,8 @@ Dashboard summary:
 curl http://127.0.0.1:8082/api/model-scan/dashboard
 ```
 
-That response includes active model-scan provenance, RTK compression stats, and recent unified errors.
+That response includes active model-scan provenance, the `allocator` report (per-profile picks +
+quota meters when enabled), RTK compression stats, and recent unified errors.
 
 Reliability feedback is aggregated from `usage_tracking.db` and posted to model-scan on an interval.
 Model-scan persists it and degrades provider health in future snapshots when error or rate-limit
