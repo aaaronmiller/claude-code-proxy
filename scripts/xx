@@ -64,7 +64,7 @@ _v=$(_cfg "d['proxy']['health_url']");    [ -n "$_v" ] && PROXY_HEALTH="$_v"
 _v=$(_cfg "d['proxy']['headroom_health_url']"); [ -n "$_v" ] && HEADROOM_HEALTH="$_v"
 _v=$(_cfg "d['proxy']['auto_start']");    [ "$_v" = "False" ] && AUTO_START=0
 
-[ $# -ge 1 ] || usage 1
+[ $# -ge 1 ] || usage 0
 case "$1" in -h|--help|help) usage 0 ;; esac
 
 CODE="$1"; shift

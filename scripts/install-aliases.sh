@@ -234,44 +234,37 @@ alias proxies-up='proxies up'
 alias proxies-down='proxies down'
 alias proxies-status='proxies status'
 
-# ─── Primary aliases — xx handles crash-guard internally ───────────────────
+# ─── Claude ──────────────────────────────────────────────────────────────
 alias cc='xx cip'                  # Claude init, proxy
 alias ccc='xx ccf'                 # Claude continue, proxy, free tier
-alias cc-debug='xx cid'            # Claude init, debug (direct)
+alias cc-debug='xx cid'            # Claude init, direct (no proxy)
 
 alias hsi='xx hip'                 # Hermes init, proxy
 alias hsr='xx hcf'                 # Hermes continue, proxy, free tier
 
-alias psi='xx pip'                 # Pi init, proxy
-alias psi-c='xx pcf'               # Pi continue, proxy, free tier
+alias pi='xx pip'                  # Pi init, proxy
+alias pic='xx pcp'                 # Pi continue, proxy, free tier
 
 alias qw='xx qip'                  # Qwen init, proxy
-alias qw-c='xx qcf'                # Qwen continue, proxy, free tier
+alias qw-c='xx qcp'                # Qwen continue, proxy, free tier
 
 alias codex-run='xx xip'           # Codex init, proxy
-alias codex-res='xx xcf'           # Codex continue, proxy, free tier
+alias codex-res='xx xcp'           # Codex continue, proxy, free tier
 
 alias oc='xx oip'                  # OpenCode init, proxy
 alias ante='xx aip'                # Ante init, proxy
 alias antigravity='xx gip'         # Antigravity init, proxy
 
-# ─── Quick tier variants ──────────────────────────────────────────────────
-alias cc-ds='xx cipd'              # Claude init, proxy, deepseek
-alias cc-free='xx cipf'            # Claude init, proxy, free tier
-alias psi-ds='xx pipd'             # Pi init, proxy, deepseek
-alias psi-free='xx pipf'           # Pi init, proxy, free tier
-alias hsi-ds='xx hipd'             # Hermes init, proxy, deepseek
-
 # ─── Direct (no proxy) ────────────────────────────────────────────────────
 alias cc-direct='xx cid'
-alias psi-direct='xx pid'
+alias pi-direct='xx pid'
 alias hsi-direct='xx hid'
 alias qw-direct='xx qid'
 alias ante-direct='xx aid'
 
 # ─── Bypass (proxy features on, model reroute off) ────────────────────────
 alias hsi-bp='xx hib'
-alias psi-bp='xx pib'
+alias pi-bp='xx pib'
 
 $MARKER_END
 EOF
@@ -363,8 +356,8 @@ cat <<'EOFQR'
   hsr                    xx hcf            Continue, free tier
 
   ── Pi ─────────────────────────────────────────────────────────
-  psi                    xx pip            Init, proxy
-  psi-c                  xx pcf            Continue, free tier
+  pi                     xx pip            Init, proxy
+  pic                    xx pcp            Continue, free tier
 
   ── Others ─────────────────────────────────────────────────────
   qw                     xx qip            Qwen init, proxy
@@ -388,5 +381,5 @@ cat <<'EOFQR'
 EOFQR
 echo ""
 echo -e "  ${YELLOW}Tip:${NC} xx handles crash-guard internally. Use ${CYAN}--no-cg${NC} to disable."
-echo -e "  ${YELLOW}Tip:${NC} Run ${CYAN}xx -h${NC} for the full encoding reference."
+echo -e "  ${YELLOW}Tip:${NC} Run ${CYAN}xx${NC} or ${CYAN}xx -h${NC} for the full encoding reference."
 echo ""
