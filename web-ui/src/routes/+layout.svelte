@@ -27,6 +27,7 @@
       <a href="/">Chain</a>
       <a href="/assignments">Assignments</a>
       <a href="/identifier-mappings">Identifier Mappings</a>
+      <a href="/settings">Settings</a>
     </div>
     <div class="status">
       <ConnectionStatus />
