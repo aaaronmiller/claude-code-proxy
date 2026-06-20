@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from src.api.endpoints import router as api_router
@@ -400,9 +400,18 @@ if svelte_build_dir.exists():
     # Svelte web-ui is built - serve it
     print(f"🌐 Serving Svelte Web UI from: {svelte_build_dir}")
 
-    # Mount build directory at root to handle all static assets (/_app, /favicon.ico, etc)
-    # html=True ensures index.html is served for root path /
-    app.mount("/", StaticFiles(directory=str(svelte_build_dir), html=True), name="site")
+    # SPA serving with deep-link fallback: serve the real file when it exists (assets like
+    # /_app/*, /favicon.ico), otherwise return index.html so client-side routes (/settings,
+    # /assignments, …) work on hard-load / refresh — not just on in-app navigation. Registered
+    # after the API routers, so /api/* still resolves normally (and 404s for unknown API paths).
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        if full_path.startswith("api/") or full_path.startswith("v1/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        candidate = svelte_build_dir / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(svelte_build_dir / "index.html")
 
 elif legacy_static_dir.exists():
     # Fallback to legacy HTML dashboard
@@ -436,9 +445,11 @@ async def serve_config_ui():
     return {"message": "Web UI not available"}
 
 
-@app.get("/settings")
+@app.get("/settings-legacy")
 async def serve_settings_ui():
-    """Serve the settings dashboard (Alpine.js + shadcn-style UI)."""
+    """Legacy Alpine.js settings page (the manifest-driven Svelte /settings supersedes it).
+
+    Kept reachable at /settings-legacy; /settings now boots the SPA via the deep-link fallback."""
     settings_file = legacy_static_dir / "settings.html"
     if settings_file.exists():
         return FileResponse(settings_file)

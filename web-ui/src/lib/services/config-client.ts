@@ -26,7 +26,10 @@ export interface IdentifierMapping {
 	notes: string;
 }
 
-const BASE = "http://127.0.0.1:8082";
+// In the built bundle the UI is served by the gateway itself, so use same-origin ("") —
+// this makes it work on any port the gateway binds. Only `vite dev` (separate :5173 origin)
+// needs the explicit gateway address.
+const BASE = import.meta.env.DEV ? "http://127.0.0.1:8082" : "";
 
 // ── Manifest-driven settings (the 64-setting config surface) ──────────────────
 
