@@ -215,8 +215,8 @@ $MARKER_START
 # Managed by: $PROXY_DIR/scripts/install-aliases.sh
 # Re-run the installer to refresh. Run with --uninstall to remove.
 #
-# Every *alias below* wraps through cg_run (crash-guard tmux attach/recovery).
-# Run xx directly if you want raw subprocess launch without crash-guard.
+# xx handles cg_run (crash-guard) internally by default.
+# Use --no-cg to disable crash-guard if needed.
 #
 # ENCODING: xx <AGENT><MODE><ROUTE>[<TIER>]
 #   AGENT: c=claude  h=hermes  x=codex  o=opencode
@@ -234,44 +234,44 @@ alias proxies-up='proxies up'
 alias proxies-down='proxies down'
 alias proxies-status='proxies status'
 
-# ─── Primary aliases — every one goes through cg_run + xx ──────────────────
-alias cc='cg_run xx cip'           # Claude init, proxy
-alias ccc='cg_run xx ccf'          # Claude continue, proxy, free tier
-alias cc-debug='cg_run xx cid'     # Claude init, debug (direct)
+# ─── Primary aliases — xx handles crash-guard internally ───────────────────
+alias cc='xx cip'                  # Claude init, proxy
+alias ccc='xx ccf'                 # Claude continue, proxy, free tier
+alias cc-debug='xx cid'            # Claude init, debug (direct)
 
-alias hsi='cg_run xx hip'          # Hermes init, proxy
-alias hsr='cg_run xx hcf'          # Hermes continue, proxy, free tier
+alias hsi='xx hip'                 # Hermes init, proxy
+alias hsr='xx hcf'                 # Hermes continue, proxy, free tier
 
-alias psi='cg_run xx pip'          # Pi init, proxy
-alias psi-c='cg_run xx pcf'        # Pi continue, proxy, free tier
+alias psi='xx pip'                 # Pi init, proxy
+alias psi-c='xx pcf'               # Pi continue, proxy, free tier
 
-alias qw='cg_run xx qip'           # Qwen init, proxy
-alias qw-c='cg_run xx qcf'         # Qwen continue, proxy, free tier
+alias qw='xx qip'                  # Qwen init, proxy
+alias qw-c='xx qcf'                # Qwen continue, proxy, free tier
 
-alias codex-run='cg_run xx xip'    # Codex init, proxy
-alias codex-res='cg_run xx xcf'    # Codex continue, proxy, free tier
+alias codex-run='xx xip'           # Codex init, proxy
+alias codex-res='xx xcf'           # Codex continue, proxy, free tier
 
-alias oc='cg_run xx oip'           # OpenCode init, proxy
-alias ante='cg_run xx aip'         # Ante init, proxy
-alias antigravity='cg_run xx gip'  # Antigravity init, proxy
+alias oc='xx oip'                  # OpenCode init, proxy
+alias ante='xx aip'                # Ante init, proxy
+alias antigravity='xx gip'         # Antigravity init, proxy
 
 # ─── Quick tier variants ──────────────────────────────────────────────────
-alias cc-ds='cg_run xx cipd'       # Claude init, proxy, deepseek
-alias cc-free='cg_run xx cipf'     # Claude init, proxy, free tier
-alias psi-ds='cg_run xx pipd'      # Pi init, proxy, deepseek
-alias psi-free='cg_run xx pipf'    # Pi init, proxy, free tier
-alias hsi-ds='cg_run xx hipd'      # Hermes init, proxy, deepseek
+alias cc-ds='xx cipd'              # Claude init, proxy, deepseek
+alias cc-free='xx cipf'            # Claude init, proxy, free tier
+alias psi-ds='xx pipd'             # Pi init, proxy, deepseek
+alias psi-free='xx pipf'           # Pi init, proxy, free tier
+alias hsi-ds='xx hipd'             # Hermes init, proxy, deepseek
 
 # ─── Direct (no proxy) ────────────────────────────────────────────────────
-alias cc-direct='cg_run xx cid'
-alias psi-direct='cg_run xx pid'
-alias hsi-direct='cg_run xx hid'
-alias qw-direct='cg_run xx qid'
-alias ante-direct='cg_run xx aid'
+alias cc-direct='xx cid'
+alias psi-direct='xx pid'
+alias hsi-direct='xx hid'
+alias qw-direct='xx qid'
+alias ante-direct='xx aid'
 
 # ─── Bypass (proxy features on, model reroute off) ────────────────────────
-alias hsi-bp='cg_run xx hib'
-alias psi-bp='cg_run xx pib'
+alias hsi-bp='xx hib'
+alias psi-bp='xx pib'
 
 $MARKER_END
 EOF
@@ -354,27 +354,28 @@ echo ""
 echo -e "${BOLD}Quick reference:${NC}"
 cat <<'EOFQR'
   ── Claude ─────────────────────────────────────────────────────
-  cc                     cg_run xx cip     Init, proxy
-  ccc                    cg_run xx ccf     Continue, free tier
-  cc-debug               cg_run xx cid     Init, direct
+  cc                     xx cip            Init, proxy
+  ccc                    xx ccf            Continue, free tier
+  cc-debug               xx cid            Init, direct
 
   ── Hermes ─────────────────────────────────────────────────────
-  hsi                    cg_run xx hip     Init, proxy
-  hsr                    cg_run xx hcf     Continue, free tier
+  hsi                    xx hip            Init, proxy
+  hsr                    xx hcf            Continue, free tier
 
   ── Pi ─────────────────────────────────────────────────────────
-  psi                    cg_run xx pip     Init, proxy
-  psi-c                  cg_run xx pcf     Continue, free tier
+  psi                    xx pip            Init, proxy
+  psi-c                  xx pcf            Continue, free tier
 
   ── Others ─────────────────────────────────────────────────────
-  qw                     cg_run xx qip     Qwen init, proxy
-  codex-run              cg_run xx xip     Codex init, proxy
-  antigravity            cg_run xx gip     Antigravity init, proxy
-  ante                   cg_run xx aip     Ante init, proxy
-  oc                     cg_run xx oip     OpenCode init, proxy
+  qw                     xx qip            Qwen init, proxy
+  codex-run              xx xip            Codex init, proxy
+  antigravity            xx gip            Antigravity init, proxy
+  ante                   xx aip            Ante init, proxy
+  oc                     xx oip            OpenCode init, proxy
 
   ── Any tool, any mode, raw ────────────────────────────────────
-  xx cip                 Claude init proxy         (no cg_run)
+  xx cip                 Claude init proxy         (cg_run on by default)
+  xx --no-cg cip         Claude init proxy         (no crash-guard)
   xx hif                 Hermes init free tier
   xx xcd                 Codex continue debug
   xx qcpd                Qwen continue proxy deepseek
@@ -386,6 +387,6 @@ cat <<'EOFQR'
   xx -h
 EOFQR
 echo ""
-echo -e "  ${YELLOW}Tip:${NC} All aliases wrap through ${CYAN}c g _ r u n${NC} for tmux attach + crash recovery."
+echo -e "  ${YELLOW}Tip:${NC} xx handles crash-guard internally. Use ${CYAN}--no-cg${NC} to disable."
 echo -e "  ${YELLOW}Tip:${NC} Run ${CYAN}xx -h${NC} for the full encoding reference."
 echo ""
