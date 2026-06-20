@@ -120,6 +120,18 @@ class CircuitBreaker:
     def is_open(self) -> bool:
         return self.stats.state == CircuitState.OPEN
     
+    def _set_state(self, new_state: CircuitState) -> None:
+        """Single transition point: update state and mirror it to Prometheus.
+
+        Metric emission is best-effort — a metrics failure must never affect breaker logic."""
+        self.stats.state = new_state
+        try:
+            from src.api.metrics_api import set_circuit_breaker_state
+
+            set_circuit_breaker_state(self.name, new_state.value)
+        except Exception:
+            pass
+
     def _should_attempt(self) -> bool:
         """Check if request should be attempted based on circuit state."""
         if self.stats.state == CircuitState.CLOSED:
@@ -131,7 +143,7 @@ class CircuitBreaker:
                 elapsed = time.time() - self.stats.last_failure_time
                 if elapsed >= self.config.timeout:
                     # Transition to half-open
-                    self.stats.state = CircuitState.HALF_OPEN
+                    self._set_state(CircuitState.HALF_OPEN)
                     self.stats.success_count = 0
                     logger.info(f"Circuit breaker '{self.name}' transitioning to HALF_OPEN after {elapsed:.1f}s")
                     return True
@@ -148,7 +160,7 @@ class CircuitBreaker:
             self.stats.success_count += 1
             if self.stats.success_count >= self.config.success_threshold:
                 # Transition back to closed
-                self.stats.state = CircuitState.CLOSED
+                self._set_state(CircuitState.CLOSED)
                 self.stats.failure_count = 0
                 logger.info(f"Circuit breaker '{self.name}' CLOSED after {self.stats.success_count} successes")
         else:
@@ -163,12 +175,12 @@ class CircuitBreaker:
         
         if self.stats.state == CircuitState.HALF_OPEN:
             # Any failure in half-open sends back to open
-            self.stats.state = CircuitState.OPEN
+            self._set_state(CircuitState.OPEN)
             logger.warning(f"Circuit breaker '{self.name}' OPEN (failed in half-open): {error}")
-            
+
         elif self.stats.state == CircuitState.CLOSED:
             if self.stats.failure_count >= self.config.failure_threshold:
-                self.stats.state = CircuitState.OPEN
+                self._set_state(CircuitState.OPEN)
                 logger.warning(
                     f"Circuit breaker '{self.name}' OPEN after {self.stats.failure_count} failures: {error}"
                 )

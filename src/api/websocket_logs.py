@@ -292,6 +292,16 @@ def log_cascade(
     }
     _cascade_events.append(event)
 
+    # Mirror cascade switches to Prometheus (single choke point for all switch sites).
+    # Best-effort: a metrics failure must never break cascade logging.
+    if action == "switch":
+        try:
+            from src.api.metrics_api import record_cascade_switch
+
+            record_cascade_switch(from_model or model, to_model or "", reason or "")
+        except Exception:
+            pass
+
     message = f"Cascade {action}: {model}"
     if from_model and to_model:
         message = f"Cascade {action}: {from_model} -> {to_model}"
