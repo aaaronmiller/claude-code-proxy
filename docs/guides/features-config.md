@@ -2,7 +2,7 @@
 
 ## Configuration Methods (All Are Equivalent)
 
-The proxy supports **4 identical configuration surfaces**. All expose the same 62 settings.
+The proxy supports equivalent configuration surfaces. All expose the manifest settings listed in `docs/feature-parity.md`.
 
 | Method | How | Persistence |
 |--------|-----|-------------|
@@ -38,7 +38,7 @@ Visit `http://localhost:8082/settings` for the full settings dashboard:
 ### API Endpoints
 
 ```
-GET  /api/settings          → all 62 settings with values, types, descriptions
+GET  /api/settings          → all manifest settings with values, types, descriptions
 POST /api/settings          → {settings: {ENV_VAR: value}, persist: true}
 GET  /api/reliability       → reliability score R ∈ [0,1] with grade
 GET  /api/breakers          → circuit breaker states

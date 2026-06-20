@@ -49,6 +49,8 @@ def configure_reasoning():
         effort = os.getenv("REASONING_EFFORT", "disabled")
         tokens = os.getenv("REASONING_MAX_TOKENS", "not set")
         exclude = os.getenv("REASONING_EXCLUDE", "false")
+        big_reasoning = os.getenv("BIG_MODEL_REASONING", "")
+        middle_reasoning = os.getenv("MIDDLE_MODEL_REASONING", "")
 
         console.print("\n[bold yellow]Current Settings:[/]")
         console.print(f"  Effort:      [cyan]{effort}[/]")
@@ -56,16 +58,20 @@ def configure_reasoning():
         console.print(
             f"  Exclude:     [cyan]{exclude}[/] (Don't reason on non-coding tasks)"
         )
+        console.print(f"  BIG Override:    [cyan]{big_reasoning or '(none)'}[/]")
+        console.print(f"  MIDDLE Override: [cyan]{middle_reasoning or '(none)'}[/]")
 
         console.print("\n[bold cyan]Options:[/]")
         console.print("  [1] Set Effort (low/medium/high)")
         console.print("  [2] Set Max Budget Tokens")
         console.print("  [3] Toggle Exclusion")
-        console.print("  [4] [red]Disable Reasoning[/] (Unset variables)")
+        console.print("  [4] Set BIG tier reasoning override")
+        console.print("  [5] Set MIDDLE tier reasoning override")
+        console.print("  [6] [red]Disable Reasoning[/] (Unset variables)")
         console.print("  [0] Back")
 
         choice = Prompt.ask(
-            "\nSelect option", choices=["1", "2", "3", "4", "0"], default="0"
+            "\nSelect option", choices=["1", "2", "3", "4", "5", "6", "0"], default="0"
         )
 
         updates = {}
@@ -84,11 +90,21 @@ def configure_reasoning():
             new_val = "true" if exclude.lower() != "true" else "false"
             updates["REASONING_EXCLUDE"] = new_val
         elif choice == "4":
+            updates["BIG_MODEL_REASONING"] = Prompt.ask(
+                "BIG tier reasoning override", default=big_reasoning
+            )
+        elif choice == "5":
+            updates["MIDDLE_MODEL_REASONING"] = Prompt.ask(
+                "MIDDLE tier reasoning override", default=middle_reasoning
+            )
+        elif choice == "6":
             if Confirm.ask("Disable reasoning features?"):
                 updates["REASONING_EFFORT"] = None
                 updates["REASONING_MAX_TOKENS"] = None
                 # We might keep EXCLUDE or remove it, usually good to remove
                 updates["REASONING_EXCLUDE"] = None
+                updates["BIG_MODEL_REASONING"] = None
+                updates["MIDDLE_MODEL_REASONING"] = None
 
         if updates:
             update_env_file(updates)
@@ -301,7 +317,11 @@ def configure_analytics():
         # Current values
         track_usage = os.getenv("TRACK_USAGE", "false")
         log_content = os.getenv("LOG_FULL_CONTENT", "false")
-        db_path = os.getenv("USAGE_DB_PATH", "usage_tracking.db")
+        db_path = os.getenv(
+            "USAGE_TRACKING_DB_PATH",
+            os.getenv("USAGE_DB_PATH", "usage_tracking.db"),
+        )
+        silence_deps = os.getenv("SILENCE_DEPRECATION_WARNINGS", "false")
 
         console.print("\n[bold yellow]Current Settings:[/]")
         console.print(f"  1. Track Usage:      [cyan]{track_usage}[/]")
@@ -309,16 +329,17 @@ def configure_analytics():
             f"  2. Log Full Content: [cyan]{log_content}[/] (WARNING: stores request/response data)"
         )
         console.print(f"  3. Database Path:    [cyan]{db_path}[/]")
+        console.print(f"  4. Silence Deprecation Warnings: [cyan]{silence_deps}[/]")
 
         console.print("\n[bold cyan]Options:[/]")
-        console.print("  1-3 - Edit setting")
-        console.print("  [4] Launch Analytics Viewer")
-        console.print("  [5] Export Data")
-        console.print("  [6] Reset/Clear Analytics Data")
+        console.print("  1-4 - Edit setting")
+        console.print("  [5] Launch Analytics Viewer")
+        console.print("  [6] Export Data")
+        console.print("  [7] Reset/Clear Analytics Data")
         console.print("  [0] Back")
 
         choice = Prompt.ask(
-            "\nSelect option", choices=["1", "2", "3", "4", "5", "6", "0"], default="0"
+            "\nSelect option", choices=["1", "2", "3", "4", "5", "6", "7", "0"], default="0"
         )
         updates = {}
 
@@ -331,10 +352,13 @@ def configure_analytics():
             new_val = "true" if log_content.lower() != "true" else "false"
             updates["LOG_FULL_CONTENT"] = new_val
         elif choice == "3":
-            updates["USAGE_DB_PATH"] = Prompt.ask(
-                "Enter database path", default="usage_tracking.db"
+            updates["USAGE_TRACKING_DB_PATH"] = Prompt.ask(
+                "Enter database path", default=db_path
             )
         elif choice == "4":
+            new_val = "true" if silence_deps.lower() != "true" else "false"
+            updates["SILENCE_DEPRECATION_WARNINGS"] = new_val
+        elif choice == "5":
             # Launch analytics viewer
             console.clear()
             console.print("[bold cyan]Launching Analytics Viewer...[/bold cyan]\n")
@@ -346,20 +370,23 @@ def configure_analytics():
                 console.print(f"[red]Error: {e}[/red]")
                 input("\nPress Enter to continue...")
             continue
-        elif choice == "5":
+        elif choice == "6":
             # Export
             from src.cli.analytics import export_to_csv
 
             export_to_csv()
             continue
-        elif choice == "6":
+        elif choice == "7":
             if Confirm.ask(
                 "[red]Delete all analytics data? This cannot be undone![/red]"
             ):
                 try:
                     import sqlite3
 
-                    db_path_resolved = os.getenv("USAGE_DB_PATH", "usage_tracking.db")
+                    db_path_resolved = os.getenv(
+                        "USAGE_TRACKING_DB_PATH",
+                        os.getenv("USAGE_DB_PATH", "usage_tracking.db"),
+                    )
                     if os.path.exists(db_path_resolved):
                         os.remove(db_path_resolved)
                         console.print("\n[green]✓ Analytics database deleted.[/green]")
@@ -645,6 +672,7 @@ def main():
         console.print("  [7] 🔄 Cascade & Circuit Bkr [dim](Fallback lists, CB thresholds)[/]")
         console.print("  [8] 🔧 Tool Calls            [dim](Tool-capable models, truncation)[/]")
         console.print("  [9] 🔑 API Keys & Provider   [dim](Endpoints, Auth, API keys)[/]")
+        console.print("  [J] 🧬 OpenRouter Fusion     [dim](Fusion profiles and aliases)[/]")
         console.print("  [A] 🌐 Network & Server      [dim](Host, Port, Timeouts)[/]")
         console.print("  [B] 📋 Logging               [dim](Log file, rotation, debug)[/]")
         console.print("  [C] 📈 Analytics & Tracking  [dim](Usage tracking config)[/]")
@@ -658,7 +686,7 @@ def main():
 
         choice = Prompt.ask(
             "\nSelect category",
-            choices=["1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","0"],
+            choices=["1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J","0"],
             default="0",
         ).upper()
 
@@ -682,6 +710,8 @@ def main():
             configure_toolcalls()
         elif choice == "9":
             configure_api_keys()
+        elif choice == "J":
+            configure_fusion()
         elif choice == "A":
             configure_network()
         elif choice == "B":
@@ -865,20 +895,26 @@ def configure_compression():
 
         bypass = os.environ.get("HEADROOM_BYPASS_THRESHOLD", "0")
         strip = os.environ.get("TOOL_SCHEMA_STRIP", "true").lower() in ("true","1")
+        tool_desc = os.environ.get("TOOL_DESC_MAX", "200")
+        tool_param_desc = os.environ.get("TOOL_PARAM_DESC_MAX", "120")
         sc_on = os.environ.get("SEMANTIC_CACHE_ENABLED", "true").lower() in ("true","1")
         sc_thr = os.environ.get("SEMANTIC_CACHE_THRESHOLD", "0.97")
         sc_ttl = os.environ.get("SEMANTIC_CACHE_TTL", "3600")
         sc_sz = os.environ.get("SEMANTIC_CACHE_SIZE", "256")
+        token_cache = os.environ.get("TOKEN_COUNT_CACHE_SIZE", "512")
 
         console.print(f"\n  [1] Headroom bypass threshold  [cyan]{bypass}[/] tokens [dim](0=disabled; skip compression for small requests)[/]")
         console.print(f"  [2] Tool schema stripping      {'[green]ON[/]' if strip else '[dim]off[/]'}  [dim](9-52% tool JSON reduction)[/]")
-        console.print(f"  [3] Semantic cache             {'[green]ON[/]' if sc_on else '[dim]off[/]'}  [dim](near-dup prompt dedup)[/]")
-        console.print(f"  [4] Semantic cache threshold   [cyan]{sc_thr}[/]  [dim](0.97 = 97% similarity)[/]")
-        console.print(f"  [5] Semantic cache TTL         [cyan]{sc_ttl}[/]s  [dim](entry expiry)[/]")
-        console.print(f"  [6] Semantic cache size        [cyan]{sc_sz}[/] entries  [dim](LRU max)[/]")
+        console.print(f"  [3] Tool description max       [cyan]{tool_desc}[/] chars")
+        console.print(f"  [4] Tool parameter desc max    [cyan]{tool_param_desc}[/] chars")
+        console.print(f"  [5] Semantic cache             {'[green]ON[/]' if sc_on else '[dim]off[/]'}  [dim](near-dup prompt dedup)[/]")
+        console.print(f"  [6] Semantic cache threshold   [cyan]{sc_thr}[/]  [dim](0.97 = 97% similarity)[/]")
+        console.print(f"  [7] Semantic cache TTL         [cyan]{sc_ttl}[/]s  [dim](entry expiry)[/]")
+        console.print(f"  [8] Semantic cache size        [cyan]{sc_sz}[/] entries  [dim](LRU max)[/]")
+        console.print(f"  [9] Token count cache size     [cyan]{token_cache}[/] entries")
         console.print("  [0] Back")
 
-        choice = Prompt.ask("\nSelect option", choices=["1","2","3","4","5","6","0"], default="0")
+        choice = Prompt.ask("\nSelect option", choices=["1","2","3","4","5","6","7","8","9","0"], default="0")
         updates = {}
         if choice == "0":
             return
@@ -889,17 +925,27 @@ def configure_compression():
             updates["TOOL_SCHEMA_STRIP"] = "false" if strip else "true"
             console.print(f"[cyan]Tool schema stripping: {'ON' if not strip else 'OFF'}[/]")
         elif choice == "3":
+            updates["TOOL_DESC_MAX"] = Prompt.ask("Max tool description chars", default=tool_desc)
+        elif choice == "4":
+            updates["TOOL_PARAM_DESC_MAX"] = Prompt.ask(
+                "Max parameter description chars", default=tool_param_desc
+            )
+        elif choice == "5":
             updates["SEMANTIC_CACHE_ENABLED"] = "false" if sc_on else "true"
             console.print(f"[cyan]Semantic cache: {'ON' if not sc_on else 'OFF'}[/]")
-        elif choice == "4":
+        elif choice == "6":
             v = Prompt.ask("Similarity threshold (0.0-1.0)", default=sc_thr)
             updates["SEMANTIC_CACHE_THRESHOLD"] = v
-        elif choice == "5":
+        elif choice == "7":
             v = Prompt.ask("TTL seconds", default=sc_ttl)
             updates["SEMANTIC_CACHE_TTL"] = v
-        elif choice == "6":
+        elif choice == "8":
             v = Prompt.ask("Max cache entries", default=sc_sz)
             updates["SEMANTIC_CACHE_SIZE"] = v
+        elif choice == "9":
+            updates["TOKEN_COUNT_CACHE_SIZE"] = Prompt.ask(
+                "Token count cache entries", default=token_cache
+            )
         if updates:
             update_env_file(updates)
 
@@ -997,6 +1043,78 @@ def configure_models():
             update_env_file(updates)
 
 
+def configure_fusion():
+    """Configure OpenRouter Fusion profiles and aliases."""
+    while True:
+        console.clear()
+        console.print(Panel(
+            "[bold]OpenRouter Fusion[/]\n"
+            "[dim]Route a request through a panel of models and a judge model.[/]",
+            border_style="magenta", title="🧬 Fusion"
+        ))
+
+        profile = os.environ.get("FUSION_PROFILE", "free")
+        aliases = os.environ.get("FUSION_ALIASES", "fusion,ccp/fusion,openrouter/fusion")
+        analysis = os.environ.get(
+            "FUSION_FREE_ANALYSIS_MODELS",
+            "openrouter/free,openrouter/free,openrouter/free",
+        )
+        judge = os.environ.get("FUSION_FREE_MODEL", "openrouter/free")
+        preset = os.environ.get("FUSION_FREE_PRESET", "")
+        force = os.environ.get("FUSION_FREE_FORCE", "true")
+        profiles = os.environ.get("FUSION_PROFILES", "")
+
+        console.print(f"\n  [1] Default profile        [cyan]{profile}[/]")
+        console.print(f"  [2] Fusion aliases         [cyan]{aliases}[/]")
+        console.print(f"  [3] Free panel models      [cyan]{analysis}[/]")
+        console.print(f"  [4] Free judge model       [cyan]{judge}[/]")
+        console.print(f"  [5] Free preset            [cyan]{preset or '(none)'}[/]")
+        console.print(f"  [6] Force no-tool Fusion   [cyan]{force}[/]")
+        console.print(f"  [7] JSON profiles          [cyan]{profiles or '(none)'}[/]")
+        console.print("  [8] Set MIDDLE_MODEL=fusion")
+        console.print("  [0] Back")
+
+        choice = Prompt.ask(
+            "\nSelect",
+            choices=["0", "1", "2", "3", "4", "5", "6", "7", "8"],
+            default="0",
+        )
+        updates = {}
+        if choice == "0":
+            return
+        elif choice == "1":
+            updates["FUSION_PROFILE"] = Prompt.ask("Default Fusion profile", default=profile)
+        elif choice == "2":
+            updates["FUSION_ALIASES"] = Prompt.ask("Comma-separated aliases", default=aliases)
+        elif choice == "3":
+            updates["FUSION_FREE_ANALYSIS_MODELS"] = Prompt.ask(
+                "Free profile panel models", default=analysis
+            )
+        elif choice == "4":
+            updates["FUSION_FREE_MODEL"] = Prompt.ask("Free profile judge model", default=judge)
+        elif choice == "5":
+            updates["FUSION_FREE_PRESET"] = Prompt.ask("OpenRouter preset (blank=none)", default=preset)
+        elif choice == "6":
+            v = Confirm.ask(
+                "Force Fusion when no other tools compete?",
+                default=force.lower() == "true",
+            )
+            updates["FUSION_FREE_FORCE"] = "true" if v else "false"
+        elif choice == "7":
+            updates["FUSION_PROFILES"] = Prompt.ask("Fusion profile JSON", default=profiles)
+        elif choice == "8":
+            updates["MIDDLE_MODEL"] = "fusion"
+
+        if updates:
+            update_env_file(updates)
+            for k, v in updates.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            input("\nPress Enter to continue...")
+
+
 def configure_toolcalls():
     """Configure tool-call routing and truncation."""
     while True:
@@ -1052,14 +1170,16 @@ def configure_logging_advanced():
         log_max = os.environ.get("LOG_MAX_SIZE_MB", "50")
         log_ret = os.environ.get("LOG_RETENTION_DAYS", "7")
         debug_traf = os.environ.get("DEBUG_TRAFFIC_LOG", "false")
+        debug_quiet = os.environ.get("DEBUG_TRAFFIC_QUIET", "false")
 
         console.print(f"\n  [1] Log file path       [cyan]{log_file}[/]")
         console.print(f"  [2] Max size (MB)       [cyan]{log_max}[/]")
         console.print(f"  [3] Retention (days)    [cyan]{log_ret}[/]")
         console.print(f"  [4] Debug traffic log   [cyan]{debug_traf}[/] [dim](dumps full HTTP headers)[/]")
+        console.print(f"  [5] Suppress debug dump [cyan]{debug_quiet}[/] [dim](quiet traffic at LOG_LEVEL=debug)[/]")
         console.print("  [0] Back")
 
-        choice = Prompt.ask("\nSelect", choices=["0","1","2","3","4"], default="0")
+        choice = Prompt.ask("\nSelect", choices=["0","1","2","3","4","5"], default="0")
         updates = {}
         if choice == "0":
             return
@@ -1072,6 +1192,12 @@ def configure_logging_advanced():
         elif choice == "4":
             v = Confirm.ask("Enable debug traffic log?", default=debug_traf.lower() == "true")
             updates["DEBUG_TRAFFIC_LOG"] = "true" if v else "false"
+        elif choice == "5":
+            v = Confirm.ask(
+                "Suppress full traffic dump at LOG_LEVEL=debug?",
+                default=debug_quiet.lower() == "true",
+            )
+            updates["DEBUG_TRAFFIC_QUIET"] = "true" if v else "false"
         if updates:
             update_env_file(updates)
 

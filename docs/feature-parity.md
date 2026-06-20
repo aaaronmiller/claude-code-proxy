@@ -1,6 +1,6 @@
 # Configuration Feature Parity
 
-Auto-generated from `src/core/config_manifest.py` — 63 settings.
+Auto-generated from `src/core/config_manifest.py` — 70 settings.
 
 Every setting on every surface. All four surfaces (CLI flag, TUI menu, Web UI, .env)
 are listed per setting. ✅ = supported, — = N/A on that surface.
@@ -9,10 +9,10 @@ are listed per setting. ✅ = supported, — = N/A on that surface.
 
 | Surface | Coverage |
 |---|---|
-| .env file | 63/63 (100%) — every setting has an env var by definition |
-| CLI flags | 63/63 (100%) |
-| TUI widgets | 63/63 (100%) |
-| Web components | 63/63 (100%) |
+| .env file | 70/70 (100%) — every setting has an env var by definition |
+| CLI flags | 70/70 (100%) |
+| TUI widgets | 70/70 (100%) |
+| Web components | 70/70 (100%) |
 
 ## Authentication & API Keys
 
@@ -68,8 +68,8 @@ are listed per setting. ✅ = supported, — = N/A on that surface.
 | `LOG_FILE` | ✅ | `--log-file` | `input` | `input` | Proxy log file path |
 | `LOG_MAX_SIZE_MB` | ✅ | `--log-max-mb` | `number` | `number` | Max log file size before rotation |
 | `LOG_RETENTION_DAYS` | ✅ | `--log-retention` | `number` | `number` | Days to keep rotated logs |
-| `DEBUG_TRAFFIC_LOG` | ✅ | `--debug-traffic` | `toggle` | `switch` | Force full traffic logging (logs/debug_traffic.log). Automatic when LOG_LEVEL=de |
-| `DEBUG_TRAFFIC_QUIET` | ✅ | `--debug-traffic-quiet` | `toggle` | `switch` | Suppress full traffic logging even at LOG_LEVEL=debug. For debug Python logs WIT |
+| `DEBUG_TRAFFIC_LOG` | ✅ | `--debug-traffic` | `toggle` | `switch` | Force full traffic logging (logs/debug_traffic.log). Automatic when LOG_LEVEL=debug — use DEBUG_TRAFFIC_QUIET=true to suppress at debug level. |
+| `DEBUG_TRAFFIC_QUIET` | ✅ | `--debug-traffic-quiet` | `toggle` | `switch` | Suppress full traffic logging even at LOG_LEVEL=debug. For debug Python logs WITHOUT the heavy traffic dump. |
 
 ## Model Tiers
 
@@ -84,6 +84,18 @@ are listed per setting. ✅ = supported, — = N/A on that surface.
 | `MODEL_CASCADE` | ✅ | `--model-cascade` | `toggle` | `switch` | Enable cascade fallback on model failures |
 | `MODEL_CASCADE_DAILY_LIMIT` | ✅ | `--cascade-daily-limit` | `number` | `number` | Max cascade requests per model per day (0=unlimited) |
 | `OPENROUTER_FALLBACK_MODELS` | ✅ | `--or-fallbacks` | `textarea` | `textarea` | Dynamic OpenRouter fallback pool (comma-separated) |
+
+## OpenRouter Fusion
+
+| Setting | .env | CLI | TUI | Web | Description |
+|---|---|---|---|---|---|
+| `FUSION_PROFILE` | ✅ | `--fusion-profile` | `input` | `input` | Default OpenRouter Fusion profile name |
+| `FUSION_ALIASES` | ✅ | `--fusion-aliases` | `textarea` | `textarea` | Model aliases that trigger OpenRouter Fusion |
+| `FUSION_FREE_ANALYSIS_MODELS` | ✅ | `--fusion-free-analysis-models` | `textarea` | `textarea` | Free Fusion profile panel models |
+| `FUSION_FREE_MODEL` | ✅ | `--fusion-free-model` | `input` | `input` | Free Fusion profile judge/final model |
+| `FUSION_FREE_PRESET` | ✅ | `--fusion-free-preset` | `input` | `input` | Optional OpenRouter Fusion preset for the free profile |
+| `FUSION_FREE_FORCE` | ✅ | `--fusion-free-force` | `toggle` | `switch` | Force Fusion invocation for one-shot requests when no other tools compete |
+| `FUSION_PROFILES` | ✅ | `--fusion-profiles` | `textarea` | `textarea` | JSON map of named Fusion profiles |
 
 ## Reasoning & Thinking
 
@@ -141,33 +153,3 @@ are listed per setting. ✅ = supported, — = N/A on that surface.
 | `PROXY_WATCHDOG` | ✅ | `--proxy-watchdog` | `toggle` | `switch` | Start auto-recovery watchdog pane (checks health, restarts dead services) |
 | `WATCHDOG_INTERVAL` | ✅ | `--watchdog-interval` | `number` | `number` | Watchdog health check frequency |
 | `WATCHDOG_GRACE` | ✅ | `--watchdog-grace` | `number` | `number` | Seconds to wait before restarting after first failure |
-
-## How to Configure
-
-Pick whichever surface is convenient:
-
-**Via `.env` file** (persistent):
-```bash
-echo 'BIG_MODEL=anthropic/claude-opus-4-20250514' >> .env
-proxies down && proxies up   # picks up new env vars
-```
-
-**Via CLI flag** (single run):
-```bash
-python start_proxy.py --big-model anthropic/claude-opus-4-20250514
-```
-
-**Via TUI** (interactive):
-```bash
-python start_proxy.py --configure-advanced
-```
-
-**Via Web UI**:
-```
-http://localhost:8082/settings
-```
-
-**Via `--config-file` JSON** (bulk):
-```bash
-python start_proxy.py --config-file my-config.json
-```

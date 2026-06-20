@@ -177,7 +177,7 @@ For more details, see docs/guides/configuration.md
                        help='Run as client wrapper (internal use)')
 
     # ── Settings from manifest (auto-generated from config_manifest.py) ────────
-    # These expose ALL 62 configurable settings via CLI. Values set here override
+    # These expose manifest settings via CLI. Values set here override
     # the .env file for the current run only (do not persist unless --save-config used).
     try:
         from src.core.config_manifest import SETTINGS, GROUP_LABELS

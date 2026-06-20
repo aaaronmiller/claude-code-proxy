@@ -1,6 +1,6 @@
 # Configuration Guide
 
-Claude Code Proxy supports four equally-capable configuration surfaces. All 62 settings are reachable from every surface.
+Claude Code Proxy supports equivalent configuration surfaces. The generated parity table in `docs/feature-parity.md` is the authoritative list of manifest settings reachable from each surface.
 
 ## The Four Surfaces
 
@@ -35,7 +35,9 @@ python start_proxy.py --save-config ~/my-proxy.json
 
 ---
 
-## All 62 Settings
+## Common Settings
+
+For the complete generated list, see `docs/feature-parity.md`.
 
 ### Server (5 settings)
 
@@ -60,6 +62,20 @@ python start_proxy.py --save-config ~/my-proxy.json
 | `MODEL_CASCADE` | `--model-cascade` | `true` | Enable cascade fallback |
 | `MODEL_CASCADE_DAILY_LIMIT` | `--cascade-daily-limit` | `0` | Max cascade per model/day (0=∞) |
 | `OPENROUTER_FALLBACK_MODELS` | `--or-fallbacks` | — | Dynamic OR fallback pool |
+
+### OpenRouter Fusion (7 settings)
+
+| Setting | CLI Flag | Default | Description |
+|---------|----------|---------|-------------|
+| `FUSION_PROFILE` | `--fusion-profile` | `free` | Default Fusion profile |
+| `FUSION_ALIASES` | `--fusion-aliases` | `fusion,ccp/fusion,openrouter/fusion` | Aliases that trigger Fusion |
+| `FUSION_FREE_ANALYSIS_MODELS` | `--fusion-free-analysis-models` | `openrouter/free,openrouter/free,openrouter/free` | Panel models for the free profile |
+| `FUSION_FREE_MODEL` | `--fusion-free-model` | `openrouter/free` | Judge/final model for the free profile |
+| `FUSION_FREE_PRESET` | `--fusion-free-preset` | — | Optional OpenRouter preset |
+| `FUSION_FREE_FORCE` | `--fusion-free-force` | `true` | Force Fusion when no other tools compete |
+| `FUSION_PROFILES` | `--fusion-profiles` | — | JSON map of named Fusion profiles |
+
+Use `model: "fusion"` or `model: "fusion/<profile>"` for per-request Fusion. Use `ccp-fusion <profile> <prompt>` for one-shot prompts from shell-capable agents.
 
 ### Reasoning (5 settings)
 
@@ -207,7 +223,7 @@ Menu categories (19 total):
 
 Open `http://localhost:8082/settings` in a browser.
 
-All 62 settings are rendered dynamically from `/api/settings`. Changes are queued locally and committed on **Save**. The UI shows:
+Manifest settings are rendered dynamically from `/api/settings`. Changes are queued locally and committed on **Save**. The UI shows:
 
 - 15 sections including Reliability Score and Circuit Breaker live state
 - Toggle switches for boolean settings

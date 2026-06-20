@@ -29,9 +29,9 @@
       "type": "http",
       "port": 8317,
       "health_path": "/v1/models",
-      "enabled": true,
+      "enabled": false,
       "order": 2,
-      "service_cmd": "/home/cheta/code/cliproxyapi/cli-proxy-api --config /home/cheta/code/cliproxyapi/config.yaml",
+      "service_cmd": "$HOME/code/cliproxyapi/cli-proxy-api-plus --config $HOME/code/cliproxyapi/config.yaml",
       "url": "http://127.0.0.1:8317/v1"
     }
   ],
@@ -44,8 +44,8 @@
     },
     "background": {
       "model": "nvidia/nemotron-nano-9b-v2:free",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "base_url": "",
+      "api_key": "",
       "assignment_id": ""
     },
     "think": {
@@ -56,8 +56,8 @@
     },
     "long_context": {
       "model": "nvidia/nemotron-3-super-120b-a12b:free",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "base_url": "",
+      "api_key": "",
       "assignment_id": ""
     },
     "long_context_threshold": 60000,
@@ -69,8 +69,8 @@
     },
     "image": {
       "model": "qwen/qwen2.5-vl-72b-instruct",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "base_url": "",
+      "api_key": "",
       "assignment_id": ""
     },
     "custom_router_path": "",
@@ -81,51 +81,44 @@
     {
       "id": "big",
       "kind": "tier",
-      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "provider": "openrouter",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "provider": "",
+      "base_url": "",
+      "api_key": "",
       "enabled": true,
       "cascade": [
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "nex-agi/nex-n2-pro:free",
-        "openai/gpt-oss-120b:free"
+        "google/gemma-4-26b-a4b-it:free"
       ]
     },
     {
       "id": "middle",
       "kind": "tier",
-      "model": "nvidia/nemotron-3-super-120b-a12b:free",
-      "provider": "openrouter",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "model": "google/gemma-4-26b-a4b-it:free",
+      "provider": "",
+      "base_url": "",
+      "api_key": "",
       "enabled": true,
       "cascade": [
-        "z-ai/glm-4.5-air:free",
-        "openai/gpt-oss-120b:free"
+        "liquid/lfm-2.5-1.2b-thinking:free"
       ]
     },
     {
       "id": "small",
       "kind": "tier",
-      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-      "provider": "openrouter",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "model": "liquid/lfm-2.5-1.2b-thinking:free",
+      "provider": "",
+      "base_url": "",
+      "api_key": "",
       "enabled": true,
-      "cascade": [
-        "openai/gpt-oss-120b:free",
-        "inclusionai/ling-2.6-flash:free",
-        "nvidia/nemotron-3-super-120b-a12b:free"
-      ]
+      "cascade": []
     },
     {
       "id": "background",
       "kind": "slot",
       "model": "nvidia/nemotron-nano-9b-v2:free",
-      "provider": "openrouter",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "provider": "",
+      "base_url": "",
+      "api_key": "",
       "enabled": true,
       "cascade": []
     },
@@ -133,9 +126,9 @@
       "id": "long_context",
       "kind": "slot",
       "model": "nvidia/nemotron-3-super-120b-a12b:free",
-      "provider": "openrouter",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "provider": "",
+      "base_url": "",
+      "api_key": "",
       "enabled": true,
       "cascade": []
     },
@@ -143,77 +136,14 @@
       "id": "image",
       "kind": "slot",
       "model": "qwen/qwen2.5-vl-72b-instruct",
-      "provider": "openrouter",
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "${OPENROUTER_API_KEY}",
+      "provider": "",
+      "base_url": "",
+      "api_key": "",
       "enabled": true,
       "cascade": []
     }
   ],
   "identifier_mappings": [
-    {
-      "incoming_identifier": "claude-opus-4-20250514",
-      "assignment_id": "big",
-      "enabled": true,
-      "priority": 0,
-      "notes": "Auto-route Claude opus models to BIG tier"
-    },
-    {
-      "incoming_identifier": "claude-opus-4",
-      "assignment_id": "big",
-      "enabled": true,
-      "priority": 0,
-      "notes": "Auto-route Claude opus models to BIG tier"
-    },
-    {
-      "incoming_identifier": "opus",
-      "assignment_id": "big",
-      "enabled": true,
-      "priority": 0,
-      "notes": "Auto-route opus aliases to BIG tier"
-    },
-    {
-      "incoming_identifier": "claude-sonnet-4-20250514",
-      "assignment_id": "middle",
-      "enabled": true,
-      "priority": 0,
-      "notes": "Auto-route Claude sonnet models to MIDDLE tier"
-    },
-    {
-      "incoming_identifier": "claude-sonnet-4",
-      "assignment_id": "middle",
-      "enabled": true,
-      "priority": 0,
-      "notes": "Auto-route Claude sonnet models to MIDDLE tier"
-    },
-    {
-      "incoming_identifier": "sonnet",
-      "assignment_id": "middle",
-      "enabled": true,
-      "priority": 0,
-      "notes": "Auto-route sonnet aliases to MIDDLE tier"
-    },
-    {
-      "incoming_identifier": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "assignment_id": "big",
-      "enabled": true,
-      "priority": 0,
-      "notes": "Auto-route default free BIG model to BIG tier"
-    },
-    {
-      "incoming_identifier": "nvidia/nemotron-3-super-120b-a12b:free",
-      "assignment_id": "middle",
-      "enabled": true,
-      "priority": 0,
-      "notes": "Auto-route default free MIDDLE model to MIDDLE tier"
-    },
-    {
-      "incoming_identifier": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-      "assignment_id": "small",
-      "enabled": true,
-      "priority": 0,
-      "notes": "Auto-route default free SMALL model to SMALL tier"
-    },
     {
       "incoming_identifier": "gemini-3-flash",
       "assignment_id": "small",

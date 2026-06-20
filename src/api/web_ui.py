@@ -123,7 +123,7 @@ class ProfileCreate(BaseModel):
 async def get_config():
     """
     Get current configuration — returns all settings for the web UI.
-    Now includes all 62 manifest settings plus legacy fields for backward compatibility.
+    Now includes all manifest settings plus legacy fields for backward compatibility.
     """
     try:
         from src.core.config_manifest import as_config_response as _manifest_response

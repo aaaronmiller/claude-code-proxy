@@ -40,6 +40,14 @@ def clean_env(monkeypatch):
         "HOST",
         "PORT",
         "LOG_LEVEL",
+        "FUSION_PROFILE",
+        "FUSION_ALIASES",
+        "FUSION_PROFILES",
+        "FUSION_FREE_ANALYSIS_MODELS",
+        "FUSION_FREE_MODEL",
+        "FUSION_FREE_PRESET",
+        "FUSION_FREE_FORCE",
+        "FUSION_FREE_ENABLED",
     ]
 
     for var in env_vars_to_clear:

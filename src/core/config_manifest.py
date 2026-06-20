@@ -98,6 +98,33 @@ SETTINGS: List[Setting] = [
             cli_flag="--or-fallbacks", tui_widget="textarea", web_component="textarea"),
 
     # ════════════════════════════════════════════════════════════════════════
+    # GROUP: fusion
+    # ════════════════════════════════════════════════════════════════════════
+    Setting("FUSION_PROFILE", str, "free",
+            "Default OpenRouter Fusion profile name", "fusion",
+            cli_flag="--fusion-profile", tui_widget="input", web_component="input"),
+    Setting("FUSION_ALIASES", str, "fusion,ccp/fusion,openrouter/fusion",
+            "Model aliases that trigger OpenRouter Fusion", "fusion",
+            cli_flag="--fusion-aliases", tui_widget="textarea", web_component="textarea"),
+    Setting("FUSION_FREE_ANALYSIS_MODELS", str,
+            "openrouter/free,openrouter/free,openrouter/free",
+            "Free Fusion profile panel models", "fusion",
+            cli_flag="--fusion-free-analysis-models", tui_widget="textarea",
+            web_component="textarea"),
+    Setting("FUSION_FREE_MODEL", str, "openrouter/free",
+            "Free Fusion profile judge/final model", "fusion",
+            cli_flag="--fusion-free-model", tui_widget="input", web_component="input"),
+    Setting("FUSION_FREE_PRESET", str, "",
+            "Optional OpenRouter Fusion preset for the free profile", "fusion",
+            cli_flag="--fusion-free-preset", tui_widget="input", web_component="input"),
+    Setting("FUSION_FREE_FORCE", bool, True,
+            "Force Fusion invocation for one-shot requests when no other tools compete", "fusion",
+            cli_flag="--fusion-free-force", tui_widget="toggle", web_component="switch"),
+    Setting("FUSION_PROFILES", str, "",
+            "JSON map of named Fusion profiles", "fusion",
+            cli_flag="--fusion-profiles", tui_widget="textarea", web_component="textarea"),
+
+    # ════════════════════════════════════════════════════════════════════════
     # GROUP: router_slots
     # ════════════════════════════════════════════════════════════════════════
     Setting("ROUTER_BACKGROUND", str, "", "Model for background/async tasks", "router_slots",
@@ -398,6 +425,7 @@ def as_config_response() -> dict:
 GROUP_LABELS = {
     "server": "Server",
     "models": "Model Tiers",
+    "fusion": "OpenRouter Fusion",
     "router_slots": "Router Slots",
     "reasoning": "Reasoning & Thinking",
     "budget": "Budget & Cost Controls",

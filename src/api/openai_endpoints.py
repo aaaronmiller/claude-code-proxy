@@ -34,6 +34,11 @@ from src.services.conversion.response_converter import (
     normalize_tool_arguments,
 )
 from src.services.conversion.request_converter import _normalize_system_role
+from src.core.fusion import (
+    apply_fusion_to_openai_request,
+    openrouter_api_key,
+    openrouter_base_url,
+)
 from src.core.constants import Constants
 import logging
 
@@ -456,6 +461,23 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
         if openai_request.get("tools"):
             openai_request["tools"] = normalize_openai_tools_for_provider(
                 openai_request["tools"], provider, source_ide
+            )
+
+        openai_request, _fusion_profile = apply_fusion_to_openai_request(
+            openai_request
+        )
+        if _fusion_profile is not None:
+            from openai import AsyncOpenAI as _AsyncOpenAI
+
+            base_url = openrouter_base_url(config)
+            endpoint = base_url
+            provider = "openrouter"
+            api_key = openrouter_api_key(config, api_key) or api_key
+            client = _AsyncOpenAI(api_key=api_key, base_url=base_url)
+            routed_model = openai_request["model"]
+            logger.info(
+                f"[{request_id}] fusion profile={_fusion_profile.name} "
+                f"panel={len(_fusion_profile.analysis_models)} judge={_fusion_profile.model}"
             )
 
         # ── Profile overrides (Option C-slim) ────────────────────────────────

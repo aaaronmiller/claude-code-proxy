@@ -55,6 +55,7 @@ Issues = "https://github.com/holegots/claude-code-proxy/issues"
 
 [project.scripts]
 claude-code-proxy = "src.main:main"
+ccp-fusion = "src.cli.fusion:main"
 
 [dependency-groups]
 dev = [

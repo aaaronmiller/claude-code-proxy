@@ -10,10 +10,11 @@
 #   TIER  : (optional) d=deepseek n=nemotron k=kimi q=qwen-next m=best f=free 0-9=named profile
 #
 # Common flags (normalised across every tool):
-#   -s, --session <id>   resume/continue a specific session
-#   -m, --model   <id>   override the main model (beats TIER)
-#       --profile <name> override proxy profile path (/p/<name>)
-#   -p, --prompt  <txt>  non-interactive prompt
+#   -s, --session <id>    resume/continue a specific session
+#   -m, --model   <id>    override the main model (beats TIER)
+#   --profile    <name>   proxy profile name (overrides ROUTE's default, e.g. pi-glm)
+#   -p, --prompt  <txt>   non-interactive prompt
+#   --no-cg               disable crash-guard session tracking (default: enabled)
 #   everything else is passed straight through to the underlying CLI.
 #
 # Per-tool flags are baked in (verified against each CLI's --help). Model/route
@@ -73,13 +74,14 @@ CODE="$1"; shift
 AGENT="${CODE:0:1}"; MODE="${CODE:1:1}"; ROUTE="${CODE:2:1}"; TIER="${CODE:3:1}"
 
 # ── Parse normalised flags; collect the rest as passthrough ────────────────────
-SESSION=""; MODEL=""; PROMPT=""; PROFILE_OVERRIDE=""; EXTRA=()
+SESSION=""; MODEL=""; PROMPT=""; CRASH_GUARD=1; PROXY_PROFILE=""; EXTRA=()
 while [ $# -gt 0 ]; do
     case "$1" in
         -s|--session) SESSION="${2:-}"; shift 2 ;;
         -m|--model)   MODEL="${2:-}";   shift 2 ;;
-        --profile)    PROFILE_OVERRIDE="${2:-}"; shift 2 ;;
         -p|--prompt)  PROMPT="${2:-}";  shift 2 ;;
+        --profile)    PROXY_PROFILE="${2:-}"; shift 2 ;;
+        --no-cg)      CRASH_GUARD=0 ;;
         *)            EXTRA+=("$1");    shift ;;
     esac
 done
@@ -118,16 +120,41 @@ if [ "$ROUTE" = "b" ]; then
     esac
 fi
 
-if [ -n "$PROFILE_OVERRIDE" ]; then
-    PROFILE="$PROFILE_OVERRIDE"
+# ── --profile flag overrides the resolved profile name (max flexibility, no hardcoding) ──
+if [ -n "$PROXY_PROFILE" ]; then
+    PROFILE="$PROXY_PROFILE"
+    note "profile override: → $PROFILE"
 fi
 
 # ── Health check + auto-start for proxy/bypass routes ──────────────────────────
 _healthy() { curl -sf --max-time 1 "$1" >/dev/null 2>&1; }
 if [ "$ROUTE" != "d" ] && [ "$AUTO_START" = 1 ]; then
     if ! _healthy "$PROXY_HEALTH" || ! _healthy "$HEADROOM_HEALTH"; then
-        note "proxy chain down — starting it (proxies up)…"
-        PROXIES_NO_ATTACH=1 proxies up >/dev/null 2>&1 || warn "proxies up failed — continuing anyway"
+        note "proxy chain down — starting in new terminal…"
+        # Open a Ghostty window showing proxy startup + tmux panes
+        # The window stays open so you can monitor proxy output during dev work.
+        # Ctrl+B D to detach tmux; close the window when done.
+        if command -v ghostty &>/dev/null; then
+            ghostty --title=proxies -e bash -c "proxies up; exec bash" &
+        elif command -v alacritty &>/dev/null; then
+            alacritty --title proxies -e bash -c "proxies up; exec bash" &
+        else
+            # fallback: start silent in background
+            PROXIES_NO_ATTACH=1 proxies up >/dev/null 2>&1 &
+        fi
+        note "waiting for proxies to become healthy…"
+        local _px_wait=0
+        while [ $_px_wait -lt 60 ]; do
+            if _healthy "$PROXY_HEALTH" && _healthy "$HEADROOM_HEALTH"; then
+                note "proxies ready"
+                break
+            fi
+            sleep 2
+            _px_wait=$((_px_wait + 2))
+        done
+        if ! _healthy "$PROXY_HEALTH" || ! _healthy "$HEADROOM_HEALTH"; then
+            warn "proxies not healthy after 60s — continuing anyway (check the new terminal)"
+        fi
     fi
 fi
 
@@ -219,4 +246,10 @@ esac
 [ ${#EXTRA[@]} -gt 0 ] && CMD+=("${EXTRA[@]}")
 
 note "→ ${ENVV[*]:-(direct)} ${CMD[*]}"
-exec env "${ENVV[@]}" "${CMD[@]}"
+
+if [ "$CRASH_GUARD" = 1 ] && command -v cg_run >/dev/null 2>&1; then
+    # Use AGENT_NAME as the crash-guard key for proper session restore mapping
+    exec env "${ENVV[@]}" cg_run "$AGENT_NAME" -- "${CMD[@]}"
+else
+    exec env "${ENVV[@]}" "${CMD[@]}"
+fi

@@ -1027,7 +1027,7 @@ function proxySettings() {
     toast: { show: false, message: '', type: 'success' },
 
     // Sections shown in settings groups (excluding reliability/breakers, shown separately)
-    displayGroups: ['models', 'reasoning', 'budget', 'router_slots', 'compression', 'local_gpu', 'circuit_breaker', 'toolcalls', 'server', 'auth', 'logging', 'usage_tracking', 'watchdog'],
+    displayGroups: ['models', 'fusion', 'reasoning', 'budget', 'router_slots', 'compression', 'local_gpu', 'circuit_breaker', 'toolcalls', 'server', 'auth', 'logging', 'usage_tracking', 'watchdog'],
 
     routingProfiles: { loaded: false, profiles: [], unprefixed_count: 0 },
 
@@ -1543,7 +1543,7 @@ function proxySettings() {
 
     getGroupIcon(groupId) {
       const icons = {
-        models: '🤖', budget: '💰', router_slots: '🗺️', compression: '🗜️',
+        models: '🤖', fusion: '🧬', budget: '💰', router_slots: '🗺️', compression: '🗜️',
         local_gpu: '🖥️', circuit_breaker: '🔄', server: '🌐', auth: '🔑',
         logging: '📋', toolcalls: '🔧', usage_tracking: '📈', watchdog: '🐕',
         reasoning: '🧠',
