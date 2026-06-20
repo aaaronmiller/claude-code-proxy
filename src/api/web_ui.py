@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 import httpx
 
@@ -117,6 +117,62 @@ class ProfileCreate(BaseModel):
 
     name: str
     config: Dict[str, Any]
+
+
+@router.get("/api/config/schema")
+async def get_config_schema():
+    """Manifest metadata (groups + per-setting render hints) for the generic settings UIs.
+
+    Pairs with GET /api/config (values) and POST /api/config (save). Secret defaults masked.
+    """
+    from src.core.config_manifest import as_schema_response
+
+    return as_schema_response()
+
+
+@router.post("/api/config/manifest")
+async def update_config_manifest(payload: dict = Body(...)):
+    """Generic manifest-driven save used by the web + TUI settings forms.
+
+    Accepts {key|env_var: value} for any registered manifest setting, validates type/choices,
+    persists to .env (the canonical path via update_env_values), and hot-applies to os.environ.
+    Secret values equal to the mask ("***") are treated as unchanged and skipped. Unknown or
+    invalid keys are reported in `rejected`, never silently dropped.
+    """
+    from src.core.config_manifest import get_by_env_var
+
+    updates: dict[str, str] = {}
+    rejected: dict[str, str] = {}
+    for key, value in (payload or {}).items():
+        s = get_by_env_var(str(key).upper())
+        if s is None:
+            rejected[key] = "unknown setting"
+            continue
+        if s.secret and value in ("***", None):
+            continue  # unchanged secret — do not overwrite with the mask
+        if s.choices and str(value) not in [str(c) for c in s.choices]:
+            rejected[key] = f"not in choices {s.choices}"
+            continue
+        try:
+            if s.type is bool:
+                sval = "true" if value in (True, "true", "True", "1", 1, "yes") else "false"
+            elif s.type is int:
+                sval = str(int(value))
+            elif s.type is float:
+                sval = str(float(value))
+            else:
+                sval = str(value)
+        except (ValueError, TypeError):
+            rejected[key] = "type error"
+            continue
+        updates[s.env_var] = sval
+
+    if updates:
+        update_env_values(updates, verbose=False)
+        for k, v in updates.items():
+            os.environ[k] = v
+
+    return {"status": "success", "saved": sorted(updates), "rejected": rejected}
 
 
 @router.get("/api/config")

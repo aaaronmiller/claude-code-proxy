@@ -28,6 +28,56 @@ export interface IdentifierMapping {
 
 const BASE = "http://127.0.0.1:8082";
 
+// ── Manifest-driven settings (the 64-setting config surface) ──────────────────
+
+export interface ConfigSetting {
+	key: string;
+	env_var: string;
+	type: "str" | "int" | "float" | "bool";
+	default: unknown;
+	description: string;
+	group: string;
+	cli_flag: string | null;
+	choices: string[] | null;
+	tui_widget: string;
+	web_component: "input" | "switch" | "select" | "number" | "textarea" | "slider";
+	secret: boolean;
+	units: string | null;
+}
+
+export interface ConfigGroup {
+	name: string;
+	label: string;
+	settings: ConfigSetting[];
+}
+
+/** GET /api/config/schema — manifest metadata (groups + render hints). */
+export async function getConfigSchema(): Promise<{ groups: ConfigGroup[] }> {
+	const res = await fetch(`${BASE}/api/config/schema`);
+	if (!res.ok) throw new Error(`getConfigSchema: ${res.status} ${res.statusText}`);
+	return res.json();
+}
+
+/** GET /api/config — current values keyed by lowercased env var. */
+export async function getConfigValues(): Promise<Record<string, unknown>> {
+	const res = await fetch(`${BASE}/api/config`);
+	if (!res.ok) throw new Error(`getConfigValues: ${res.status} ${res.statusText}`);
+	return res.json();
+}
+
+/** POST /api/config/manifest — generic save of any manifest setting(s). */
+export async function saveSettings(
+	updates: Record<string, unknown>,
+): Promise<{ status: string; saved: string[]; rejected: Record<string, string> }> {
+	const res = await fetch(`${BASE}/api/config/manifest`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(updates),
+	});
+	if (!res.ok) throw new Error(`saveSettings: ${res.status} ${res.statusText}`);
+	return res.json();
+}
+
 /** GET /api/assignments */
 export async function listAssignments(): Promise<{ assignments: Assignment[] }> {
 	const res = await fetch(`${BASE}/api/assignments`);

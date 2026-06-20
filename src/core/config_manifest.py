@@ -437,4 +437,46 @@ GROUP_LABELS = {
     "logging": "Logging",
     "watchdog": "Watchdog",
     "usage_tracking": "Usage Tracking",
+    "allocator": "Quota Allocator (F18)",
 }
+
+
+def as_schema_response() -> dict:
+    """Manifest metadata for the generic settings UIs (web + TUI).
+
+    Values come from /api/config (`as_config_response`); this is the static shape — how to render
+    each setting and how to group it. Secret *defaults* are never emitted. Group order follows
+    definition order in SETTINGS.
+    """
+    groups: dict = {}
+    order: list = []
+    for s in SETTINGS:
+        if s.group not in groups:
+            groups[s.group] = []
+            order.append(s.group)
+        groups[s.group].append(
+            {
+                "key": s.env_var.lower(),
+                "env_var": s.env_var,
+                "type": s.type.__name__,
+                "default": None if s.secret else s.default,
+                "description": s.description,
+                "group": s.group,
+                "cli_flag": s.cli_flag,
+                "choices": s.choices,
+                "tui_widget": s.tui_widget,
+                "web_component": s.web_component,
+                "secret": bool(s.secret),
+                "units": s.units,
+            }
+        )
+    return {
+        "groups": [
+            {
+                "name": g,
+                "label": GROUP_LABELS.get(g, g.replace("_", " ").title()),
+                "settings": groups[g],
+            }
+            for g in order
+        ]
+    }
