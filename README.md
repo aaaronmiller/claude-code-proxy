@@ -4,6 +4,8 @@
 
 ### Run 8 coding agents through one gateway. Cheaper context, automatic failover, one launcher.
 
+![Architecture](docs/screenshot.png)
+
 [![GitHub stars](https://img.shields.io/github/stars/aaaronmiller/claude-code-proxy?style=flat-square)](https://github.com/aaaronmiller/claude-code-proxy)
 [![License](https://img.shields.io/github/license/aaaronmiller/claude-code-proxy?style=flat-square)](MIT)
 
