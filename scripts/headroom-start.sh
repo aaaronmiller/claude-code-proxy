@@ -144,10 +144,17 @@ print(f"  preload: backend={getattr(kompress, '_kompress_backend', None)} model=
 PY
 fi
 
+# Anthropic upstream redirect. headroom 0.5.7's `proxy` CLI dropped --anthropic-api-url
+# (anthropic upstream was hardcoded to api.anthropic.com). We patched the installed
+# package's server.py to honor ANTHROPIC_TARGET_API_URL (mirroring its OPENAI_TARGET_API_URL).
+# Default: chain anthropic traffic through the upstream, restoring prior behaviour.
+# To send anthropic straight to api.anthropic.com, run with HEADROOM_ANTHROPIC_UPSTREAM="".
+export ANTHROPIC_TARGET_API_URL="${HEADROOM_ANTHROPIC_UPSTREAM-$HEADROOM_UPSTREAM_URL}"
+
 exec "$HEADROOM_BIN" proxy \
     --host "$HEADROOM_HOST" \
     --port "$HEADROOM_PORT" \
     --mode "$HEADROOM_MODE" \
-    --anthropic-api-url "$HEADROOM_UPSTREAM_URL" \
+    --openai-api-url "$HEADROOM_UPSTREAM_URL" \
     --log-file "$HEADROOM_LOG_FILE" \
     "$@"
