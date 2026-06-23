@@ -278,6 +278,20 @@ class UsageTracker:
         except sqlite3.OperationalError:
             pass  # column already exists, expected on fresh DBs
 
+        # Migration: cache-token + transformation visibility (additive; no-op if present).
+        # cached_tokens: prompt-cache read tokens (cost-weighted ~0.1x); transformed:
+        # 1 if a protocol conversion (e.g. Claude<->OpenAI) occurred; transform_type:
+        # human-readable conversion label e.g. "claude->openai-><provider>".
+        for _ddl in (
+            "ALTER TABLE api_requests ADD COLUMN cached_tokens INTEGER DEFAULT 0",
+            "ALTER TABLE api_requests ADD COLUMN transformed INTEGER DEFAULT 0",
+            "ALTER TABLE api_requests ADD COLUMN transform_type TEXT",
+        ):
+            try:
+                cursor.execute(_ddl)
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
         # Model usage summary (aggregated view)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS model_usage_summary (
@@ -484,6 +498,9 @@ class UsageTracker:
         resolved_model: Optional[str] = None,
         # Profile routing (Option C-slim Phase 3)
         profile: Optional[str] = None,
+        # Transformation + cache visibility
+        transformed: bool = False,
+        transform_type: Optional[str] = None,
     ) -> bool:
         """
         Log an API request.
@@ -585,6 +602,27 @@ class UsageTracker:
                 """,
                     (status, error_message, request_id, attempt_index),
                 )
+
+            # Persist cache-token + transformation fields additively, so a
+            # placeholder miscount in the main INSERT can never break logging and
+            # older DBs missing these columns degrade gracefully.
+            try:
+                cursor.execute(
+                    """
+                    UPDATE api_requests SET
+                        cached_tokens = ?, transformed = ?, transform_type = ?
+                    WHERE request_id = ? AND attempt_index = ?
+                """,
+                    (
+                        int(cached_tokens or 0),
+                        1 if transformed else 0,
+                        transform_type,
+                        request_id,
+                        attempt_index,
+                    ),
+                )
+            except sqlite3.OperationalError:
+                pass  # very old schema without these columns
 
             # Update model summary
             cursor.execute(

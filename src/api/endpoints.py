@@ -1269,6 +1269,9 @@ async def create_message(
                                 duration_ms=duration_ms,
                                 status="error" if error else "success",
                                 error_message=str(error) if error else None,
+                                cached_tokens=stream_usage.get("cache_read_input_tokens", 0) or 0,
+                                transformed=True,
+                                transform_type=f"claude->openai/{routed_model.split('/')[0] if '/' in routed_model else 'unknown'}",
                                 profile=_cpn(),
                             )
                         except Exception as ut_e:
@@ -1585,6 +1588,12 @@ async def create_message(
                     if "estimated_cost" in locals()
                     else 0.0,
                     status="success",
+                    cached_tokens=usage.get(
+                        "cache_read_input_tokens", usage.get("cached_tokens", 0)
+                    )
+                    or 0,
+                    transformed=True,
+                    transform_type=f"claude->openai/{routed_model.split('/')[0] if '/' in routed_model else 'unknown'}",
                     profile=__import__(
                         "src.core.profiles", fromlist=["current_profile_name"]
                     ).current_profile_name(),
@@ -1691,6 +1700,8 @@ async def create_message(
                 duration_ms=duration_ms,
                 status="error",
                 error_message=str(e.detail),
+                transformed=True,
+                transform_type=f"claude->openai/{routed_model.split('/')[0] if '/' in routed_model else 'unknown'}",
                 profile=_cpn(),
             )
         except Exception as ut_e:
@@ -1735,6 +1746,8 @@ async def create_message(
                 duration_ms=duration_ms,
                 status="error",
                 error_message=str(error_message),
+                transformed=True,
+                transform_type=f"claude->openai/{routed_model.split('/')[0] if '/' in routed_model else 'unknown'}",
                 profile=_cpn(),
             )
         except Exception as ut_e:
