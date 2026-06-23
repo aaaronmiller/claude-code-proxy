@@ -1,26 +1,18 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════════════════
-# xx — unified agent launcher
+# xx — unified LLM launcher.  Grammar:  xx <agent><run>[route][model] [opts] [prompt]
 #
-#   xx <AGENT><MODE><ROUTE>[<TIER>] [extra args...]
+# CANONICAL SOURCE: claude-code-proxy/scripts/xx
+#   ~/.local/bin/xx is a SYMLINK to this file, so edits here are live immediately.
 #
-#   AGENT : c=claude  h=hermes  x=codex  q=qwen  p=pi  o=opencode  a=ante  g=antigravity
-#   MODE  : i=init     c=continue  n=non-interactive  s=session  r=resume
-#   ROUTE : p=proxy    b=bypass    d=debug (direct, no proxy)
-#   TIER  : (optional) d=deepseek n=nemotron k=kimi q=qwen-next m=best f=free 0-9=named profile
-#
-# Common flags (normalised across every tool):
-#   -s, --session <id>    resume/continue a specific session
-#   -m, --model   <id>    override the main model (beats TIER)
-#   --profile    <name>   proxy profile name (overrides ROUTE's default, e.g. pi-glm)
-#   -p, --prompt  <txt>   non-interactive prompt
-#   --no-cg               disable crash-guard session tracking (default: enabled)
-#   everything else is passed straight through to the underlying CLI.
-#
-# Per-tool flags are baked in (verified against each CLI's --help). Model/route
-# tables live in ~/.xx/config.json — edit there, not here.
+# CODE = <agent><run>[route][model]   (route defaults to proxy; model only with proxy)
+#   agent : c claude  h hermes  x codex  o opencode  q qwen  p pi  a ante  g antigravity
+#   run   : i init  c continue  r resume      (lowercase = interactive)
+#           I init  C continue  R resume      (UPPERCASE = headless, needs a prompt)
+#   route : p proxy(default,+Headroom/RTK+reroute)  b bypass(native model)  d direct(raw)
+#   model : m best  f free  t tool  r reason  v verify  s fast  0-9 profile  (proxy only)
+# Model/route/selector tables live in ~/.xx/config.json.
 # ═══════════════════════════════════════════════════════════════════════════════
-
 set -euo pipefail
 
 XX_CONFIG="${XX_CONFIG:-$HOME/.xx/config.json}"
@@ -29,227 +21,273 @@ PROXY_HEALTH="http://127.0.0.1:8082/health"
 HEADROOM_HEALTH="http://127.0.0.1:8787/health"
 AUTO_START=1
 
-RED='\033[0;31m'; CYAN='\033[0;36m'; YELLOW='\033[0;33m'; NC='\033[0m'
+RED=$'\033[0;31m'; CYAN=$'\033[0;36m'; YEL=$'\033[0;33m'; GRN=$'\033[0;32m'; DIM=$'\033[2m'; NC=$'\033[0m'
 die()  { echo -e "${RED}xx:${NC} $*" >&2; exit 1; }
 note() { echo -e "${CYAN}xx:${NC} $*" >&2; }
-warn() { echo -e "${YELLOW}xx:${NC} $*" >&2; }
+warn() { echo -e "${YEL}xx:${NC} $*" >&2; }
 
+# ── Single-screen, multi-column help ─────────────────────────────────────────
 usage() {
-    sed -n '3,18p' "$0" | sed 's/^# \{0,1\}//'
-    exit "${1:-0}"
+cat <<H
+${CYAN}xx${NC} — LLM launcher   ${DIM}xx <code> [opts] [prompt]  ·  xx <command>${NC}
+${DIM}code = <agent><run>[route][model]   route defaults to proxy${NC}
+
+${GRN}AGENT${NC}          ${GRN}RUN${NC} ${DIM}(lower=interactive UPPER=headless)${NC}   ${GRN}ROUTE${NC}        ${GRN}MODEL${NC} ${DIM}(proxy only)${NC}
+ c claude        i/I init       r/R resume          p proxy*      m best    r reason
+ h hermes        c/C continue                       b bypass      f free    v verify
+ x codex         ${DIM}o${NC} opencode  ${DIM}q${NC} qwen              d direct      t tool    s fast
+ p pi   a ante   g antigravity                                    0-9 profile slot
+
+${GRN}OPTS${NC}  -s session  -P provider  -m model  -p prompt  --stdin  -n dry-run  -v  --no-cg  -h
+${GRN}CMDS${NC}  doctor  models  sessions
+${GRN}RULES${NC} route=proxy default · model needs proxy(not b/d) · headless(UPPER) needs a prompt
+${GRN}EX${NC}  xx ci · xx cc · xx cI "task" · xx cIf -P openrouter "task" · xx cib · xx cCd "task"
+H
+exit "${1:-0}"
 }
 
-# ── Read a value out of ~/.xx/config.json (best-effort, no jq dependency) ──────
+# ── config reader (no jq dep) ────────────────────────────────────────────────
 _cfg() {
-    # _cfg <python-expression-on-`d`>  -> prints result or empty
     [ -f "$XX_CONFIG" ] || return 0
     python3 - "$XX_CONFIG" "$1" <<'PYEOF' 2>/dev/null || true
 import json, sys
-try:
-    d = json.load(open(sys.argv[1]))
-except Exception:
-    sys.exit(0)
-try:
-    v = eval(sys.argv[2], {"d": d})
-except Exception:
-    v = None
-if v is not None:
-    print(v)
+try: d = json.load(open(sys.argv[1]))
+except Exception: sys.exit(0)
+try: v = eval(sys.argv[2], {"d": d})
+except Exception: v = None
+if v is not None: print(v)
 PYEOF
 }
+_healthy() { curl -sf --max-time 1 "$1" >/dev/null 2>&1; }
 
-# Load proxy settings from config if present (env/defaults otherwise)
-_v=$(_cfg "d['proxy']['base_url']");      [ -n "$_v" ] && PROXY_BASE="$_v"
-_v=$(_cfg "d['proxy']['health_url']");    [ -n "$_v" ] && PROXY_HEALTH="$_v"
+# Load proxy settings from config (env/defaults otherwise)
+_v=$(_cfg "d['proxy']['base_url']");            [ -n "$_v" ] && PROXY_BASE="$_v"
+_v=$(_cfg "d['proxy']['health_url']");          [ -n "$_v" ] && PROXY_HEALTH="$_v"
 _v=$(_cfg "d['proxy']['headroom_health_url']"); [ -n "$_v" ] && HEADROOM_HEALTH="$_v"
-_v=$(_cfg "d['proxy']['auto_start']");    [ "$_v" = "False" ] && AUTO_START=0
+_v=$(_cfg "d['proxy']['auto_start']");          [ "$_v" = "False" ] && AUTO_START=0
 
+# ── model-scan resolver (config selectors first, then live proxy, else warn) ──
+_scan() { # <kind> <provider>
+    local kind="$1" prov="${2:-}" m
+    m="$(_cfg "d['selectors'].get('$kind')")"
+    [ -n "$m" ] && { echo "$m"; return; }
+    if _healthy "$PROXY_HEALTH"; then
+        m="$(curl -sf --max-time 3 "$PROXY_BASE/model-scan/pick?kind=$kind${prov:+&provider=$prov}" 2>/dev/null \
+            | python3 -c 'import sys,json;print(json.load(sys.stdin).get("model",""))' 2>/dev/null || true)"
+    fi
+    echo "$m"
+}
+resolve_model() { # <code> <provider>
+    local code="$1" prov="${2:-}" m=""
+    case "$code" in
+        [0-9]) m="$(_cfg "d['profiles'].get('$code')")" ;;
+        m) m="$(_scan best "$prov")" ;;     f) m="$(_scan free "$prov")" ;;
+        t) m="$(_scan tool "$prov")" ;;     r) m="$(_scan reasoning "$prov")" ;;
+        v) m="$(_scan verifier "$prov")" ;; s) m="$(_scan fast "$prov")" ;;
+    esac
+    [ -n "$m" ] || warn "model selector '$code' unresolved — using config/proxy default"
+    echo "$m"
+}
+
+# ── subcommands ──────────────────────────────────────────────────────────────
+cmd_doctor() {
+    echo -e "${CYAN}xx doctor${NC}"
+    _healthy "$PROXY_HEALTH"    && echo -e "  proxy 8082    ${GRN}UP${NC}"   || echo -e "  proxy 8082    ${RED}DOWN${NC} ${DIM}(proxies up)${NC}"
+    _healthy "$HEADROOM_HEALTH" && echo -e "  headroom 8787 ${GRN}UP${NC}"   || echo -e "  headroom 8787 ${RED}DOWN${NC}"
+    command -v rtk    >/dev/null 2>&1 && echo -e "  rtk           ${GRN}ok${NC}" || echo -e "  rtk           ${YEL}missing${NC}"
+    command -v cg_run >/dev/null 2>&1 && echo -e "  crash-guard   ${GRN}ok${NC}" || echo -e "  crash-guard   ${DIM}absent${NC}"
+    [ -f "$XX_CONFIG" ] && echo -e "  config        ${GRN}$XX_CONFIG${NC}" || echo -e "  config        ${YEL}none${NC} ${DIM}($XX_CONFIG)${NC}"
+}
+cmd_models() {
+    if _healthy "$PROXY_HEALTH"; then
+        curl -sf --max-time 5 "$PROXY_BASE/model-scan/dashboard?limit=30" 2>/dev/null || echo "model-scan endpoint unavailable"
+    else
+        echo "proxy down — start it:  proxies up"
+        _cfg "d.get('selectors')"; _cfg "d.get('profiles')"
+    fi
+}
+cmd_sessions() {
+    echo -e "${CYAN}Claude${NC} (recent):"
+    find "$HOME/.claude/projects" -name '*.jsonl' -printf '%T@ %p\n' 2>/dev/null \
+        | sort -rn | head -8 | awk '{cmd="date -d @"int($1)" +%m-%d_%H:%M"; cmd|getline t; close(cmd); print "  "t"  "$2}'
+    for d in "$HOME"/.pi/sessions "$HOME"/.hermes/sessions; do
+        [ -d "$d" ] && { echo -e "${CYAN}${d##*/.}${NC}:"; ls -t "$d" 2>/dev/null | head -5 | sed 's/^/  /'; }
+    done
+}
+
+# ── dispatch ─────────────────────────────────────────────────────────────────
 [ $# -ge 1 ] || usage 0
-case "$1" in -h|--help|help) usage 0 ;; esac
-
-CODE="$1"; shift
-[ ${#CODE} -ge 3 ] || die "code '$CODE' too short — need <AGENT><MODE><ROUTE>[<TIER>] (e.g. cip)"
-[ ${#CODE} -le 4 ] || die "code '$CODE' too long — max 4 chars (e.g. cipd)"
-
-AGENT="${CODE:0:1}"; MODE="${CODE:1:1}"; ROUTE="${CODE:2:1}"; TIER="${CODE:3:1}"
-
-# ── Parse normalised flags; collect the rest as passthrough ────────────────────
-SESSION=""; MODEL=""; PROMPT=""; CRASH_GUARD=1; PROXY_PROFILE=""; EXTRA=()
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -s|--session) SESSION="${2:-}"; shift 2 ;;
-        -m|--model)   MODEL="${2:-}";   shift 2 ;;
-        -p|--prompt)  PROMPT="${2:-}";  shift 2 ;;
-        --profile)    PROXY_PROFILE="${2:-}"; shift 2 ;;
-        --no-cg)      CRASH_GUARD=0 ;;
-        *)            EXTRA+=("$1");    shift ;;
-    esac
-done
-
-# ── Resolve model from TIER (explicit -m always wins) ──────────────────────────
-if [ -z "$MODEL" ] && [ -n "$TIER" ]; then
-    case "$TIER" in
-        [0-9]) MODEL=$(_cfg "d['profiles'].get('$TIER')") ;;
-        *)     MODEL=$(_cfg "d['tiers'].get('$TIER')") ;;
-    esac
-    [ -n "$MODEL" ] || warn "tier '$TIER' has no model in $XX_CONFIG — ignoring"
-fi
-
-# ── Agent → profile name (used for /p/<profile> path-prefix routing) ───────────
-case "$AGENT" in
-    c) AGENT_NAME=claude;  PROFILE=claude;      PROTO=anthropic ;;
-    h) AGENT_NAME=hermes;  PROFILE=hermes;      PROTO=openai ;;
-    x) AGENT_NAME=codex;   PROFILE=codex;       PROTO=openai ;;
-    q) AGENT_NAME=qwen;    PROFILE=default;     PROTO=openai ;;
-    p) AGENT_NAME=pi;      PROFILE=pi;          PROTO=openai ;;
-    o) AGENT_NAME=opencode;PROFILE=opencode;    PROTO=openai ;;
-    a) AGENT_NAME=ante;    PROFILE=ante;        PROTO=openai ;;
-    g) AGENT_NAME=antigravity; PROFILE=antigravity; PROTO=openai ;;
-    *) die "unknown agent '$AGENT' (c h x q p o a g)" ;;
+case "$1" in
+    -h|--help|help) usage 0 ;;
+    doctor)   cmd_doctor;   exit 0 ;;
+    models)   cmd_models;   exit 0 ;;
+    sessions) cmd_sessions; exit 0 ;;
 esac
 
-case "$MODE" in i|c|n|s|r) ;; *) die "unknown mode '$MODE' (i c n s r)" ;; esac
-case "$ROUTE" in p|b|d) ;; *) die "unknown route '$ROUTE' (p b d)" ;; esac
+CODE="$1"; shift
+[ ${#CODE} -ge 2 ] || die "code '$CODE' too short — need <agent><run> e.g. 'ci' (see -h)"
+[ ${#CODE} -le 4 ] || die "code '$CODE' too long — max <agent><run><route><model> e.g. 'cIpf'"
+AGENT="${CODE:0:1}"; RUN="${CODE:1:1}"; REST="${CODE:2}"
 
-# ── Bypass route → <profile>-bypass when one exists ────────────────────────────
-if [ "$ROUTE" = "b" ]; then
-    case "$AGENT" in
-        h) PROFILE=hermes-bypass ;;
-        p) PROFILE=pi-bypass ;;
-        *) warn "no dedicated bypass profile for $AGENT_NAME — using '$PROFILE'" ;;
+# ── parse route + model out of REST (0-2 chars) ──────────────────────────────
+ROUTE="p"; MODELCODE=""
+case "${#REST}" in
+    0) ;;
+    1) case "$REST" in
+           p|b|d)             ROUTE="$REST" ;;
+           m|f|t|r|v|s|[0-9]) MODELCODE="$REST" ;;
+           *) die "bad route/model char '$REST' in '$CODE' (route p/b/d · model m f t r v s 0-9)" ;;
+       esac ;;
+    2) ROUTE="${REST:0:1}"; MODELCODE="${REST:1:1}"
+       case "$ROUTE"     in p|b|d) ;;              *) die "bad route '$ROUTE' (p/b/d)" ;; esac
+       case "$MODELCODE" in m|f|t|r|v|s|[0-9]) ;;  *) die "bad model '$MODELCODE' (m f t r v s 0-9)" ;; esac ;;
+esac
+# RULE: model selectors only apply on proxy route
+if [ -n "$MODELCODE" ] && [ "$ROUTE" != "p" ]; then
+    die "model selector '$MODELCODE' is invalid with route '$ROUTE' — reroute only happens on proxy (p)"
+fi
+
+# ── decode run → base + headless ─────────────────────────────────────────────
+case "$RUN" in
+    i) RUNBASE=init;     HEADLESS=0 ;;  I) RUNBASE=init;     HEADLESS=1 ;;
+    c) RUNBASE=continue; HEADLESS=0 ;;  C) RUNBASE=continue; HEADLESS=1 ;;
+    r) RUNBASE=resume;   HEADLESS=0 ;;  R) RUNBASE=resume;   HEADLESS=1 ;;
+    *) die "bad run '$RUN' — i/c/r interactive, I/C/R headless" ;;
+esac
+
+# ── options + trailing prompt ────────────────────────────────────────────────
+SESSION=""; PROVIDER=""; MODEL=""; PROMPT=""; USE_STDIN=0; DRYRUN=0; VERBOSE=0; CRASH_GUARD=1; POS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -s|--session)  SESSION="${2:-}";  shift 2 ;;
+        -P|--provider) PROVIDER="${2:-}"; shift 2 ;;
+        -m|--model)    MODEL="${2:-}";    shift 2 ;;
+        -p|--prompt)   PROMPT="${2:-}";   shift 2 ;;
+        --stdin)       USE_STDIN=1;       shift ;;
+        -n|--dry-run)  DRYRUN=1;          shift ;;
+        -v|--verbose)  VERBOSE=1;         shift ;;
+        --no-cg)       CRASH_GUARD=0;     shift ;;
+        -h|--help)     usage 0 ;;
+        --)            shift; while [ $# -gt 0 ]; do POS+=("$1"); shift; done ;;
+        *)             POS+=("$1");       shift ;;
     esac
+done
+[ "$USE_STDIN" = 1 ] && PROMPT="$(cat)"
+[ -z "$PROMPT" ] && [ ${#POS[@]} -gt 0 ] && PROMPT="${POS[*]}"
+# RULE: headless needs a prompt
+if [ "$HEADLESS" = 1 ] && [ -z "$PROMPT" ]; then
+    die "headless run ('$RUN') needs a prompt — add trailing text, -p <text>, or --stdin"
 fi
 
-# ── --profile flag overrides the resolved profile name (max flexibility, no hardcoding) ──
-if [ -n "$PROXY_PROFILE" ]; then
-    PROFILE="$PROXY_PROFILE"
-    note "profile override: → $PROFILE"
+# ── agent → tool/profile/proto ───────────────────────────────────────────────
+case "$AGENT" in
+    c) AGENT_NAME=claude;     PROFILE=claude;     PROTO=anthropic ;;
+    h) AGENT_NAME=hermes;     PROFILE=hermes;     PROTO=openai ;;
+    x) AGENT_NAME=codex;      PROFILE=codex;      PROTO=openai ;;
+    q) AGENT_NAME=qwen;       PROFILE=default;    PROTO=openai ;;
+    p) AGENT_NAME=pi;         PROFILE=pi;         PROTO=openai ;;
+    o) AGENT_NAME=opencode;   PROFILE=opencode;   PROTO=openai ;;
+    a) AGENT_NAME=ante;       PROFILE=ante;       PROTO=openai ;;
+    g) AGENT_NAME=antigravity;PROFILE=antigravity;PROTO=openai ;;
+    *) die "unknown agent '$AGENT' (c h x o q p a g)" ;;
+esac
+
+# bypass → native profile (no reroute)
+if [ "$ROUTE" = "b" ]; then
+    case "$AGENT" in h) PROFILE=hermes-bypass ;; p) PROFILE=pi-bypass ;; esac
+fi
+# resolve model (proxy only; -m wins)
+if [ "$ROUTE" = "p" ] && [ -z "$MODEL" ] && [ -n "$MODELCODE" ]; then
+    MODEL="$(resolve_model "$MODELCODE" "$PROVIDER")"
 fi
 
-# ── Health check + auto-start for proxy/bypass routes ──────────────────────────
-_healthy() { curl -sf --max-time 1 "$1" >/dev/null 2>&1; }
-if [ "$ROUTE" != "d" ] && [ "$AUTO_START" = 1 ]; then
+# ── proxy health + auto-start (headless; never spawns a GUI window) ───────────
+if [ "$ROUTE" != "d" ] && [ "$AUTO_START" = 1 ] && [ "$DRYRUN" = 0 ]; then
     if ! _healthy "$PROXY_HEALTH" || ! _healthy "$HEADROOM_HEALTH"; then
-        note "proxy chain down — starting in new terminal…"
-        # Open a Ghostty window showing proxy startup + tmux panes
-        # The window stays open so you can monitor proxy output during dev work.
-        # Ctrl+B D to detach tmux; close the window when done.
-        if command -v ghostty &>/dev/null; then
-            ghostty --title=proxies -e bash -c "proxies up; exec bash" &
-        elif command -v alacritty &>/dev/null; then
-            alacritty --title proxies -e bash -c "proxies up; exec bash" &
-        else
-            # fallback: start silent in background
-            PROXIES_NO_ATTACH=1 proxies up >/dev/null 2>&1 &
-        fi
-        note "waiting for proxies to become healthy…"
-        local _px_wait=0
-        while [ $_px_wait -lt 60 ]; do
-            if _healthy "$PROXY_HEALTH" && _healthy "$HEADROOM_HEALTH"; then
-                note "proxies ready"
-                break
-            fi
-            sleep 2
-            _px_wait=$((_px_wait + 2))
+        note "proxy chain down — starting headless in background…"
+        mkdir -p "$HOME/.xx"
+        PROXIES_NO_ATTACH=1 proxies up >>"$HOME/.xx/proxies.log" 2>&1 &
+        note "waiting for proxies… (log: ~/.xx/proxies.log)"
+        _w=0; while [ $_w -lt 60 ]; do
+            _healthy "$PROXY_HEALTH" && _healthy "$HEADROOM_HEALTH" && { note "proxies ready"; break; }
+            sleep 2; _w=$((_w+2))
         done
-        if ! _healthy "$PROXY_HEALTH" || ! _healthy "$HEADROOM_HEALTH"; then
-            warn "proxies not healthy after 60s — continuing anyway (check the new terminal)"
-        fi
+        _healthy "$PROXY_HEALTH" && _healthy "$HEADROOM_HEALTH" || warn "proxies not healthy after 60s — continuing"
     fi
 fi
 
-# ── Routing env ────────────────────────────────────────────────────────────────
+# ── routing env ──────────────────────────────────────────────────────────────
 declare -a ENVV=()
 if [ "$ROUTE" = "d" ]; then
-    note "debug route: direct to provider, no proxy (profile/tier routing off)"
+    [ "$VERBOSE" = 1 ] && note "direct route: raw CLI, no proxy/Headroom/RTK"
+elif [ "$PROTO" = "anthropic" ]; then
+    ENVV+=("ANTHROPIC_BASE_URL=$PROXY_BASE/p/$PROFILE" "ANTHROPIC_API_KEY=pass")
 else
-    if [ "$PROTO" = "anthropic" ]; then
-        ENVV+=("ANTHROPIC_BASE_URL=$PROXY_BASE/p/$PROFILE" "ANTHROPIC_API_KEY=pass")
-    else
-        ENVV+=("OPENAI_BASE_URL=$PROXY_BASE/p/$PROFILE/v1" "OPENAI_API_KEY=pass")
-    fi
+    ENVV+=("OPENAI_BASE_URL=$PROXY_BASE/p/$PROFILE/v1" "OPENAI_API_KEY=pass")
 fi
 
-# ── Tool availability ──────────────────────────────────────────────────────────
-command -v "$AGENT_NAME" >/dev/null 2>&1 || die "'$AGENT_NAME' is not installed / not on PATH"
-
-# ── Build the command (verified per-tool flags) ────────────────────────────────
-declare -a CMD=(rtk "$AGENT_NAME")
-
-# model override (Hermes has no --model flag — model is profile-driven)
-_add_model() { if [ -n "$MODEL" ]; then CMD+=(--model "$MODEL"); fi; }
+# ── build command (per-tool, normalized init/continue/resume × interactive/headless) ──
+command -v "$AGENT_NAME" >/dev/null 2>&1 || die "'$AGENT_NAME' not installed / not on PATH"
+# direct route also skips the RTK wrapper (raw CLI); proxy/bypass keep it
+if [ "$ROUTE" = "d" ]; then declare -a CMD=("$AGENT_NAME"); else declare -a CMD=(rtk "$AGENT_NAME"); fi
+_model() { if [ -n "$MODEL" ]; then CMD+=(--model "$MODEL"); fi; }
 
 case "$AGENT_NAME" in
     claude)
-        CMD+=(--dangerously-skip-permissions)
-        _add_model
-        case "$MODE" in
-            c) CMD+=(--continue) ;;
-            r) CMD+=(--resume) ;;
-            s) [ -n "$SESSION" ] && CMD+=(--resume "$SESSION") ;;
-            n) [ -n "$PROMPT" ] && CMD+=(-p "$PROMPT") ;;
+        CMD+=(--dangerously-skip-permissions); _model
+        case "$RUNBASE" in
+            continue) CMD+=(--continue) ;;
+            resume)   [ -n "$SESSION" ] && CMD+=(--resume "$SESSION") || CMD+=(--resume) ;;
         esac
-        ;;
+        [ "$HEADLESS" = 1 ] && CMD+=(-p "$PROMPT") ;;
     qwen)
-        CMD+=(--auth-type openai -y)
-        _add_model
-        case "$MODE" in
-            c) CMD+=(--continue) ;;
-            r) CMD+=(--resume) ;;
-            s) [ -n "$SESSION" ] && CMD+=(--resume "$SESSION") ;;
-            n) [ -n "$PROMPT" ] && CMD+=(--prompt "$PROMPT") ;;
+        CMD+=(--auth-type openai -y); _model
+        case "$RUNBASE" in
+            continue) CMD+=(--continue) ;;
+            resume)   [ -n "$SESSION" ] && CMD+=(--resume "$SESSION") || CMD+=(--resume) ;;
         esac
-        ;;
+        [ "$HEADLESS" = 1 ] && CMD+=(--prompt "$PROMPT") ;;
     codex)
-        case "$MODE" in
-            c) CMD+=(resume --last) ;;
-            r) CMD+=(resume) ;;
-            s) [ -n "$SESSION" ] && CMD+=(resume "$SESSION") ;;
-            *) CMD+=(--dangerously-bypass-approvals-and-sandbox); _add_model
-               [ "$MODE" = n ] && [ -n "$PROMPT" ] && CMD+=("$PROMPT") ;;
+        case "$RUNBASE" in
+            continue) CMD+=(resume --last) ;;
+            resume)   [ -n "$SESSION" ] && CMD+=(resume "$SESSION") || CMD+=(resume) ;;
+            init)     CMD+=(--dangerously-bypass-approvals-and-sandbox); _model ;;
         esac
-        ;;
+        [ "$HEADLESS" = 1 ] && CMD+=("$PROMPT") ;;
     opencode)
-        _add_model
-        case "$MODE" in
-            c) CMD+=(--continue) ;;
-            s) [ -n "$SESSION" ] && CMD+=(--session "$SESSION") ;;
-            r) CMD+=(--continue) ;;
-            n) [ -n "$PROMPT" ] && CMD+=(--prompt "$PROMPT") ;;
+        _model
+        case "$RUNBASE" in
+            continue) CMD+=(--continue) ;;
+            resume)   [ -n "$SESSION" ] && CMD+=(--session "$SESSION") || CMD+=(--continue) ;;
         esac
-        ;;
+        [ "$HEADLESS" = 1 ] && CMD+=(--prompt "$PROMPT") ;;
     hermes)
-        [ -n "$MODEL" ] && warn "hermes has no --model flag; model is set by the '$PROFILE' profile — ignoring -m"
-        case "$MODE" in
-            c) CMD+=(--yolo --continue) ;;
-            r) CMD+=(--yolo --resume "${SESSION:-}") ;;
-            s) CMD+=(--yolo --resume "${SESSION:-}") ;;
-            n) CMD+=(--yolo chat -q "${PROMPT:-}") ;;
-            i) CMD+=(--yolo) ;;
+        [ -n "$MODEL" ] && warn "hermes model is profile-driven; ignoring -m/$MODELCODE"
+        CMD+=(--yolo)
+        case "$RUNBASE" in
+            continue) CMD+=(--continue) ;;
+            resume)   CMD+=(--resume "${SESSION:-}") ;;
         esac
-        ;;
+        [ "$HEADLESS" = 1 ] && CMD+=(chat -q "$PROMPT") ;;
     pi)
-        _add_model
-        case "$MODE" in
-            c) CMD+=(--continue) ;;
-            s) [ -n "$SESSION" ] && CMD+=(--session "$SESSION") ;;
-            n) [ -n "$PROMPT" ] && CMD+=(--prompt "$PROMPT") ;;
+        _model
+        case "$RUNBASE" in
+            continue) CMD+=(--continue) ;;
+            resume)   [ -n "$SESSION" ] && CMD+=(--session "$SESSION") ;;
         esac
-        ;;
-    *)  # ante / antigravity — pass model + prompt best-effort
-        _add_model
-        [ "$MODE" = n ] && [ -n "$PROMPT" ] && CMD+=("$PROMPT")
-        ;;
+        [ "$HEADLESS" = 1 ] && CMD+=(--prompt "$PROMPT") ;;
+    *)  _model; [ "$HEADLESS" = 1 ] && CMD+=("$PROMPT") ;;
 esac
 
-# Append any remaining passthrough args
-[ ${#EXTRA[@]} -gt 0 ] && CMD+=("${EXTRA[@]}")
+# ── dry-run / verbose / exec ─────────────────────────────────────────────────
+if [ "$VERBOSE" = 1 ] || [ "$DRYRUN" = 1 ]; then
+    note "agent=$AGENT_NAME run=$RUNBASE headless=$HEADLESS route=$ROUTE model=${MODEL:-<default>} profile=$PROFILE"
+    note "→ ${ENVV[*]:-(direct)} ${CMD[*]}"
+fi
+[ "$DRYRUN" = 1 ] && exit 0
 
-note "→ ${ENVV[*]:-(direct)} ${CMD[*]}"
-
-if [ "$CRASH_GUARD" = 1 ] && command -v cg_run >/dev/null 2>&1; then
-    # Use AGENT_NAME as the crash-guard key for proper session restore mapping
+if [ "$CRASH_GUARD" = 1 ] && [ "$ROUTE" != "d" ] && command -v cg_run >/dev/null 2>&1; then
     exec env "${ENVV[@]}" cg_run "$AGENT_NAME" -- "${CMD[@]}"
 else
-    exec env "${ENVV[@]}" "${CMD[@]}"
+    exec env ${ENVV[@]:+"${ENVV[@]}"} "${CMD[@]}"
 fi

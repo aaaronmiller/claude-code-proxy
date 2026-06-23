@@ -178,12 +178,14 @@ if [ ! -f "$XX_SOURCE" ]; then
     fi
 else
     if [ "$DRY_RUN" = true ]; then
-        info "would copy $XX_SOURCE → $XX_BIN"
+        info "would symlink $XX_SOURCE → $XX_BIN"
     else
         mkdir -p "$LOCAL_BIN"
-        cp "$XX_SOURCE" "$XX_BIN"
-        chmod +x "$XX_BIN"
-        ok "installed xx launcher at $XX_BIN"
+        chmod +x "$XX_SOURCE"
+        # Symlink (not copy) so edits to the repo source are live immediately —
+        # ~/.local/bin/xx is an install artifact, the repo scripts/xx is canonical.
+        ln -sf "$XX_SOURCE" "$XX_BIN"
+        ok "linked xx launcher: $XX_BIN → $XX_SOURCE"
     fi
 fi
 
