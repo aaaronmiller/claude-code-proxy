@@ -201,6 +201,7 @@ if [ "$ROUTE" = "p" ] && [ -z "$MODEL" ] && [ -n "$MODELCODE" ]; then
     MODEL="$(resolve_model "$MODELCODE" "$PROVIDER")"
 fi
 
+
 # ── proxy health + auto-start (headless; never spawns a GUI window) ───────────
 if [ "$ROUTE" != "d" ] && [ "$AUTO_START" = 1 ] && [ "$DRYRUN" = 0 ]; then
     if ! _healthy "$PROXY_HEALTH" || ! _healthy "$HEADROOM_HEALTH"; then

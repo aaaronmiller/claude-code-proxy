@@ -210,9 +210,11 @@ install_claude_integration() {
   install -m 0755 "$ROOT_DIR/rtk/rtk-rewrite.sh" "$hooks_dir/rtk-rewrite.sh"
   install -m 0644 "$ROOT_DIR/rtk/RTK.md" "$HOME/.claude/RTK.md"
   patch_json_hook "$HOME/.claude/settings.json" "Bash" "$hooks_dir/rtk-rewrite.sh"
-  if has headroom && has claude; then
-    headroom mcp install >/dev/null 2>&1 || true
-  fi
+  # NOTE: Intentionally NOT running `headroom mcp install` — that registers headroom
+  # as a per-session auto-start MCP server in the Claude config (~/.claude.json's
+  # mcpServers), causing EVERY Claude Code/Pi session to spawn its own ~1GB headroom
+  # `mcp serve` process. Instead, headroom runs as a single shared proxy instance
+  # (port :8787) managed by `proxies up` or systemd. See docs/configuration.md.
 }
 
 install_qwen_integration() {
@@ -230,6 +232,11 @@ enable_cli_hooks() {
 disable_cli_hooks() {
   remove_json_hook "$HOME/.claude/settings.json" "Bash" "$HOME/.claude/hooks/rtk-rewrite.sh"
   remove_json_hook "$HOME/.qwen/settings.json" ".*" "$HOME/.qwen/hooks/rtk-rewrite.sh"
+  # Clean up any residual per-session headroom MCP registration from
+  # `headroom mcp install` (we no longer run it — see install_claude_integration).
+  if has headroom; then
+    headroom mcp uninstall >/dev/null 2>&1 || true
+  fi
 }
 
 write_launcher() {

@@ -2,9 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+### Fixed (Removed unnecessary MCP infrastructure)
+- **`xx` launcher: removed `-M`/`--mcp` flag** — Claude Code's Tool Search handles lazy MCP natively. No need for opt-in flag or `~/.xx/mcp/` configs.
+- **`~/.xx/mcp/` directory removed** — configs for aaa-memory, context7, clawmem deleted.
+- **greptile plugin MCP disabled** — `.mcp.json` → `.mcp.json.disabled` in plugin cache.
+- **CLAUDE.md: simplified MCP section** — documents Tool Search lazy loading, no CLI-tool workaround guidance needed.
+### Added (Agent integrations and SSE daemon)
+- **aaa-memory SSE daemon** (`mcp.py`) — shared singleton on `:7437`.
+- **Agent integrations** (`agent_integration/`) — OpenCode, Qwen, Codex, Pi modules call `clawmem` CLI.
+
+### Fixed (Per-session MCP servers — headroom, context7, clawmem)
+- **`compression/bin/compressctl`: removed `headroom mcp install`** — headroom now runs as shared `:8787` proxy, not per-session MCP. Fix also applied to deployed copies (`~/.local/bin/compressctl`, `~/.local/bin/deploy-compression-stack.sh`, `~/code/input-compression/bin/compressctl`).
+- **context7 plugin: disabled auto-start MCP server** (plugin cache `.mcp.json` → `.mcp.json.disabled`). Replaced with `xx -M context7` for on-demand activation.
+- **clawmem: separated hooks from MCP** — hooks always run for context surfacing/recording; MCP server removed from `mcpServers`, available via `xx -M clawmem` for memory search tools only on demand.
+
 ## [Unreleased] — Performance & Reliability Improvements + Profile Routing Spec
 
 ### Fixed
+- **Inbound `system`-role messages no longer 422** (`src/models/claude.py`, `src/services/conversion/request_converter.py`) — `ClaudeMessage.role` was a hard `Literal["user","assistant","tool"]`, so any request carrying a `system`-role message inside `messages[]` (e.g. from the `xx` launcher / context-injecting hooks) was rejected by Pydantic with `422 literal_error … body.messages[N].role` **before any proxy code ran** — making the existing `normalize_system_role` / `_normalize_system_role()` shim dead code. Added `"system"` to the accepted roles and a converter branch that hoists the message into the OpenAI stream as a system message (position preserved, content no longer silently dropped); downstream `_normalize_system_role` still folds it to `user` when `NORMALIZE_SYSTEM_ROLE=true`. Verified end-to-end against the exact failing payload (`claude-opus-4-8 → deepseek-v4-flash`).
 - **headroom-start.sh: removed `--anthropic-api-url` (was crashing the whole desktop to login)** (`scripts/headroom-start.sh`) — A newer headroom CLI dropped the `--anthropic-api-url` option (anthropic upstream is now hardcoded to `api.anthropic.com`; only `--openai-api-url`/`--gemini-api-url` are overridable). The start script still passed `--anthropic-api-url "$HEADROOM_UPSTREAM_URL"`, so `headroom proxy` exited immediately with `Error: No such option: --anthropic-api-url`, leaving :8787 unbound. That sent `proxies` into a teardown/restart loop which re-loaded the Kompress model onto the NVIDIA GPU every iteration; the repeated CUDA load/teardown churn destabilised the GPU and crashed the GNOME/Wayland compositor (SIGSEGV in `disassociate_window`), kicking the user to GDM on every `pi`/`xx pip` launch. Swapped to `--openai-api-url` (upstream `:8082` speaks OpenAI `/v1`). Verified headroom boots and binds cleanly.
 
 ### Changed

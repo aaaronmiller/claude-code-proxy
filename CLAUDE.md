@@ -183,3 +183,39 @@ data-model.md, contracts/, tasks.md).
    atomic swaps, or alias installation (T023, T042, T046) invoke Principle III — confirm scope.
    Finish with T086: update `CHANGELOG.md` and `docs/` (Principle IV).
 6. Run `/speckit.implement` to execute the list, but only after the gate in rule 1 passes.
+
+## Headroom Architecture
+
+Headroom runs as a **single shared proxy instance** (port `:8787`) managed by `proxies up`
+or systemd — NOT as per-session MCP servers.
+
+**Critical:** `headroom mcp install` MUST NOT be called. It registers headroom as an auto-start
+stdio MCP in `~/.claude.json`, causing every Claude Code/Pi session to spawn its own ~1GB
+`headroom mcp serve` process. The `compression/bin/compressctl` script enforces this:
+`install_claude_integration()` explicitly skips `headroom mcp install`.
+
+If you see `headroom mcp serve` processes multiplying in `htop`, run:
+```bash
+compressctl disable-cli-hooks   # also runs headroom mcp uninstall
+```
+Or manually: `headroom mcp uninstall`
+
+## MCP Architecture
+
+Claude Code has **Tool Search** (default since v2.1) — lazy MCP tool loading.
+Servers start in background while you type (non-blocking), tool schemas deferred
+until needed. Set `ENABLE_TOOL_SEARCH=auto:5` for threshold tuning. Qwen Code
+and Hermes also support lazy MCP (`lazy: true` per-server).
+
+### What was fixed
+
+Three MCP servers were auto-starting every session (~3.5GB total):
+- **headroom mcp serve** (~1GB) — switched to shared `:8787` proxy (systemd/proxies up).
+  All `headroom mcp install` calls behind `if false;` guards across 4 files.
+- **context7** (npx + node) — plugin cache `.mcp.json` disabled (`.mcp.json.disabled`).
+- **clawmem/aaa-memory** (~500MB) — hooks handle recording/surfacing; no MCP needed.
+- **greptile** (HTTP MCP) — plugin cache `.mcp.json` disabled.
+
+Global `~/.claude.json mcpServers` is empty. Add servers with `claude mcp add`
+when you want them — Tool Search handles lazy loading.
+

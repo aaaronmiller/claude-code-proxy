@@ -44,7 +44,12 @@ class ClaudeContentBlockRedactedThinking(BaseModel):
 
 
 class ClaudeMessage(BaseModel):
-    role: Literal["user", "assistant", "tool"]
+    # Anthropic's own API disallows "system" inside messages[], but real-world
+    # clients/launchers and middleware (e.g. context-injecting hooks) sometimes
+    # emit one. We tolerate it here so validation doesn't 422; the request
+    # converter hoists it into the system stream and _normalize_system_role()
+    # downstream converts it to "user" for backends that reject the system role.
+    role: Literal["user", "assistant", "tool", "system"]
     content: Union[
         str,
         List[

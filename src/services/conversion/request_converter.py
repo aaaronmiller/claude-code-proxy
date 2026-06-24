@@ -430,6 +430,30 @@ def convert_claude_to_openai(
                     tool_results = convert_claude_tool_results(next_msg)
                     openai_messages.extend(tool_results)
 
+        elif msg.role == Constants.ROLE_SYSTEM:
+            # Tolerated inbound "system" message (see ClaudeMessage.role). Hoist
+            # its text into the OpenAI stream as a system message, preserving
+            # position. _normalize_system_role() downstream will fold it into
+            # "user" for backends that reject the system role.
+            content = msg.content
+            if isinstance(content, str):
+                text = content
+            else:
+                parts = []
+                for block in content or []:
+                    if hasattr(block, "type") and block.type == Constants.CONTENT_TEXT:
+                        parts.append(block.text)
+                    elif (
+                        isinstance(block, dict)
+                        and block.get("type") == Constants.CONTENT_TEXT
+                    ):
+                        parts.append(block.get("text", ""))
+                text = "\n\n".join(parts)
+            if text.strip():
+                openai_messages.append(
+                    {"role": Constants.ROLE_SYSTEM, "content": text.strip()}
+                )
+
         i += 1
 
     # Validate tool message sequence - detect orphaned tool messages
