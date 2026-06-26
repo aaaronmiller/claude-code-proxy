@@ -73,6 +73,25 @@ install_headroom() {
     fi
 }
 
+# Patch headroom so the Kompress model/backbone are env-configurable
+# (HEADROOM_KOMPRESS_MODEL / HEADROOM_KOMPRESS_BACKBONE). Idempotent; defaults
+# match upstream so this changes nothing until those vars are set. headroom-start.sh
+# also re-applies it on every boot so it survives `pip install --upgrade headroom`.
+patch_headroom() {
+    log_info "Patching headroom (env-configurable Kompress model)..."
+    local patcher
+    patcher="$(dirname "${BASH_SOURCE[0]}")/patch-headroom-kompress.py"
+    if [[ -f "$patcher" ]]; then
+        if python3 "$patcher"; then
+            log_success "Headroom Kompress model-knob patch applied"
+        else
+            log_warn "Kompress model-knob patch skipped (headroom not importable or layout changed)"
+        fi
+    else
+        log_warn "patch-headroom-kompress.py not found - skipping"
+    fi
+}
+
 # Install RTK
 install_rtk() {
     log_info "Installing RTK..."
@@ -260,6 +279,7 @@ show_usage() {
 main() {
     check_prereqs || exit 1
     install_headroom
+    patch_headroom
     install_rtk
     install_claude_proxy
     install_input_compression

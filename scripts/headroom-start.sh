@@ -14,6 +14,16 @@ HEADROOM_UPSTREAM_URL="${HEADROOM_UPSTREAM_URL:-http://127.0.0.1:8082}"
 HEADROOM_LOG_FILE="${HEADROOM_LOG_FILE:-$HOME/.headroom/logs/proxy.jsonl}"
 HEADROOM_ACCELERATOR="${HEADROOM_ACCELERATOR:-auto}"
 HEADROOM_KOMPRESS_DEVICE="${HEADROOM_KOMPRESS_DEVICE:-}"
+# Kompress compression model + backbone. Upstream headroom hardcodes these; the
+# patch below (patch-headroom-kompress.py) makes them honor these env vars so a
+# model swap is one line on any machine. Defaults match upstream — changing
+# nothing until overridden. NOTE (2026-06): chopratejas publishes only
+# kompress-small / -base / -v2-base; no larger checkpoint exists, so a "bigger
+# model for more savings" is not currently possible without training one. The
+# backbone MUST match the checkpoint's training backbone.
+HEADROOM_KOMPRESS_MODEL="${HEADROOM_KOMPRESS_MODEL:-chopratejas/kompress-base}"
+HEADROOM_KOMPRESS_BACKBONE="${HEADROOM_KOMPRESS_BACKBONE:-answerdotai/ModernBERT-base}"
+export HEADROOM_KOMPRESS_MODEL HEADROOM_KOMPRESS_BACKBONE
 HEADROOM_PRELOAD_TIMEOUT="${HEADROOM_PRELOAD_TIMEOUT:-90s}"
 HEADROOM_ALLOW_CPU_FALLBACK="${HEADROOM_ALLOW_CPU_FALLBACK:-1}"
 HEADROOM_REMOTE_URL="${HEADROOM_REMOTE_URL:-}"
@@ -33,6 +43,12 @@ if [ -z "$HEADROOM_PYTHON" ]; then
         HEADROOM_PYTHON="python"
     fi
 fi
+
+# Make the installed headroom package honor HEADROOM_KOMPRESS_MODEL/BACKBONE.
+# Idempotent + best-effort: re-applied every startup so it survives
+# `pip install --upgrade headroom`. A failure here never blocks the proxy.
+"$HEADROOM_PYTHON" "${ROOT_DIR}/compression/scripts/patch-headroom-kompress.py" 2>/dev/null \
+    || echo "  (kompress model-knob patch skipped — headroom layout may have changed)" >&2
 
 detect_accelerator() {
     case "$HEADROOM_ACCELERATOR" in

@@ -286,11 +286,35 @@ class ConfigResolver:
                     self.register_schema(
                         fp, FieldSchema(type=ftype, default=fdefault, is_secret=fsecret)
                     )
+        # Generic provider-key aliases are only FALLBACKS for assignments.big.api_key
+        # (the field that also backs the default provider). An explicit per-tier key
+        # (BIG_API_KEY) is more specific and must win across ALL layers — otherwise a
+        # generic key sitting in a higher-precedence layer (e.g. OPENROUTER_API_KEY in
+        # the shell env) silently clobbers an explicit BIG_API_KEY set in .env, sending
+        # the wrong provider's key to the BIG endpoint. So: when an explicit alias owns
+        # a target field in any layer, the generic provider-key aliases do NOT bridge
+        # into that field.
+        GENERIC_FALLBACK_ALIASES = {
+            "OPENROUTER_API_KEY": "assignments.big.api_key",
+            "OPENAI_API_KEY": "assignments.big.api_key",
+        }
+        _bridge_layers = (ConfigLayer.SHELL_ENV, ConfigLayer.DOTENV)
+        explicit_owned: set[str] = {
+            field_path
+            for env_name, field_path in self.LEGACY_ALIAS_MAP.items()
+            if env_name not in GENERIC_FALLBACK_ALIASES
+            and any(env_name in self._layers[layer] for layer in _bridge_layers)
+        }
         for env_name, field_path in self.LEGACY_ALIAS_MAP.items():
             if field_path in self._schemas:
                 self._schemas[field_path].env_alias = env_name
+            # Skip a generic provider-key fallback when an explicit alias already
+            # owns the same target field (e.g. BIG_API_KEY present → ignore the
+            # generic OPENROUTER_API_KEY/OPENAI_API_KEY mapping to big.api_key).
+            if env_name in GENERIC_FALLBACK_ALIASES and field_path in explicit_owned:
+                continue
             # Bridge present env value into modern field path, in the same layer.
-            for layer in (ConfigLayer.SHELL_ENV, ConfigLayer.DOTENV):
+            for layer in _bridge_layers:
                 if env_name in self._layers[layer]:
                     self._deprecated_aliases.add(env_name)
                     if field_path not in self._layers[layer]:
