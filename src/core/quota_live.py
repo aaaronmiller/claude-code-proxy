@@ -79,3 +79,13 @@ def fetch_openrouter_meters(api_key: str, *, http_get: HttpGet | None = None, ob
     if status != 200 or not isinstance(body, dict):
         return []
     return parse_openrouter_auth_key(body, observed_at=observed_at)
+
+
+# Process-wide cache the request path feeds (passively) and rotation/allocator read.
+_GLOBAL_CACHE = QuotaCache()
+
+
+def get_quota_cache() -> QuotaCache:
+    """Shared QuotaCache singleton. client.py records response headers into it; rotation/allocator
+    read its samples()."""
+    return _GLOBAL_CACHE

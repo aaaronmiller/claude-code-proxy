@@ -36,6 +36,13 @@ def test_cache_record_meters_from_poll():
     assert c.samples()["openrouter"].remaining_fraction == 0.8
 
 
+def test_global_cache_singleton():
+    from src.core.quota_live import get_quota_cache
+    assert get_quota_cache() is get_quota_cache()
+    get_quota_cache().record_headers("groq", GROQ_HDR)
+    assert "groq" in get_quota_cache().samples()
+
+
 def test_fetch_openrouter_meters_cases():
     ok = fetch_openrouter_meters("k", http_get=lambda u, h, t: (200, {"data": {"limit": 50, "limit_remaining": 40}}))
     assert len(ok) == 1 and ok[0].remaining == 40.0

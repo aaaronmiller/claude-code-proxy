@@ -1338,6 +1338,14 @@ class OpenAIClient:
                     if resp_headers is None:
                         resp_headers = getattr(e, "response", None)
                     if resp_headers is not None:
+                        # Passively feed the live quota cache from error-response headers
+                        # (provider rate-limit info on 429/5xx -> rotation drain decisions). F06.
+                        try:
+                            from src.core.quota_live import get_quota_cache
+                            _prov = model.split("/")[0] if "/" in model else model
+                            get_quota_cache().record_headers(_prov, dict(resp_headers.headers))
+                        except Exception:
+                            pass
                         # X-RateLimit-Reset can be epoch seconds or seconds-until-reset
                         reset_raw = resp_headers.headers.get("X-RateLimit-Reset") or \
                                     resp_headers.headers.get("x-ratelimit-reset") or \
