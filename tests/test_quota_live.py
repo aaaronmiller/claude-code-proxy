@@ -43,6 +43,19 @@ def test_global_cache_singleton():
     assert "groq" in get_quota_cache().samples()
 
 
+def test_quota_cache_source_feeds_collect_meters():
+    # closes the F06->F18 loop: live headers -> QuotaCache -> QuotaCacheSource -> collect_meters
+    from src.core.quota_live import get_quota_cache, QuotaCacheSource
+    from src.core.quota_runtime import collect_meters
+    get_quota_cache().record_headers("groq", GROQ_HDR)
+
+    class _Cfg:
+        pass
+
+    meters = collect_meters(_Cfg(), sources=[QuotaCacheSource()])
+    assert any(m.provider == "groq" for m in meters)
+
+
 def test_fetch_openrouter_meters_cases():
     ok = fetch_openrouter_meters("k", http_get=lambda u, h, t: (200, {"data": {"limit": 50, "limit_remaining": 40}}))
     assert len(ok) == 1 and ok[0].remaining == 40.0

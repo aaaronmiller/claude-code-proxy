@@ -29,10 +29,12 @@ def _config_sources(config) -> list:
 
 
 def _default_live_sources() -> list:
-    """The live fraction sources rotation already trusts. Imported lazily so tests stay offline."""
+    """The live fraction sources rotation already trusts, plus the live header-fed QuotaCache.
+    Imported lazily so tests stay offline."""
     from src.core.quota_sources import CcusageSource, TokscaleSQLiteSource
+    from src.core.quota_live import QuotaCacheSource
 
-    return [TokscaleSQLiteSource(), CcusageSource()]
+    return [TokscaleSQLiteSource(), CcusageSource(), QuotaCacheSource()]
 
 
 def collect_meters(config, *, sources: Sequence | None = None) -> list[QuotaMeter]:

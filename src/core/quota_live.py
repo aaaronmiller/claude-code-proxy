@@ -89,3 +89,13 @@ def get_quota_cache() -> QuotaCache:
     """Shared QuotaCache singleton. client.py records response headers into it; rotation/allocator
     read its samples()."""
     return _GLOBAL_CACHE
+
+
+class QuotaCacheSource:
+    """Adapts the live QuotaCache to the QuotaSource protocol (provider-level samples) so
+    quota_runtime.collect_meters / rotation can consume header-derived live quota."""
+
+    name = "quota_cache"
+
+    def samples(self) -> list[QuotaSample]:
+        return list(_GLOBAL_CACHE.samples().values())
