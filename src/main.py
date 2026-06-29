@@ -813,7 +813,7 @@ def main(env_updates: dict = None, skip_validation: bool = False):
             host=config.host,
             port=config.port,
             log_level=log_level,
-            reload=False,
+            reload=True,
         )
     finally:
         # Cleanup dashboard if running

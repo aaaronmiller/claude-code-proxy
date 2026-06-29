@@ -910,8 +910,16 @@ def convert_claude_assistant_message(
                     },
                 }
             )
-        # Explicitly skip thinking blocks to avoid 422 errors
-        elif block.type == "thinking" or block.type == "redacted_thinking":
+        # Thinking blocks: preserve content as text for non-Claude APIs.
+        # DeepSeek (via OpenRouter/OpenCode) requires reasoning_content to be
+        # passed back when thinking mode was used — dropping it causes a 400
+        # error: "the `reasoning_content` in the thinking mode must be passed
+        # back to the api."
+        elif block.type == Constants.CONTENT_THINKING:
+            text_parts.append(block.thinking)
+        # Redacted thinking blocks contain encrypted Claude-specific blobs;
+        # no value for other providers, skip them.
+        elif block.type == Constants.CONTENT_REDACTED_THINKING:
             continue
 
     openai_message = {"role": Constants.ROLE_ASSISTANT}
