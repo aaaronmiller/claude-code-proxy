@@ -104,10 +104,28 @@ expected_backend=""
 
 case "$accelerator" in
     intel)
-        export ONEAPI_DEVICE_SELECTOR="${ONEAPI_DEVICE_SELECTOR:-level_zero:0}"
         export LIBVA_DRIVER_NAME="${LIBVA_DRIVER_NAME:-iHD}"
+        # Select the GPU for Kompress. Prefer the DISCRETE GPU (e.g. Arc): on a
+        # dual-GPU laptop the iGPU often carries a far older host driver, and in
+        # WSL2 a guest/host driver-version gap faults the /dev/dxg bridge hard
+        # enough to crash the whole VM (dmesg: dxgkio_reserve_gpu_va: -75).
+        # Picking by device TYPE (not a hardcoded index) survives enumeration
+        # reordering. Honors an explicit HEADROOM_KOMPRESS_DEVICE if set.
+        if [ -z "${HEADROOM_KOMPRESS_DEVICE:-}" ]; then
+            HEADROOM_KOMPRESS_DEVICE="$("$HEADROOM_PYTHON" - <<'PYDEV' 2>/dev/null
+from openvino import Core
+c = Core()
+gpus = [d for d in c.available_devices if d.startswith("GPU")]
+disc = [d for d in gpus if str(c.get_property(d, "DEVICE_TYPE")).endswith("DISCRETE")]
+print(disc[0] if disc else (gpus[0] if gpus else ""))
+PYDEV
+)"
+        fi
         export HEADROOM_KOMPRESS_DEVICE="${HEADROOM_KOMPRESS_DEVICE:-GPU.0}"
+        # Expose ALL level_zero GPUs so the discrete pick is never hidden.
+        export ONEAPI_DEVICE_SELECTOR="${ONEAPI_DEVICE_SELECTOR:-level_zero:*}"
         expected_backend="openvino"
+        echo "  intel gpu: kompress device = ${HEADROOM_KOMPRESS_DEVICE} (discrete-preferred)"
         ;;
     nvidia)
         export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"

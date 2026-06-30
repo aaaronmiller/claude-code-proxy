@@ -189,9 +189,11 @@ cmd_stop() {
 # ── GPU detection for headroom kompressor ────────────────────────────────────
 # Returns the env-var prefix to prepend to headroom's service_cmd.
 # NVIDIA: ONNX/PyTorch+CUDA — no special vars needed (headroom detects CUDA auto)
-# Intel Arc: OpenVINO requires Level Zero and an explicit Kompress device.
-# On this host Headroom's default GPU.1 fails with CL_OUT_OF_RESOURCES; GPU.0
-# is the Arc dGPU verified by Kompress preload.
+# Intel: OpenVINO requires Level Zero. Device SELECTION now lives in
+# scripts/headroom-start.sh, which picks the DISCRETE GPU by device type.
+# On this host GPU.0 is the Iris Xe iGPU (old host driver — crashes the WSL VM
+# via the /dev/dxg bridge) and GPU.1 is the Arc dGPU (current driver). We no
+# longer hardcode an index here; we only expose all level_zero GPUs.
 # CPU: no vars — headroom falls back to ONNX CPU
 #
 # WSL2 note: lspci only shows "Microsoft Basic Render Driver" — use clinfo or
@@ -212,7 +214,7 @@ _detect_gpu_env() {
         local intel_cl
         intel_cl=$(clinfo --list 2>/dev/null | grep -i intel | head -1)
         if [[ -n "$intel_cl" ]]; then
-            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0 HEADROOM_KOMPRESS_DEVICE=${HEADROOM_KOMPRESS_DEVICE:-GPU.0} LIBVA_DRIVER_NAME=iHD"
+            echo "ONEAPI_DEVICE_SELECTOR=level_zero:* LIBVA_DRIVER_NAME=iHD"
             return
         fi
     fi
@@ -222,14 +224,14 @@ _detect_gpu_env() {
         local intel_gpu
         intel_gpu=$(lspci 2>/dev/null | grep -i 'vga\|display\|3d' | grep -i intel | head -1)
         if [[ -n "$intel_gpu" ]]; then
-            echo "ONEAPI_DEVICE_SELECTOR=level_zero:0 HEADROOM_KOMPRESS_DEVICE=${HEADROOM_KOMPRESS_DEVICE:-GPU.0} LIBVA_DRIVER_NAME=iHD"
+            echo "ONEAPI_DEVICE_SELECTOR=level_zero:* LIBVA_DRIVER_NAME=iHD"
             return
         fi
     fi
 
     # WSL2 with /dev/dxg but no clinfo — DirectX GPU present, try level_zero anyway
     if [[ -e /dev/dxg ]] && [[ -d /dev/dri ]]; then
-        echo "ONEAPI_DEVICE_SELECTOR=level_zero:0 HEADROOM_KOMPRESS_DEVICE=${HEADROOM_KOMPRESS_DEVICE:-GPU.0} LIBVA_DRIVER_NAME=iHD"
+        echo "ONEAPI_DEVICE_SELECTOR=level_zero:* LIBVA_DRIVER_NAME=iHD"
         return
     fi
 
