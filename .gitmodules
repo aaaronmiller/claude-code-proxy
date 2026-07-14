@@ -4,3 +4,6 @@
 [submodule "compression/rtk"]
 	path = compression/rtk
 	url = https://github.com/rtk-ai/rtk.git
+[submodule "model-scraper"]
+	path = model-scraper
+	url = https://github.com/aaaronmiller/model-scraper.git
