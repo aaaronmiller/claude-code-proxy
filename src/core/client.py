@@ -14,11 +14,11 @@ from openai._exceptions import (
 
 logger = logging.getLogger(__name__)
 
-# Providers whose APIs expect bare model names (no provider prefix like "opencode_go/").
+# Providers whose APIs expect bare model names (no provider prefix like "opencode/").
 # The proxy stores models as "provider/model" for routing, but these endpoints
 # only recognise the part after the slash.
 _MODEL_PREFIX_STRIP_PROVIDERS = {
-    "opencode_go",  # opencode.ai expects "qwen3.6-plus", not "opencode_go/qwen3.6-plus"
+    "opencode",  # opencode.ai expects "qwen3.6-plus", not "opencode/deepseek-v4-flash"
 }
 
 
@@ -29,7 +29,7 @@ def _maybe_strip_model_prefix(model: str, base_url: str) -> str:
     prefix = model.split("/", 1)[0].lower()
     # Match by checking if the URL belongs to a known strip-provider
     for known_prefix, url_fragment in [
-        ("opencode_go", "opencode.ai"),
+        ("opencode", "opencode.ai"),
     ]:
         if prefix == known_prefix and url_fragment in base_url:
             stripped = model.split("/", 1)[1]
@@ -53,13 +53,27 @@ _circuit_breakers: Dict[str, Any] = {}
 # ─────────────────────────────────────────────────────────────────────────────
 _mid_stream_tier_overrides: Dict[str, str] = {}
 
+
+def _profile_state_key(value: str) -> str:
+    """Namespace mutable health/continuation state for isolated canary requests."""
+    try:
+        from src.core.profiles import ACTIVE_PROFILE
+
+        profile = ACTIVE_PROFILE.get()
+        if profile is not None and profile.kind == "canary":
+            return f"canary:{profile.name}:{value}"
+    except Exception:
+        pass
+    return value
+
+
 def get_mid_stream_tier_override(session_fp: str) -> Optional[str]:
     """Return the cheaper tier override for a session, then clear it (one-shot)."""
-    return _mid_stream_tier_overrides.pop(session_fp, None)
+    return _mid_stream_tier_overrides.pop(_profile_state_key(session_fp), None)
 
 def set_mid_stream_tier_override(session_fp: str, tier: str) -> None:
     """Record that this session's next request should use a cheaper tier."""
-    _mid_stream_tier_overrides[session_fp] = tier
+    _mid_stream_tier_overrides[_profile_state_key(session_fp)] = tier
 
 
 def _get_circuit_breaker(model: str):
@@ -70,24 +84,26 @@ def _get_circuit_breaker(model: str):
         CB_SUCCESS_THRESHOLD  — successes in half-open before closing (default: 1)
         CB_TIMEOUT_SECONDS    — cooldown before half-open probe (default: 300)
     """
-    if model not in _circuit_breakers:
+    key = _profile_state_key(model)
+    if key not in _circuit_breakers:
         import os
         from src.core.circuit_breaker import CircuitBreaker
 
-        _circuit_breakers[model] = CircuitBreaker(
-            name=model,
+        _circuit_breakers[key] = CircuitBreaker(
+            name=key,
             failure_threshold=int(os.environ.get("CB_FAILURE_THRESHOLD", "3")),
             success_threshold=int(os.environ.get("CB_SUCCESS_THRESHOLD", "1")),
             timeout=float(os.environ.get("CB_TIMEOUT_SECONDS", "300")),
         )
-    return _circuit_breakers[model]
+    return _circuit_breakers[key]
 
 
 def _is_cb_open(model: str) -> bool:
     """Return True if the circuit breaker for this model is OPEN (should be skipped)."""
-    if model not in _circuit_breakers:
+    key = _profile_state_key(model)
+    if key not in _circuit_breakers:
         return False
-    return _circuit_breakers[model].is_open
+    return _circuit_breakers[key].is_open
 
 
 def _build_or_models_list(primary: str, fallback_models: list) -> list:
@@ -367,10 +383,11 @@ class OpenAIClient:
         """Resolve provider client for a model using the provider registry.
 
         Logic:
-        1. Compare the model name (with/without provider prefix) against each tier's configured model
-        2. If matched AND tier is enabled, route to that tier's resolved provider
-        3. If tier is disabled, skip it (falls through to default)
-        4. Fall back to the default client (OpenRouter)
+        1. Check provider registry via model prefix (e.g., "opencode/..." → PROVIDERS_opencode_URL)
+        2. Compare the model name (with/without provider prefix) against each tier's configured model
+        3. If matched AND tier is enabled, route to that tier's resolved provider
+        4. If tier is disabled, skip it (falls through to default)
+        5. Fall back to the default client (OpenRouter)
         """
         import time
 
@@ -378,12 +395,23 @@ class OpenAIClient:
         if not config:
             return self.client
 
+        # Check provider registry via model prefix FIRST
+        if "/" in model:
+            prefix = model.split("/", 1)[0].lower()
+            provider_client = self._get_provider_client(prefix)
+            if provider_client:
+                logger.debug(
+                    f"[Client Selection {timestamp}] Provider prefix '{prefix}' matched → using provider client for '{model}'"
+                )
+                return provider_client
+
         def norm(name: str) -> str:
             if name and "/" in name:
                 return name.split("/", 1)[1]
             return name or ""
 
         tier_enabled_map = {
+            "xbig": getattr(config, "xbig_enabled", True),
             "big": getattr(config, "big_enabled", True),
             "middle": getattr(config, "middle_enabled", True),
             "small": getattr(config, "small_enabled", True),
@@ -393,6 +421,7 @@ class OpenAIClient:
         stripped_requested = norm(model)
 
         tiers = [
+            ("XBIG", config.xbig_model),
             ("BIG", config.big_model),
             ("MIDDLE", config.middle_model),
             ("SMALL", config.small_model),
@@ -482,6 +511,26 @@ class OpenAIClient:
 
         # No provider match — use default client
         return self.client
+
+    @staticmethod
+    def _record_success_quota(client: Any, headers: Any, config=None) -> None:
+        """Feed successful response headers to the provider quota cache."""
+        try:
+            base_url = str(getattr(client, "base_url", "") or "")
+            provider = ""
+            if config is not None and hasattr(config, "provider_for_endpoint"):
+                provider = config.provider_for_endpoint(base_url) or ""
+            if not provider or provider == "default":
+                from src.services.providers.provider_detector import detect_provider
+
+                provider = detect_provider(base_url)
+
+            from src.core.quota_live import record_provider_quota_headers
+
+            record_provider_quota_headers(provider, dict(headers or {}))
+        except Exception:
+            # Quota observation must never fail an otherwise successful request.
+            pass
 
     async def create_chat_completion(
         self,
@@ -631,7 +680,7 @@ class OpenAIClient:
 
             # Create task that can be cancelled
             completion_task = asyncio.create_task(
-                client.chat.completions.create(**api_request)
+                client.chat.completions.with_raw_response.create(**api_request)
             )
 
             if request_id:
@@ -656,11 +705,18 @@ class OpenAIClient:
                         status_code=499, detail="Request cancelled by client"
                     )
 
-                completion = await completion_task
+                raw_completion = await completion_task
             else:
-                completion = await completion_task
+                raw_completion = await completion_task
 
-            # Convert to dict format that matches the original interface
+            self._record_success_quota(
+                client,
+                raw_completion.headers,
+                config,
+            )
+            completion = raw_completion.parse()
+
+            # Convert to dict format that matches the original interface.
             return completion.model_dump()
 
         except AuthenticationError as e:
@@ -820,7 +876,11 @@ class OpenAIClient:
             api_request = {k: v for k, v in request.items() if not k.startswith("_")}
 
             # Create the streaming completion
-            streaming_completion = await client.chat.completions.create(**api_request)
+            raw_stream = await client.chat.completions.with_raw_response.create(
+                **api_request
+            )
+            self._record_success_quota(client, raw_stream.headers, config)
+            streaming_completion = raw_stream.parse()
 
             async for chunk in streaming_completion:
                 # Check for cancellation before yielding each chunk

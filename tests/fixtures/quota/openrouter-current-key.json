@@ -1,0 +1,14 @@
+{
+  "data": {
+    "label": "fixture-key",
+    "limit": 50,
+    "usage": 12.5,
+    "limit_remaining": 37.5,
+    "limit_reset": "monthly",
+    "is_free_tier": false,
+    "rate_limit": {
+      "requests": 50,
+      "interval": "10s"
+    }
+  }
+}

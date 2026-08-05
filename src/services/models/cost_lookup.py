@@ -51,7 +51,7 @@ def _normalize_model_id(model: str) -> str:
     if "/" in model:
         parts = model.split("/", 1)
         # If first segment is a known proxy prefix, strip it
-        if parts[0].lower() in ("openrouter", "opencode_go", "opencode", "or"):
+        if parts[0].lower() in ("openrouter", "opencode", "or"):
             return parts[1]
     return model
 

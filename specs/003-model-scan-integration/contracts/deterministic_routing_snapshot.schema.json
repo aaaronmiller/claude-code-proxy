@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.clutch/contracts/deterministic_routing_snapshot.schema.json",
+  "title": "Clutch deterministic routing snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "snapshot_id",
+    "generated_at",
+    "expires_at",
+    "catalog_version",
+    "policy_version",
+    "request_class",
+    "candidates",
+    "excluded_candidates",
+    "evidence_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "snapshot_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "generated_at": {
+      "$ref": "#/$defs/utc_timestamp"
+    },
+    "expires_at": {
+      "$ref": "#/$defs/utc_timestamp"
+    },
+    "catalog_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policy_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_class": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ranked_candidate"
+      }
+    },
+    "excluded_candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/excluded_candidate"
+      }
+    },
+    "evidence_refs": {
+      "$ref": "#/$defs/nonempty_unique_strings"
+    }
+  },
+  "$defs": {
+    "utc_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
+    "nonempty_unique_strings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "ranked_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rank",
+        "callable_id",
+        "provider_id",
+        "api_model_id",
+        "base_url",
+        "credential_ref",
+        "capability_ref",
+        "quota_ref",
+        "eligibility_reasons",
+        "evidence_refs"
+      ],
+      "properties": {
+        "rank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "callable_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "api_model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "credential_ref": {
+          "type": "string",
+          "pattern": "^[A-Z_][A-Za-z0-9_.:-]*$"
+        },
+        "capability_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quota_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eligibility_reasons": {
+          "$ref": "#/$defs/nonempty_unique_strings"
+        },
+        "evidence_refs": {
+          "$ref": "#/$defs/nonempty_unique_strings"
+        }
+      }
+    },
+    "excluded_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_ref",
+        "reasons",
+        "evidence_refs"
+      ],
+      "properties": {
+        "candidate_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reasons": {
+          "$ref": "#/$defs/nonempty_unique_strings"
+        },
+        "evidence_refs": {
+          "$ref": "#/$defs/nonempty_unique_strings"
+        }
+      }
+    }
+  }
+}

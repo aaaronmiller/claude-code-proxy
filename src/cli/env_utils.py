@@ -36,6 +36,9 @@ def update_env_values(
     Returns:
         True on success, False on error
     """
+    from src.core.persistence_boundary import require_persistence_allowed
+
+    require_persistence_allowed("client configuration")
     env_file = env_path or DEFAULT_ENV_PATH
     
     try:

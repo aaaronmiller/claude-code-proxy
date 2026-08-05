@@ -58,7 +58,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,7 @@ class ProfileContext:
 
     name: str
     slots: Dict[str, Any] = field(default_factory=dict)
+    kind: str = "normal"
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.slots.get(key, default)
@@ -112,6 +113,12 @@ def current_profile_name() -> Optional[str]:
     """
     p = ACTIVE_PROFILE.get()
     return p.name if p else None
+
+
+def current_profile_kind() -> Optional[str]:
+    """Return the request profile kind without exposing mutable registry state."""
+    p = ACTIVE_PROFILE.get()
+    return p.kind if p else None
 
 
 # ── File cache (mtime-invalidated) ────────────────────────────────────────────
@@ -189,7 +196,9 @@ def resolve_profile(name: str, path: Optional[Path] = None) -> ProfileContext:
                 }
     else:
         merged = default
-    return ProfileContext(name=name or "default", slots=merged)
+    ephemeral = _ephemeral_profiles.get(name or "")
+    kind = str(ephemeral.get("kind", "normal")) if ephemeral else "normal"
+    return ProfileContext(name=name or "default", slots=merged, kind=kind)
 
 
 def register_ephemeral_profile(
@@ -216,6 +225,95 @@ def register_ephemeral_profile(
         "expires_at": time.time() + max(1, int(ttl_s)),
     }
     return ProfileContext(name=name, slots=slots)
+
+
+def register_canary_profile(
+    *,
+    bindings: Mapping[str, Mapping[str, Any]],
+    source_comparison_ids: tuple[str, ...],
+    preset: str = "default",
+    ttl_s: int = 900,
+) -> ProfileContext:
+    """Register an exact, time-bounded canary without writing profiles.json."""
+    lifetime = int(ttl_s)
+    if not 60 <= lifetime <= 3600:
+        raise ValueError("canary ttl_s must be between 60 and 3600 seconds")
+    if not bindings:
+        raise ValueError("canary requires at least one exact binding")
+    if not source_comparison_ids or len(source_comparison_ids) != len(
+        set(source_comparison_ids)
+    ):
+        raise ValueError("canary source comparison identities must be non-empty and unique")
+
+    normalized: Dict[str, Dict[str, Any]] = {}
+    allowed = {"api_model", "provider", "base_url", "cascade", "role"}
+    for assignment_id, raw in sorted(bindings.items()):
+        if not assignment_id or set(raw) != allowed:
+            raise ValueError(f"invalid canary binding for {assignment_id!r}")
+        api_model = str(raw["api_model"])
+        provider = str(raw["provider"])
+        base_url = str(raw["base_url"])
+        cascade = raw["cascade"]
+        role = str(raw["role"])
+        if not api_model or not role:
+            raise ValueError(f"canary binding {assignment_id!r} lacks exact model or role")
+        if not isinstance(cascade, (list, tuple)) or not all(
+            isinstance(item, str) and item for item in cascade
+        ):
+            raise ValueError(f"canary binding {assignment_id!r} has invalid fallbacks")
+        normalized[assignment_id] = {
+            "api_model": api_model,
+            "provider": provider,
+            "base_url": base_url,
+            "cascade": list(cascade),
+            "role": role,
+        }
+
+    base = resolve_profile(preset).slots
+    slots = {
+        **base,
+        "notes": "Ephemeral isolated model-scan canary. Use only through its explicit URL.",
+        "lane": "canary",
+        "force_main": "",
+        "provider_override": "",
+        "toolcall_models": [],
+        "web_search_intercept": False,
+        "tier_overrides": {},
+        "tier_providers": {},
+        "spoof_response_model": False,
+    }
+    name = f"canary-{uuid.uuid4().hex[:12]}"
+    now = time.time()
+    _ephemeral_profiles[name] = {
+        "slots": slots,
+        "preset": preset,
+        "kind": "canary",
+        "bindings": normalized,
+        "source_comparison_ids": list(source_comparison_ids),
+        "created_at": now,
+        "expires_at": now + lifetime,
+    }
+    return ProfileContext(name=name, slots=slots, kind="canary")
+
+
+def get_canary_binding(profile_name: str, assignment_id: str) -> Dict[str, Any] | None:
+    """Return one exact canary binding after expiry checks, or None."""
+    sweep_ephemeral_profiles()
+    item = _ephemeral_profiles.get(profile_name)
+    if not item or item.get("kind") != "canary":
+        return None
+    bindings = item.get("bindings")
+    if not isinstance(bindings, dict):
+        return None
+    binding = bindings.get(assignment_id)
+    return dict(binding) if isinstance(binding, dict) else None
+
+
+def is_canary_profile(name: str) -> bool:
+    """Return whether a live ephemeral profile is a canary."""
+    sweep_ephemeral_profiles()
+    item = _ephemeral_profiles.get(name)
+    return bool(item and item.get("kind") == "canary")
 
 
 def delete_ephemeral_profile(name: str) -> bool:

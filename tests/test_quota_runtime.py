@@ -21,13 +21,23 @@ def test_static_quota_becomes_meter():
     assert by_provider["openrouter"].remaining == 1000.0
 
 
-def test_injected_source_merges_by_precedence():
+def test_local_estimate_beats_static_seed():
     cfg = _Cfg(static_quota={"groq": 0.9})
-    # an injected higher-precedence source should win over static for the same provider
+    # A local estimate can refine an operator's static seed.
     src = StaticQuotaSource("tokscale", {"groq": 0.1})
     meters = collect_meters(cfg, sources=[src])
     groq = [m for m in meters if m.provider == "groq"][0]
-    assert groq.remaining_fraction == 0.1   # tokscale (precedence 100) beats static
+    assert groq.remaining_fraction == 0.1
+
+
+def test_provider_fact_beats_local_estimate():
+    cfg = _Cfg()
+    provider = StaticQuotaSource("header", {"groq": 0.8})
+    estimate = StaticQuotaSource("tokscale", {"groq": 0.1})
+    meters = collect_meters(cfg, sources=[estimate, provider])
+    groq = [m for m in meters if m.provider == "groq"][0]
+    assert groq.remaining_fraction == 0.8
+    assert groq.source == "header"
 
 
 def test_no_data_returns_empty_and_never_raises():

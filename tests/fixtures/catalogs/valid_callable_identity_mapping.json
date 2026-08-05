@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-07-23T12:01:00Z",
+  "mappings": [
+    {
+      "capability_id": "benchmark:qwen3-coder-free",
+      "callable_id": "openrouter:qwen/qwen3-coder:free:primary",
+      "provenance": [
+        "manual-provider-id-verification",
+        "model-scraper-catalog-join"
+      ]
+    }
+  ]
+}

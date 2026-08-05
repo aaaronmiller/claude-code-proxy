@@ -179,6 +179,9 @@ def migrate_if_needed(data: dict, file_path: Path) -> dict:
     if from_version == CURRENT_VERSION:
         return data
 
+    from src.core.persistence_boundary import require_persistence_allowed
+
+    require_persistence_allowed("routing migration")
     print(f"⚙️  Migrating config from {from_version} → {CURRENT_VERSION} …")
 
     # Build migration path

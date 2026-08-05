@@ -1,0 +1,5 @@
+{
+  "limit": 20,
+  "usage": 5,
+  "limit_reset": "legacy-window"
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-07-23T12:00:00Z",
+  "source": "model-scraper-fixture",
+  "records": [
+    {
+      "callable_id": "openrouter:qwen/qwen3-coder:free:primary",
+      "provider_id": "openrouter",
+      "api_model_id": "qwen/qwen3-coder:free",
+      "base_url": "https://openrouter.ai/api/v1",
+      "credential_ref": "OPENROUTER_API_KEY",
+      "observed_at": "2026-07-23T11:59:00Z",
+      "reachable": true,
+      "features": [
+        "chat-completions",
+        "streaming",
+        "tools"
+      ],
+      "provenance": [
+        "provider-models-endpoint",
+        "local-connectivity-probe"
+      ]
+    }
+  ]
+}

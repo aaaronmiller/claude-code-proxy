@@ -1,5 +1,9 @@
 """F06 live quota layer: passive QuotaCache + active OpenRouter poll (offline, injected)."""
-from src.core.quota_live import QuotaCache, fetch_openrouter_meters
+from src.core.quota_live import (
+    OPENROUTER_CURRENT_KEY_URL,
+    QuotaCache,
+    fetch_openrouter_meters,
+)
 
 GROQ_HDR = {  # real shape (Groq, per-minute)
     "x-ratelimit-limit-requests": "1000", "x-ratelimit-remaining-requests": "999",
@@ -57,10 +61,23 @@ def test_quota_cache_source_feeds_collect_meters():
 
 
 def test_fetch_openrouter_meters_cases():
-    ok = fetch_openrouter_meters("k", http_get=lambda u, h, t: (200, {"data": {"limit": 50, "limit_remaining": 40}}))
+    seen = {}
+
+    def current_key(u, h, t):
+        seen.update(url=u, headers=h, timeout=t)
+        return 200, {"data": {"limit": 50, "limit_remaining": 40}}
+
+    ok = fetch_openrouter_meters("k", http_get=current_key)
     assert len(ok) == 1 and ok[0].remaining == 40.0
+    assert seen == {
+        "url": OPENROUTER_CURRENT_KEY_URL,
+        "headers": {"Authorization": "Bearer k"},
+        "timeout": 15.0,
+    }
     # unmetered key
     assert fetch_openrouter_meters("k", http_get=lambda u, h, t: (200, {"data": {"limit": None}})) == []
+    # unknown successful payload never creates false quota
+    assert fetch_openrouter_meters("k", http_get=lambda u, h, t: (200, {"data": {"limit": 50}})) == []
     # non-200
     assert fetch_openrouter_meters("k", http_get=lambda u, h, t: (429, {})) == []
     # transport error -> []

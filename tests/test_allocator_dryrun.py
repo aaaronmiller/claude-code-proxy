@@ -1,5 +1,7 @@
 """S1-07: F18 greedy allocator dry-run. Verifies satisfice-then-maximize, floor gates,
 and scarce-capacity contention. See ai-gateway/plan/F18 + 04-DATA-CONTRACTS.md."""
+import pytest
+
 from src.core.quota_sources import QuotaMeter
 from src.services.allocator import Candidate, RoleSpec, allocate
 
@@ -13,10 +15,16 @@ def _meter(provider, limit, remaining, unit="calls"):
 SCARCE = _meter("cerebras", 1000, 300)
 ABUNDANT = _meter("openrouter", 100000, 100000)
 
-TOP = Candidate("cer/top", "cerebras", fitness=95, has_tools=True)
-FREE_A = Candidate("or/free-a", "openrouter", fitness=60, has_tools=True)
-FREE_B = Candidate("or/free-b", "openrouter", fitness=55, has_tools=True)
-NOTOOLS = Candidate("x/notools", "openrouter", fitness=99, has_tools=False)
+TOP = Candidate("cer/top", "cerebras", fitness=95, has_tools=True, api_model="cer/top")
+FREE_A = Candidate(
+    "or/free-a", "openrouter", fitness=60, has_tools=True, api_model="or/free-a"
+)
+FREE_B = Candidate(
+    "or/free-b", "openrouter", fitness=55, has_tools=True, api_model="or/free-b"
+)
+NOTOOLS = Candidate(
+    "x/notools", "openrouter", fitness=99, has_tools=False, api_model="x/notools"
+)
 
 
 def test_maximizing_role_takes_top_fitness():
@@ -83,6 +91,25 @@ def test_mapping_shape():
     assert slot["best"]["provider"] == "cerebras"
     assert slot["candidates"][0]["model_id"] == "cer/top"
     assert len(slot["candidates"]) >= 1
+
+
+def test_mapping_rejects_candidate_without_exact_callable_identity():
+    role = RoleSpec(
+        "hermes-1",
+        "primary",
+        value_sensitivity=0.9,
+        expected_calls_per_day=1,
+    )
+    unresolved = Candidate(
+        "Qwen Coder Display Name",
+        "openrouter",
+        fitness=90,
+    )
+    cbr = {"primary": [unresolved]}
+    result = allocate([role], cbr, [ABUNDANT])
+
+    with pytest.raises(ValueError, match="lacks exact callable identity"):
+        allocation_to_snapshot_dict(result, cbr)
 
 
 def test_mapping_parses_via_model_scan_snapshot(tmp_path):

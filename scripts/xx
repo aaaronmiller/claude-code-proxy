@@ -26,6 +26,35 @@ die()  { echo -e "${RED}xx:${NC} $*" >&2; exit 1; }
 note() { echo -e "${CYAN}xx:${NC} $*" >&2; }
 warn() { echo -e "${YEL}xx:${NC} $*" >&2; }
 
+CRASH_GUARD_SH="${CRASH_GUARD_SH:-$HOME/.config/crash-guard/crash-guard.sh}"
+if [ -r "$CRASH_GUARD_SH" ]; then
+    # shellcheck source=/dev/null
+    source "$CRASH_GUARD_SH"
+fi
+
+_repair_zeroed_hermes_files() {
+    local repo="${HERMES_SOURCE_ROOT:-$HOME/.hermes/hermes-agent}"
+    local rel size recovery_dir recovery_file
+    local -a restore=()
+
+    [ -d "$repo/.git" ] || return 0
+    while IFS= read -r -d '' rel; do
+        [ -f "$repo/$rel" ] || continue
+        [ ! -s "$repo/$rel" ] || continue
+        size="$(git -C "$repo" cat-file -s "HEAD:$rel" 2>/dev/null || true)"
+        [ "${size:-0}" -gt 0 ] || continue
+        restore+=("$rel")
+    done < <(git -C "$repo" diff --name-only --diff-filter=M -z --)
+
+    [ "${#restore[@]}" -gt 0 ] || return 0
+    recovery_dir="$HOME/.xx/recovery"
+    mkdir -p "$recovery_dir"
+    recovery_file="$recovery_dir/hermes-zeroed-$(date +%Y%m%d-%H%M%S).txt"
+    printf '%s\n' "${restore[@]}" > "$recovery_file"
+    git -C "$repo" restore --source=HEAD -- "${restore[@]}"
+    warn "restored ${#restore[@]} zero-byte Hermes file(s); record: $recovery_file"
+}
+
 # ── Single-screen, multi-column help ─────────────────────────────────────────
 usage() {
 cat <<H
@@ -192,6 +221,14 @@ case "$AGENT" in
     *) die "unknown agent '$AGENT' (c h x o q p a g)" ;;
 esac
 
+AGENT_EXEC="$AGENT_NAME"
+if [ "$AGENT" = "h" ]; then
+    _repair_zeroed_hermes_files
+    if [ -x "$HOME/.hermes/hermes-agent/venv/bin/hermes" ]; then
+        AGENT_EXEC="$HOME/.hermes/hermes-agent/venv/bin/hermes"
+    fi
+fi
+
 # bypass → native profile (no reroute)
 if [ "$ROUTE" = "b" ]; then
     case "$AGENT" in h) PROFILE=hermes-bypass ;; p) PROFILE=pi-bypass ;; esac
@@ -228,9 +265,9 @@ else
 fi
 
 # ── build command (per-tool, normalized init/continue/resume × interactive/headless) ──
-command -v "$AGENT_NAME" >/dev/null 2>&1 || die "'$AGENT_NAME' not installed / not on PATH"
+command -v "$AGENT_EXEC" >/dev/null 2>&1 || die "'$AGENT_NAME' not installed / not on PATH"
 # direct route also skips the RTK wrapper (raw CLI); proxy/bypass keep it
-if [ "$ROUTE" = "d" ]; then declare -a CMD=("$AGENT_NAME"); else declare -a CMD=(rtk "$AGENT_NAME"); fi
+if [ "$ROUTE" = "d" ]; then declare -a CMD=("$AGENT_EXEC"); else declare -a CMD=(rtk "$AGENT_EXEC"); fi
 _model() { if [ -n "$MODEL" ]; then CMD+=(--model "$MODEL"); fi; }
 
 case "$AGENT_NAME" in

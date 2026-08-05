@@ -82,6 +82,9 @@ class IdentifierMappingRegistry:
             return None
 
     def register(self, mapping: IdentifierMapping) -> IdentifierMapping:
+        from src.core.persistence_boundary import require_persistence_allowed
+
+        require_persistence_allowed("routing")
         with self._lock:
             chain = self._chain()
             if any(
@@ -98,6 +101,9 @@ class IdentifierMappingRegistry:
             return mapping
 
     def update(self, incoming_identifier: str, updates: dict) -> IdentifierMapping:
+        from src.core.persistence_boundary import require_persistence_allowed
+
+        require_persistence_allowed("routing")
         with self._lock:
             chain = self._chain()
             if "incoming_identifier" in updates:
@@ -122,6 +128,9 @@ class IdentifierMappingRegistry:
             )
 
     def delete(self, incoming_identifier: str) -> None:
+        from src.core.persistence_boundary import require_persistence_allowed
+
+        require_persistence_allowed("routing")
         with self._lock:
             chain = self._chain()
             for i, m in enumerate(chain.identifier_mappings):

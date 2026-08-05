@@ -57,6 +57,7 @@ def parse_ratelimit_headers(
                     limit=lim, remaining=rem,
                     reset_at=str(h.get(f"x-ratelimit-reset-{hkey}", "")),
                     source="header", observed_at=observed_at,
+                    resource="api-rate-limit", confidence=1.0,
                 )
             )
 
@@ -72,6 +73,7 @@ def parse_ratelimit_headers(
                         limit=lim_w, remaining=rem_w,
                         reset_at=str(h.get(f"x-ratelimit-reset-{hkey}-{wname}", "")),
                         source="header", observed_at=observed_at,
+                        resource="api-rate-limit", confidence=1.0,
                     )
                 )
 
@@ -86,6 +88,7 @@ def parse_ratelimit_headers(
                     limit=lim_a, remaining=rem_a,
                     reset_at=str(h.get(f"anthropic-ratelimit-{hkey}-reset", "")),
                     source="header", observed_at=observed_at,
+                    resource="api-rate-limit", confidence=1.0,
                 )
             )
 
@@ -133,24 +136,65 @@ class HeaderQuotaSource:
             return []
 
 
-def parse_openrouter_auth_key(payload: Mapping, *, observed_at: float = 0.0) -> list[QuotaMeter]:
-    """Parse OpenRouter GET /api/v1/auth/key JSON ({data:{limit,usage,...}}) into a meter.
+OPENROUTER_CURRENT_KEY_CONTRACT_DATE = "2026-07-23"
 
-    limit None => unmetered (skip). Otherwise remaining = limit - usage.
+
+def parse_openrouter_current_key(
+    payload: Mapping,
+    *,
+    observed_at: float = 0.0,
+) -> list[QuotaMeter]:
+    """Parse OpenRouter ``GET /api/v1/key`` data into one credit-limit meter.
+
+    The current contract wraps key information in ``data``. A top-level legacy
+    fixture is accepted to preserve callers that already extracted that object.
+    Unknown or inconsistent shapes return no meter rather than inventing quota.
+    The deprecated ``rate_limit`` field is intentionally ignored because it is
+    not the key's remaining credit limit.
     """
-    data = payload.get("data", payload) if isinstance(payload, Mapping) else {}
+    if not isinstance(payload, Mapping):
+        return []
+
+    wrapped = payload.get("data")
+    if isinstance(wrapped, Mapping):
+        data = wrapped
+    elif any(field in payload for field in ("limit", "usage", "limit_remaining")):
+        data = payload
+    else:
+        return []
+
     limit = _num(data.get("limit"))
     if limit is None:
-        return []  # unmetered key (verified live: limit=null => no dollar cap)
-    # Prefer the explicit limit_remaining the API returns; fall back to limit - usage.
+        return []  # unmetered key: no finite remaining-credit meter
+    if limit < 0:
+        return []
+
+    # Prefer the explicit remaining value. If it is absent, usage is required;
+    # assuming zero usage would create false quota.
     rem = _num(data.get("limit_remaining"))
     if rem is None:
-        rem = limit - (_num(data.get("usage")) or 0.0)
+        usage = _num(data.get("usage"))
+        if usage is None or usage < 0:
+            return []
+        rem = max(0.0, limit - usage)
+    elif rem < 0 or rem > limit:
+        return []
+
     return [
         QuotaMeter(
-            id="openrouter:dollars:auth-key", provider="openrouter", unit="dollars",
-            window_seconds=0, limit=limit, remaining=max(0.0, rem),
+            id="openrouter:dollars:current-key", provider="openrouter", unit="dollars",
+            window_seconds=0, limit=limit, remaining=rem,
             reset_at=str(data.get("limit_reset", "") or ""),
-            source="poll", observed_at=observed_at,
+            source="openrouter-current-key", observed_at=observed_at,
+            resource="credit-limit", confidence=1.0,
         )
     ]
+
+
+def parse_openrouter_auth_key(
+    payload: Mapping,
+    *,
+    observed_at: float = 0.0,
+) -> list[QuotaMeter]:
+    """Backward-compatible function name for the current-key payload parser."""
+    return parse_openrouter_current_key(payload, observed_at=observed_at)

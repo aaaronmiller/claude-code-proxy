@@ -163,6 +163,10 @@ class ModelScanConfig:
     static_quota: dict = field(default_factory=dict)
     # nominal per-window call budget used to turn a remaining_fraction into a meter
     quota_nominal_calls: float = 1000.0
+    # local last-known typed meter store; contains no credentials or request data
+    quota_store_path: str = "~/.cache/claude-code-proxy/quota-meters.json"
+    # age threshold exposed with stored meter facts; stale facts remain inspectable
+    quota_staleness_limit_s: int = 86400
 
     @classmethod
     def from_any(cls, val: Any) -> "ModelScanConfig":
@@ -305,6 +309,9 @@ class ProxyChain:
         update only assignments/router from accidentally wiping the service
         startup entries that `proxies up` depends on.
         """
+        from src.core.persistence_boundary import require_persistence_allowed
+
+        require_persistence_allowed("routing")
         p = Path(os.environ.get("PROXY_CHAIN_FILE", path or DEFAULT_CHAIN_FILE))
         p.parent.mkdir(parents=True, exist_ok=True)
 

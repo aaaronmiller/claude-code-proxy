@@ -247,14 +247,18 @@ class ConfigResolver:
                 self._layers[ConfigLayer.DOTENV][k] = v
 
     LEGACY_ALIAS_MAP: dict[str, str] = {
+        "XBIG_MODEL": "assignments.xbig.model",
         "BIG_MODEL": "assignments.big.model",
         "MIDDLE_MODEL": "assignments.middle.model",
         "SMALL_MODEL": "assignments.small.model",
+        "XBIG_ENDPOINT": "assignments.xbig.base_url",
         "BIG_ENDPOINT": "assignments.big.base_url",
         "MIDDLE_ENDPOINT": "assignments.middle.base_url",
         "SMALL_ENDPOINT": "assignments.small.base_url",
+        "XBIG_API_KEY": "assignments.xbig.api_key",
         "MIDDLE_API_KEY": "assignments.middle.api_key",
         "SMALL_API_KEY": "assignments.small.api_key",
+        "ENABLE_XBIG_ENDPOINT": "assignments.xbig.enabled",
         "ENABLE_BIG_ENDPOINT": "assignments.big.enabled",
         "ENABLE_MIDDLE_ENDPOINT": "assignments.middle.enabled",
         "ENABLE_SMALL_ENDPOINT": "assignments.small.enabled",
@@ -272,7 +276,7 @@ class ConfigResolver:
     def _register_legacy_aliases(self) -> None:
         # Register schemas for assignments.{tier}.* even if no chain exists yet,
         # so legacy BIG_MODEL etc. can route to a known field path during tests.
-        for tier in ("big", "middle", "small"):
+        for tier in ("xbig", "big", "middle", "small"):
             for fname, ftype, fdefault, fsecret in (
                 ("model", str, "", False),
                 ("provider", str, "", False),
@@ -386,6 +390,10 @@ class ConfigResolver:
         source_layer: ConfigLayer = ConfigLayer.STORED,
         principal: str | None = None,
     ) -> None:
+        if source_layer == ConfigLayer.STORED:
+            from src.core.persistence_boundary import require_persistence_allowed
+
+            require_persistence_allowed("client configuration")
         self._ensure_initialized()
         with self._lock:
             schema = self._schemas.get(field_path)

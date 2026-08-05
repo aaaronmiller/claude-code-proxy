@@ -93,7 +93,7 @@ class OpenRouterBilling(BillingProvider):
             # Using generation stats as proxy
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.base_url}/auth/key",
+                    f"{self.base_url}/key",
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     timeout=10.0
                 )
@@ -121,7 +121,7 @@ class OpenRouterBilling(BillingProvider):
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.base_url}/auth/key",
+                    f"{self.base_url}/key",
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     timeout=10.0
                 )

@@ -174,7 +174,7 @@ def display_startup_config(config):
         return f"${per_1k:.3f}", "✗"
 
     local_model = getattr(config, "local_model", None)
-    tiers = [("BIG", config.big_model), ("MIDDLE", config.middle_model), ("SMALL", config.small_model)]
+    tiers = [("XBIG", config.xbig_model), ("BIG", config.big_model), ("MIDDLE", config.middle_model), ("SMALL", config.small_model)]
     if local_model and getattr(config, "local_enabled", False):
         tiers.append(("LOCAL", local_model))
 

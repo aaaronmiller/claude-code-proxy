@@ -79,9 +79,19 @@
   },
   "assignments": [
     {
+      "id": "xbig",
+      "kind": "tier",
+      "model": "",
+      "provider": "",
+      "base_url": "",
+      "api_key": "",
+      "enabled": true,
+      "cascade": []
+    },
+    {
       "id": "big",
       "kind": "tier",
-      "model": "deepseek-v4-flash-free",
+      "model": "",
       "provider": "",
       "base_url": "",
       "api_key": "",
@@ -91,7 +101,7 @@
     {
       "id": "middle",
       "kind": "tier",
-      "model": "deepseek-v4-flash-free",
+      "model": "",
       "provider": "",
       "base_url": "",
       "api_key": "",
@@ -101,7 +111,7 @@
     {
       "id": "small",
       "kind": "tier",
-      "model": "deepseek-v4-flash-free",
+      "model": "",
       "provider": "",
       "base_url": "",
       "api_key": "",

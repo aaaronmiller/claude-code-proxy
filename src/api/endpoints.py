@@ -346,6 +346,34 @@ async def reload_model_scan_bindings():
         raise HTTPException(status_code=500, detail="model-scan reload failed") from exc
 
 
+@router.post("/api/model-scan/preview")
+async def preview_model_scan_bindings():
+    """Compute proposed bindings without changing configuration or active routes."""
+    try:
+        from src.core.model_scan_runtime import preview_model_scan
+
+        return preview_model_scan()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"model-scan preview failed: {exc}")
+        raise HTTPException(status_code=500, detail="model-scan preview failed") from exc
+
+
+@router.post("/api/model-scan/shadow")
+async def shadow_model_scan_bindings():
+    """Record active-versus-preview evidence without executing or persisting preview routes."""
+    try:
+        from src.core.model_scan_runtime import shadow_model_scan
+
+        return shadow_model_scan()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"model-scan shadow comparison failed: {exc}")
+        raise HTTPException(status_code=500, detail="model-scan shadow comparison failed") from exc
+
+
 @router.get("/api/model-scan/dashboard")
 async def model_scan_dashboard(limit: int = 25):
     """Return model-scan provenance, compression stats, and recent CCP errors."""
@@ -824,6 +852,8 @@ async def create_message(
                 )
 
             req = norm(model_name)
+            if req == norm(config.xbig_model):
+                return "xbig"
             if req == norm(config.big_model):
                 return "big"
             if req == norm(config.middle_model):

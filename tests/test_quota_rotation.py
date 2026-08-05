@@ -25,7 +25,7 @@ def test_tokscale_sqlite_source_reads_provider_quota(tmp_path):
     assert samples[0].remaining_fraction == 0.5
 
 
-def test_quota_merge_uses_precedence_then_freshness():
+def test_local_quota_merge_uses_precedence_then_freshness():
     merged = merge_quota_samples(
         [
             QuotaSample("p", 0.9, source="usage_tracker", observed_at=100),
@@ -33,6 +33,39 @@ def test_quota_merge_uses_precedence_then_freshness():
         ]
     )
     assert merged["p"].remaining_fraction == 0.2
+
+
+def test_provider_header_outranks_newer_local_estimate():
+    merged = merge_quota_samples(
+        [
+            QuotaSample("p", 0.2, source="header", observed_at=1),
+            QuotaSample("p", 0.9, source="tokscale", observed_at=100),
+            QuotaSample("p", 0.8, source="ccusage", observed_at=200),
+        ]
+    )
+    assert merged["p"].source == "header"
+    assert merged["p"].remaining_fraction == 0.2
+
+
+def test_provider_account_endpoint_outranks_local_estimate():
+    merged = merge_quota_samples(
+        [
+            QuotaSample(
+                "openrouter",
+                0.75,
+                source="openrouter-current-key",
+                observed_at=1,
+            ),
+            QuotaSample(
+                "openrouter",
+                0.1,
+                source="tokscale",
+                observed_at=100,
+            ),
+        ]
+    )
+    assert merged["openrouter"].source == "openrouter-current-key"
+    assert merged["openrouter"].remaining_fraction == 0.75
 
 
 def test_rotation_advances_when_provider_drained_and_free_floor_engages():

@@ -136,6 +136,9 @@ class Config:
         lambda v: int(v) if v else 2,
     )
 
+    enable_custom_xbig_prompt = ConfigField(
+        "enable_custom_xbig_prompt", lambda v: str(v).lower() in ("true", "1", "yes")
+    )
     enable_custom_big_prompt = ConfigField(
         "enable_custom_big_prompt", lambda v: str(v).lower() in ("true", "1", "yes")
     )
@@ -145,9 +148,11 @@ class Config:
     enable_custom_small_prompt = ConfigField(
         "enable_custom_small_prompt", lambda v: str(v).lower() in ("true", "1", "yes")
     )
+    xbig_system_prompt_file = ConfigField("xbig_system_prompt_file")
     big_system_prompt_file = ConfigField("big_system_prompt_file")
     middle_system_prompt_file = ConfigField("middle_system_prompt_file")
     small_system_prompt_file = ConfigField("small_system_prompt_file")
+    xbig_system_prompt = ConfigField("xbig_system_prompt")
     big_system_prompt = ConfigField("big_system_prompt")
     middle_system_prompt = ConfigField("middle_system_prompt")
     small_system_prompt = ConfigField("small_system_prompt")
@@ -169,6 +174,7 @@ class Config:
     reasoning_max_tokens = ConfigField(
         "reasoning_max_tokens", lambda v: int(v) if v else None
     )
+    xbig_model_reasoning = ConfigField("xbig_model_reasoning")
     big_model_reasoning = ConfigField("big_model_reasoning")
     middle_model_reasoning = ConfigField("middle_model_reasoning")
     small_model_reasoning = ConfigField("small_model_reasoning")
@@ -208,6 +214,15 @@ class Config:
     )
 
     # ── Assignment fields (tier) ────────────────────────────────────────────────
+    xbig_model = ConfigField("assignments.xbig.model")
+    xbig_provider = ConfigField("assignments.xbig.provider")
+    xbig_endpoint = ConfigField("assignments.xbig.base_url")
+    xbig_api_key = ConfigField("assignments.xbig.api_key")
+    xbig_cascade = ConfigField("assignments.xbig.cascade")
+    xbig_enabled = ConfigField(
+        "assignments.xbig.enabled",
+        lambda v: str(v).lower() in ("true", "1", "yes") if v is not None else False,
+    )
     big_model = ConfigField("assignments.big.model")
     big_provider = ConfigField("assignments.big.provider")
     big_endpoint = ConfigField("assignments.big.base_url")
@@ -439,16 +454,27 @@ class Config:
         return client_api_key == self.anthropic_api_key
 
     def get_provider_endpoint(self, provider_name: str) -> Optional[str]:
-        """Get base URL for a named provider from provider_registry."""
+        """Get base URL for a named provider from provider_registry, resolving ${VAR} patterns."""
         reg = self.provider_registry
         entry = reg.get(provider_name.lower())
-        return entry.get("url") if entry else None
+        if entry is None:
+            return None
+        raw = entry.get("url")
+        if not raw:
+            return None
+        return os.path.expandvars(raw) if isinstance(raw, str) else raw
 
     def get_provider_api_key(self, provider_name: str) -> Optional[str]:
-        """Get API key for a named provider from provider_registry."""
+        """Get API key for a named provider from provider_registry, resolving ${VAR} patterns."""
         reg = self.provider_registry
         entry = reg.get(provider_name.lower())
-        return entry.get("api_key") if entry else None
+        if entry is None:
+            return None
+        raw = entry.get("api_key")
+        if not raw:
+            return None
+        # Expand ${VAR} / $VAR environment variable references
+        return os.path.expandvars(raw) if isinstance(raw, str) else raw
 
     def get_provider_api_keys(self, provider_name: str) -> List[str]:
         """Get the provider key pool. Single-key providers return a one-item list."""
@@ -457,7 +483,7 @@ class Config:
         if not entry:
             return []
         pool = [
-            item.strip()
+            os.path.expandvars(item.strip())
             for item in str(entry.get("api_keys") or "").split(",")
             if item.strip()
         ]

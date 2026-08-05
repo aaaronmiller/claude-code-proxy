@@ -1,0 +1,291 @@
+{
+  "schema_version": "1.0.0",
+  "version": "task-taxonomy:2026-07-24",
+  "taxonomy_id": "sha256:ffaa3217691722c7febf79b5317da8788e2e542a9172eaa8f6ed76a3b1a0fd4d",
+  "families": [
+    "general_answer",
+    "research_synthesis",
+    "simple_script",
+    "code_patch",
+    "debug_loop",
+    "spec_driven_project",
+    "data_extraction",
+    "benchmark_analysis",
+    "artifact_generation",
+    "safety_sensitive"
+  ],
+  "classes": [
+    {
+      "task_class": "classification_routing_tagging",
+      "label": "Classification, routing, or tagging",
+      "task_family": "artifact_generation",
+      "threshold_rank": 18,
+      "validation_gates": ["schema_match"],
+      "required_capabilities": ["structured_output"],
+      "source_provenance": ["appendix_a:classification_routing_tagging", "master_v2:d4a"],
+      "mapping_rationale": "The result is a bounded structured routing artifact. The older taxonomy has no dedicated classification family."
+    },
+    {
+      "task_class": "structured_extraction",
+      "label": "Structured non-critical extraction",
+      "task_family": "data_extraction",
+      "threshold_rank": 18,
+      "validation_gates": ["schema_validation", "json_validation"],
+      "required_capabilities": ["structured_output"],
+      "source_provenance": ["appendix_a:structured_extraction", "master_v2:d4a"],
+      "mapping_rationale": "Master v2 explicitly maps both extraction classes to data_extraction."
+    },
+    {
+      "task_class": "strict_critical_extraction",
+      "label": "Strict critical JSON extraction",
+      "task_family": "data_extraction",
+      "threshold_rank": 15,
+      "validation_gates": ["strict_schema", "type_check"],
+      "required_capabilities": ["structured_output", "privacy_safe"],
+      "source_provenance": ["appendix_a:strict_critical_extraction", "master_v2:d4a"],
+      "mapping_rationale": "Master v2 explicitly maps both extraction classes to data_extraction."
+    },
+    {
+      "task_class": "format_conversion",
+      "label": "Format conversion, regex, or rename",
+      "task_family": "code_patch",
+      "threshold_rank": 18,
+      "validation_gates": ["diff", "lint"],
+      "required_capabilities": ["code_edit"],
+      "source_provenance": ["appendix_a:format_conversion", "master_v2:d4a"],
+      "mapping_rationale": "Master v2 explicitly maps format conversion to code_patch."
+    },
+    {
+      "task_class": "docstrings_comments",
+      "label": "Docstrings or comments",
+      "task_family": "code_patch",
+      "threshold_rank": 17,
+      "validation_gates": ["lint"],
+      "required_capabilities": ["code_edit"],
+      "source_provenance": ["appendix_a:docstrings_comments", "master_v2:d4a"],
+      "mapping_rationale": "Master v2 explicitly maps docstrings to code_patch."
+    },
+    {
+      "task_class": "single_function_generation",
+      "label": "Single-function generation",
+      "task_family": "simple_script",
+      "threshold_rank": 16,
+      "validation_gates": ["unit_test"],
+      "required_capabilities": ["code_generation"],
+      "source_provenance": ["appendix_a:single_function_generation", "orchestrator_v2:simple_script"],
+      "mapping_rationale": "A single bounded function is the narrowest code-producing simple_script class."
+    },
+    {
+      "task_class": "single_file_codegen_tests",
+      "label": "Single-file code generation with tests",
+      "task_family": "simple_script",
+      "threshold_rank": 14,
+      "validation_gates": ["unit_test", "red_green"],
+      "required_capabilities": ["code_generation", "test_execution"],
+      "source_provenance": ["appendix_a:single_file_codegen_tests", "orchestrator_v2:simple_script"],
+      "mapping_rationale": "The bounded single-file scope and direct validator match the simple_script workflow evidence."
+    },
+    {
+      "task_class": "independent_test_generation",
+      "label": "Test generation for independent modules",
+      "task_family": "code_patch",
+      "threshold_rank": 13,
+      "validation_gates": ["tests_compile", "fail_first"],
+      "required_capabilities": ["code_edit", "test_execution"],
+      "source_provenance": ["appendix_a:independent_test_generation", "orchestrator_v2:code_patch"],
+      "mapping_rationale": "The task changes an existing codebase and is validated as a patch."
+    },
+    {
+      "task_class": "bounded_multi_file_refactor",
+      "label": "Bounded multi-file refactor",
+      "task_family": "code_patch",
+      "threshold_rank": 10,
+      "validation_gates": ["test_suite", "build"],
+      "required_capabilities": ["code_edit", "cross_file_reasoning", "test_execution"],
+      "source_provenance": ["appendix_a:bounded_multi_file_refactor", "orchestrator_v2:code_patch"],
+      "mapping_rationale": "A bounded refactor is a multi-file code_patch with stronger capability requirements."
+    },
+    {
+      "task_class": "bounded_tool_agent_loop",
+      "label": "Bounded tool-calling agent loop",
+      "task_family": "debug_loop",
+      "threshold_rank": 13,
+      "validation_gates": ["task_specific_check"],
+      "required_capabilities": ["tool_calling"],
+      "source_provenance": ["appendix_a:bounded_tool_agent_loop", "orchestrator_v2:debug_loop"],
+      "mapping_rationale": "Both are bounded iterative observe-act-check loops; the exact validator remains task-specific."
+    },
+    {
+      "task_class": "code_review",
+      "label": "Code review",
+      "task_family": "artifact_generation",
+      "threshold_rank": 7,
+      "validation_gates": ["reviewer_checklist", "cross_family_review"],
+      "required_capabilities": ["code_understanding", "structured_output"],
+      "source_provenance": ["appendix_a:code_review", "master_v2:d4"],
+      "mapping_rationale": "The output is an independently validated review artifact rather than an implementation patch."
+    },
+    {
+      "task_class": "cross_file_debugging",
+      "label": "Subtle cross-file debugging",
+      "task_family": "debug_loop",
+      "threshold_rank": 5,
+      "validation_gates": ["reproduce_failure", "regression_pass"],
+      "required_capabilities": ["cross_file_reasoning", "tool_calling", "test_execution"],
+      "source_provenance": ["appendix_a:cross_file_debugging", "orchestrator_v2:debug_loop"],
+      "mapping_rationale": "This is the high-coupling debug_loop class."
+    },
+    {
+      "task_class": "architecture_schema_design",
+      "label": "Architecture or schema design",
+      "task_family": "spec_driven_project",
+      "threshold_rank": 4,
+      "validation_gates": ["design_review"],
+      "required_capabilities": ["architecture_reasoning", "structured_output"],
+      "source_provenance": ["appendix_a:architecture_schema_design", "master_v2:d4a"],
+      "mapping_rationale": "Master v2 explicitly maps architecture to spec_driven_project."
+    },
+    {
+      "task_class": "task_graph_decomposition",
+      "label": "Task-graph and turn-sequence decomposition",
+      "task_family": "spec_driven_project",
+      "threshold_rank": 3,
+      "validation_gates": ["constitution_check", "dependency_check"],
+      "required_capabilities": ["planning", "dependency_reasoning"],
+      "source_provenance": ["appendix_a:task_graph_decomposition", "master_v2:d4a"],
+      "mapping_rationale": "Master v2 explicitly maps task-graph decomposition to spec_driven_project."
+    },
+    {
+      "task_class": "long_horizon_autonomy",
+      "label": "Long-horizon multi-day autonomy",
+      "task_family": "spec_driven_project",
+      "threshold_rank": 1,
+      "validation_gates": ["milestone_tests", "self_validation"],
+      "required_capabilities": ["planning", "dependency_reasoning", "tool_calling", "state_persistence"],
+      "source_provenance": ["appendix_a:long_horizon_autonomy", "orchestrator_v2:spec_driven_project"],
+      "mapping_rationale": "The durable multi-day task graph is the maximum-scope spec_driven_project class."
+    },
+    {
+      "task_class": "general_answer",
+      "label": "General answer",
+      "task_family": "general_answer",
+      "threshold_rank": 18,
+      "validation_gates": ["spot_check_or_judge"],
+      "required_capabilities": ["text_generation"],
+      "source_provenance": ["master_v2:d4a", "orchestrator_v2:general_answer"],
+      "mapping_rationale": "Master v2 creates an exact class for the legacy family that had no Appendix A class."
+    },
+    {
+      "task_class": "research_synthesis",
+      "label": "Research synthesis",
+      "task_family": "research_synthesis",
+      "threshold_rank": 10,
+      "validation_gates": ["source_coverage", "citation_fidelity", "contradiction_check"],
+      "required_capabilities": ["research", "long_context", "structured_output"],
+      "source_provenance": ["master_v2:d4a", "orchestrator_v2:research_synthesis"],
+      "mapping_rationale": "Master v2 creates an exact class for the legacy family that had no Appendix A class."
+    },
+    {
+      "task_class": "benchmark_analysis",
+      "label": "Benchmark analysis",
+      "task_family": "benchmark_analysis",
+      "threshold_rank": 13,
+      "validation_gates": ["schema_validation", "recompute"],
+      "required_capabilities": ["data_analysis", "structured_output"],
+      "source_provenance": ["master_v2:d4a", "orchestrator_v2:benchmark_analysis"],
+      "mapping_rationale": "Master v2 creates an exact class for the legacy family that had no Appendix A class."
+    },
+    {
+      "task_class": "safety_sensitive",
+      "label": "Safety-sensitive work",
+      "task_family": "safety_sensitive",
+      "threshold_rank": 4,
+      "validation_gates": ["human_review"],
+      "required_capabilities": ["safety_reasoning"],
+      "source_provenance": ["master_v2:d4a", "orchestrator_v2:safety_sensitive"],
+      "mapping_rationale": "Master v2 creates an exact class and requires immediate human-review semantics."
+    }
+  ],
+  "legacy_tag_dispositions": [
+    {
+      "task_tag": "general_answer",
+      "task_family": "general_answer",
+      "disposition": "exact_default",
+      "default_task_class": "general_answer",
+      "rationale": "Master v2 creates a one-to-one class for this tag."
+    },
+    {
+      "task_tag": "research_synthesis",
+      "task_family": "research_synthesis",
+      "disposition": "exact_default",
+      "default_task_class": "research_synthesis",
+      "rationale": "Master v2 creates a one-to-one class for this tag."
+    },
+    {
+      "task_tag": "simple_script",
+      "task_family": "simple_script",
+      "disposition": "family_only",
+      "default_task_class": null,
+      "rationale": "The tag spans single-function and single-file classes. Inference must choose the exact class."
+    },
+    {
+      "task_tag": "code_patch",
+      "task_family": "code_patch",
+      "disposition": "family_only",
+      "default_task_class": null,
+      "rationale": "The tag spans format, documentation, tests, and refactor classes. Inference must choose the exact class."
+    },
+    {
+      "task_tag": "debug_loop",
+      "task_family": "debug_loop",
+      "disposition": "family_only",
+      "default_task_class": null,
+      "rationale": "The tag spans bounded tool loops and cross-file debugging. Inference must choose the exact class."
+    },
+    {
+      "task_tag": "spec_driven_project",
+      "task_family": "spec_driven_project",
+      "disposition": "family_only",
+      "default_task_class": null,
+      "rationale": "The tag spans architecture, task decomposition, and long-horizon autonomy. Inference must choose the exact class."
+    },
+    {
+      "task_tag": "data_extraction",
+      "task_family": "data_extraction",
+      "disposition": "family_only",
+      "default_task_class": null,
+      "rationale": "The tag does not distinguish non-critical from strict critical extraction. Inference must choose the exact class."
+    },
+    {
+      "task_tag": "benchmark_analysis",
+      "task_family": "benchmark_analysis",
+      "disposition": "exact_default",
+      "default_task_class": "benchmark_analysis",
+      "rationale": "Master v2 creates a one-to-one class for this tag."
+    },
+    {
+      "task_tag": "artifact_generation",
+      "task_family": "artifact_generation",
+      "disposition": "family_only",
+      "default_task_class": null,
+      "rationale": "The tag spans structured classification and code-review artifacts. Inference must choose the exact class."
+    },
+    {
+      "task_tag": "safety_sensitive",
+      "task_family": "safety_sensitive",
+      "disposition": "exact_default",
+      "default_task_class": "safety_sensitive",
+      "rationale": "Master v2 creates a one-to-one class for this tag."
+    }
+  ],
+  "class_aliases": {
+    "architecture_design": "architecture_schema_design",
+    "single_file_patch": "single_file_codegen_tests"
+  },
+  "source_provenance": [
+    "model-progression-delegation.md#appendix-a",
+    "master-update-plan-spec-000-v2.md#d-4-the-task-class-threshold-table-canonical-seed",
+    "prompts/orchestrator-system-prompt-v2.md#classification",
+    "prompts/classifier-system-prompt.md"
+  ]
+}

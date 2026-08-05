@@ -380,6 +380,8 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
     api_key = config.openai_api_key
     base_url = config.openai_base_url
 
+
+
     if not api_key:
         raise HTTPException(
             status_code=500,
@@ -433,11 +435,25 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
         endpoint = str(client.base_url) if hasattr(client, 'base_url') else config.openai_base_url
         provider = config.provider_for_endpoint(endpoint) if hasattr(config, 'provider_for_endpoint') else config.default_provider
 
-        logger.debug(f"[{request_id}] Routing to {endpoint} (provider: {provider})")
+        logger.debug(f"[{request_id}] Routing to {endpoint} (client: {type(client).__name__})")
 
         # Prepare request dict
         openai_request = body.model_dump(exclude_none=True)
         openai_request["model"] = routed_model
+
+        # Strip provider prefix from model name for providers that require bare names
+        # (e.g. opencode_go expects "deepseek-v4-flash" not "opencode_go/deepseek-v4-flash")
+        if "/" in openai_request["model"]:
+            _prefix = openai_request["model"].split("/", 1)[0].lower()
+            _stripped = openai_request["model"].split("/", 1)[1]
+            # Match known strip-providers by checking the endpoint URL
+            _strip_providers = {"opencode": "opencode.ai"}
+            for _known_prefix, _url_fragment in _strip_providers.items():
+                if _prefix == _known_prefix and _url_fragment in endpoint:
+                    logger.debug(f'[{request_id}] Stripped provider prefix for {_known_prefix}: {openai_request["model"]} \u2192 {_stripped}')
+
+                    openai_request["model"] = _stripped
+                    break
 
         # Normalise system-role messages for backends that reject "role": "system"
         if "messages" in openai_request:
@@ -449,6 +465,8 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
             def norm(name):
                 return name.split("/", 1)[1].lower() if name and "/" in name else (name or "").lower()
             req = norm(model_name)
+            if req == norm(config.xbig_model):
+                return "xbig"
             if req == norm(config.big_model):
                 return "big"
             if req == norm(config.middle_model):
@@ -682,9 +700,14 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                                 yield output
                     else:
                         openai_request.pop("stream", None)  # avoid duplicate kwarg
-                        stream = await client.chat.completions.create(
-                            **openai_request, stream=True
+                        raw_stream = await client.chat.completions.with_raw_response.create(
+                            **openai_request,
+                            stream=True,
                         )
+                        from src.core.quota_live import record_provider_quota_headers
+
+                        record_provider_quota_headers(provider, dict(raw_stream.headers))
+                        stream = raw_stream.parse()
                         async for chunk in stream:
                             chunk_dict = chunk.model_dump()
                             saw_data_chunk = True
@@ -752,7 +775,13 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
             else:
                 # Pop the internal stash key before forwarding to OpenAI client
                 _ptm = openai_request.pop("_profile_toolcall_models", None)
-                response = await client.chat.completions.create(**openai_request)
+                raw_response = await client.chat.completions.with_raw_response.create(
+                    **openai_request
+                )
+                from src.core.quota_live import record_provider_quota_headers
+
+                record_provider_quota_headers(provider, dict(raw_response.headers))
+                response = raw_response.parse()
                 # Restore so caller/retry can re-read
                 if _ptm is not None:
                     openai_request["_profile_toolcall_models"] = _ptm

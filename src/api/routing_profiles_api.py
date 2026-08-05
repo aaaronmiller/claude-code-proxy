@@ -40,6 +40,10 @@ class EphemeralProfileRequest(BaseModel):
     profile_id: Optional[str] = None
 
 
+class CanaryProfileRequest(BaseModel):
+    ttl_s: int = Field(default=900, ge=60, le=3600)
+
+
 def _request_counts_by_profile(hours: int = 24) -> Dict[str, int]:
     """Count requests per profile from usage_tracker over the window."""
     counts: Dict[str, int] = {}
@@ -110,6 +114,7 @@ async def list_routing_profiles(hours: int = 24) -> Dict[str, Any]:
         "ephemeral": {
             name: {
                 "preset": item.get("preset"),
+                "kind": item.get("kind", "normal"),
                 "expires_at": item.get("expires_at"),
             }
             for name, item in list_ephemeral_profiles().items()
@@ -138,6 +143,17 @@ async def create_ephemeral_routing_profile(payload: EphemeralProfileRequest) -> 
         "ttl_s": payload.ttl_s,
         "resolved": ctx.slots,
     }
+
+
+@router.post("/api/routing-profiles/canary")
+async def create_canary_routing_profile(payload: CanaryProfileRequest) -> Dict[str, Any]:
+    """Create an isolated model-scan canary without sending provider traffic."""
+    try:
+        from src.core.model_scan_runtime import create_model_scan_canary
+
+        return create_model_scan_canary(ttl_s=payload.ttl_s)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete("/api/routing-profiles/{name}")

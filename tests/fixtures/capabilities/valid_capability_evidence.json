@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-07-23T14:00:00Z",
+  "source": "model-scan:test",
+  "records": [
+    {
+      "capability_id": "model-scan:openrouter:qwen/qwen3-coder:free",
+      "model_identity": "qwen/qwen3-coder:free",
+      "dimensions": {
+        "slot:agentic": 88.0,
+        "slot:coding": 91.2
+      },
+      "features": [
+        "tools",
+        "context:131072"
+      ],
+      "health": "healthy",
+      "cost": {
+        "input_per_million": null,
+        "output_per_million": null,
+        "blended_per_million": 0.0
+      },
+      "latency_ms": 450.0,
+      "confidence": 0.92,
+      "evidence_refs": [
+        "scan:fixture"
+      ],
+      "measured_at": "2026-07-23T14:00:00Z"
+    }
+  ]
+}

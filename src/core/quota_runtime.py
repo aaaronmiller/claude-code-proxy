@@ -29,12 +29,17 @@ def _config_sources(config) -> list:
 
 
 def _default_live_sources() -> list:
-    """The live fraction sources rotation already trusts, plus the live header-fed QuotaCache.
-    Imported lazily so tests stay offline."""
+    """Provider facts first, followed by local telemetry estimates.
+
+    Merge precedence is enforced by ``quota_sources.PRECEDENCE`` rather than
+    list order. This order documents the authority boundary and makes direct
+    source inspection less misleading. Imports stay lazy so tests remain
+    offline.
+    """
     from src.core.quota_sources import CcusageSource, TokscaleSQLiteSource
     from src.core.quota_live import QuotaCacheSource
 
-    return [TokscaleSQLiteSource(), CcusageSource(), QuotaCacheSource()]
+    return [QuotaCacheSource(), TokscaleSQLiteSource(), CcusageSource()]
 
 
 def collect_meters(config, *, sources: Sequence | None = None) -> list[QuotaMeter]:
@@ -68,6 +73,8 @@ def collect_meters(config, *, sources: Sequence | None = None) -> list[QuotaMete
                 reset_at=sample.reset_at,
                 source=sample.source or "runtime",
                 observed_at=sample.observed_at,
+                resource="provider-estimate",
+                confidence=sample.confidence,
             )
         )
     return meters

@@ -239,8 +239,11 @@ async def lifespan(app: FastAPI):
     # Startup: bind model-scan snapshot if enabled. This is additive; disabled or invalid
     # snapshots keep static assignments in place.
     try:
+        from src.core.proxy_chain import get_chain
+        from src.core.quota_live import configure_quota_persistence
         from src.core.model_scan_runtime import reload_model_scan
 
+        configure_quota_persistence(get_chain().model_scan.quota_store_path)
         summary = reload_model_scan()
         if summary.get("enabled"):
             scan_id = summary.get("scan_id")
@@ -603,8 +606,11 @@ def main(env_updates: dict = None, skip_validation: bool = False):
     # Bind model-scan snapshot during CLI startup when enabled. Uvicorn lifespan does the same
     # for direct ASGI startup, so both entrypoints converge.
     try:
+        from src.core.proxy_chain import get_chain
+        from src.core.quota_live import configure_quota_persistence
         from src.core.model_scan_runtime import reload_model_scan
 
+        configure_quota_persistence(get_chain().model_scan.quota_store_path)
         _ms_summary = reload_model_scan()
         if _ms_summary.get("enabled"):
             print(

@@ -32,6 +32,8 @@ class Candidate:
     has_vision: bool = False
     ctx: int = 0
     tier: str = ""
+    api_model: str = ""
+    base_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -201,9 +203,8 @@ def allocation_to_snapshot_dict(
     """Map an AllocationResult to the routing_snapshot JSON shape that
     src/services/models/model_scan_snapshot.py parses (S1-08). Each session-role becomes a
     slot keyed "<session>:<role>" with best=primary and candidates=[primary, *cascade].
-    base_url is left empty (the consumer gap-fills from its provider registry). This is the
-    mapping only; wiring it into model_scan_runtime.reload is a separate follow-up that changes
-    runtime routing and should be a deliberate commit."""
+    Exact provider, API model, and base URL fields must already be present on each candidate.
+    This mapper never reconstructs callable identity from a display or benchmark model name."""
     idx: dict[tuple[str, str], Candidate] = {}
     for role_id, cands in candidates_by_role.items():
         for c in cands:
@@ -211,16 +212,24 @@ def allocation_to_snapshot_dict(
 
     def _cand(role_id: str, model_id: str) -> dict:
         c = idx.get((role_id, model_id))
+        if c is None:
+            raise ValueError(
+                f"allocator output references unresolved candidate {role_id}:{model_id}"
+            )
+        if not c.provider or not c.api_model:
+            raise ValueError(
+                f"allocator candidate lacks exact callable identity {role_id}:{model_id}"
+            )
         return {
             "model_id": model_id,
-            "provider": c.provider if c else (model_id.split("/")[0] if "/" in model_id else ""),
-            "api_model": model_id,
-            "base_url": "",
-            "fitness": c.fitness if c else 0.0,
-            "price_blended": c.price_blended if c else None,
-            "tier": c.tier if c else "",
-            "has_tools": c.has_tools if c else False,
-            "has_vision": c.has_vision if c else False,
+            "provider": c.provider,
+            "api_model": c.api_model,
+            "base_url": c.base_url,
+            "fitness": c.fitness,
+            "price_blended": c.price_blended,
+            "tier": c.tier,
+            "has_tools": c.has_tools,
+            "has_vision": c.has_vision,
         }
 
     slots: dict[str, dict] = {}
@@ -265,6 +274,8 @@ def candidates_from_snapshot(snapshot, slot_id: str) -> list[Candidate]:
                 has_vision=c.has_vision,
                 ctx=getattr(c, "ctx", 0) or 0,
                 tier=c.tier,
+                api_model=c.api_model,
+                base_url=c.base_url,
             )
         )
     return out

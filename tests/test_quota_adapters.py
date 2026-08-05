@@ -1,11 +1,17 @@
 """F06: header/payload quota parsers are pure and offline-testable with fixtures.
 See ai-gateway/plan/features/F06 + 04-DATA-CONTRACTS.md."""
+import json
+from pathlib import Path
+
 from src.core.quota_adapters import (
     parse_ratelimit_headers,
+    parse_openrouter_current_key,
     parse_openrouter_auth_key,
     parse_reset_seconds,
     HeaderQuotaSource,
 )
+
+FIXTURES = Path(__file__).parent / "fixtures" / "quota"
 
 # Real headers captured from a live Groq gpt-oss-120b call (L1 verification).
 REAL_GROQ_HEADERS = {
@@ -63,18 +69,38 @@ def test_header_keys_case_insensitive():
     assert len(meters) == 1 and meters[0].remaining == 3
 
 
-def test_openrouter_auth_key():
-    meters = parse_openrouter_auth_key({"data": {"limit": 50, "usage": 12.5}})
+def test_openrouter_current_key_fixture():
+    payload = json.loads((FIXTURES / "openrouter-current-key.json").read_text())
+    meters = parse_openrouter_current_key(payload)
     assert len(meters) == 1
     assert meters[0].unit == "dollars"
     assert meters[0].remaining == 37.5
-    assert meters[0].source == "poll"
-    # unmetered key (limit None) -> no meter (verified live: real key returns limit=null)
-    assert parse_openrouter_auth_key({"data": {"limit": None, "usage": 5}}) == []
-    # real API shape: prefer explicit limit_remaining + carry limit_reset
-    m = parse_openrouter_auth_key({"data": {"limit": 50, "usage": 12.5,
-                                            "limit_remaining": 40, "limit_reset": "monthly"}})
-    assert m[0].remaining == 40.0 and m[0].reset_at == "monthly"  # uses limit_remaining, not 37.5
+    assert meters[0].source == "openrouter-current-key"
+    assert meters[0].reset_at == "monthly"
+    assert meters[0].id == "openrouter:dollars:current-key"
+
+
+def test_openrouter_current_key_legacy_extracted_shape():
+    payload = json.loads((FIXTURES / "openrouter-legacy-key.json").read_text())
+    meters = parse_openrouter_current_key(payload)
+    assert len(meters) == 1
+    assert meters[0].limit == 20
+    assert meters[0].remaining == 15
+    assert meters[0].reset_at == "legacy-window"
+    # Preserve the old Python entry point, not the stale HTTP endpoint.
+    assert parse_openrouter_auth_key(payload) == meters
+
+
+def test_openrouter_current_key_rejects_false_quota():
+    # Unmetered key has no finite remaining-credit meter.
+    assert parse_openrouter_current_key({"data": {"limit": None, "usage": 5}}) == []
+    # Missing usage and remaining must not be interpreted as full quota.
+    assert parse_openrouter_current_key({"data": {"limit": 50}}) == []
+    # Inconsistent explicit remaining must not be silently clamped.
+    assert parse_openrouter_current_key(
+        {"data": {"limit": 50, "limit_remaining": 60}}
+    ) == []
+    assert parse_openrouter_current_key({"unexpected": "shape"}) == []
 
 
 # Real headers captured from a live Cerebras gpt-oss-120b call (windowed family).

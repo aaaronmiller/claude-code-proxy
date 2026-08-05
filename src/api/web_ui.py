@@ -585,6 +585,9 @@ async def list_profiles():
 @router.post("/api/profiles")
 async def save_profile(profile: ProfileCreate):
     """Save a configuration profile"""
+    from src.core.persistence_boundary import require_persistence_allowed
+
+    require_persistence_allowed("profile")
     try:
         safe_name = validate_safe_filename(profile.name)
         profile_file = PROFILES_DIR / f"{safe_name}.json"
@@ -627,6 +630,9 @@ async def get_profile(profile_name: str):
 @router.delete("/api/profiles/{profile_name}")
 async def deactivate_profile(profile_name: str):
     """Delete a profile"""
+    from src.core.persistence_boundary import require_persistence_allowed
+
+    require_persistence_allowed("profile")
     try:
         safe_name = validate_safe_filename(profile_name)
         profile_file = PROFILES_DIR / f"{safe_name}.json"

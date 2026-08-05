@@ -33,7 +33,7 @@ class Assignment:
     def _validate(self) -> None:
         """Validate Assignment constraints (FR-003, FR-003a)."""
         if self.kind == "tier":
-            if self.id not in {"big", "middle", "small"}:
+            if self.id not in {"xbig", "big", "middle", "small"}:
                 raise ValueError(
                     f"Tier id must be one of 'big', 'middle', 'small'; got '{self.id}'"
                 )
@@ -161,6 +161,9 @@ class AssignmentRegistry:
 
     def register(self, assignment: Assignment, principal: str = "registry") -> Assignment:
         """Add a new assignment. Raises AssignmentError on duplicate id."""
+        from src.core.persistence_boundary import require_persistence_allowed
+
+        require_persistence_allowed("routing")
         with self._lock:
             chain = self._chain()
             if any(a.id == assignment.id for a in chain.assignments):
@@ -173,6 +176,9 @@ class AssignmentRegistry:
         self, assignment_id: str, updates: dict, principal: str = "registry"
     ) -> Assignment:
         """Partial update. `kind` and `id` are immutable."""
+        from src.core.persistence_boundary import require_persistence_allowed
+
+        require_persistence_allowed("routing")
         with self._lock:
             chain = self._chain()
             for i, a in enumerate(chain.assignments):
@@ -195,6 +201,9 @@ class AssignmentRegistry:
 
     def delete(self, assignment_id: str, principal: str = "registry") -> None:
         """Remove a slot assignment. Tier deletion is forbidden (FR-003)."""
+        from src.core.persistence_boundary import require_persistence_allowed
+
+        require_persistence_allowed("routing")
         with self._lock:
             chain = self._chain()
             for i, a in enumerate(chain.assignments):

@@ -114,7 +114,7 @@ def _lookup_models_dev(model_name: str) -> Optional[Dict[str, Any]]:
 
     Handles:
     - openrouter/owl-alpha → openrouter provider, key "openrouter/owl-alpha"
-    - opencode_go/qwen3.6-plus → opencode-go provider, key "qwen3.6-plus"
+    - opencode/qwen3.6-plus → opencode provider, key "qwen3.6-plus"
     - nvidia/nemotron-3-nano → nvidia provider, key "nemotron-3-nano"
     - openai/gpt-4o → openai provider, key "openai/gpt-4o" or "gpt-4o"
     """
@@ -143,7 +143,7 @@ def _lookup_models_dev(model_name: str) -> Optional[Dict[str, Any]]:
 
     # Strategy 3: Try provider prefix variations
     provider_map = {
-        "opencode_go": "opencode-go",
+        "opencode": "opencode",
         "openai": "openai",
         "anthropic": "anthropic",
         "google": "google",
@@ -192,10 +192,10 @@ def _load_legacy_fallback() -> Dict[str, Dict[str, int]]:
 
     _LEGACY_LIMITS_CACHE = {
         # OpenCode Go models (from opencode.ai/docs/go/)
-        "opencode_go/qwen3.6-plus": {"context": 256000, "output": 32768},
-        "opencode_go/qwen3.5-plus": {"context": 256000, "output": 32768},
-        "opencode_go/deepseek-v4-flash": {"context": 1000000, "output": 32768},
-        "opencode_go/deepseek-v4-pro": {"context": 1000000, "output": 32768},
+        "opencode/qwen3.6-plus": {"context": 256000, "output": 32768},
+        "opencode/qwen3.5-plus": {"context": 256000, "output": 32768},
+        "opencode/deepseek-v4-flash": {"context": 1000000, "output": 32768},
+        "opencode/deepseek-v4-pro": {"context": 1000000, "output": 32768},
         "opencode_go/kimi-k2.5": {"context": 262144, "output": 32768},
         "opencode_go/kimi-k2.6": {"context": 262144, "output": 32768},
         "opencode_go/glm-5": {"context": 202752, "output": 8192},

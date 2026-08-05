@@ -20,6 +20,7 @@ class QuotaSample:
     unit: str = ""
     source: str = ""
     observed_at: float = 0.0
+    confidence: float = 0.0
 
 
 class QuotaSource(Protocol):
@@ -30,11 +31,19 @@ class QuotaSource(Protocol):
 
 
 def _sample(provider: str, remaining: float, source: str, **extra) -> QuotaSample:
+    confidence = float(extra.pop("confidence", 0.0) or 0.0)
+    if not confidence:
+        confidence = 1.0 if source in {
+            "header",
+            "openrouter-current-key",
+            "provider_account",
+        } else 0.5
     return QuotaSample(
         provider=provider.lower(),
         remaining_fraction=max(0.0, min(1.0, float(remaining))),
         source=source,
         observed_at=float(extra.pop("observed_at", 0.0) or time.time()),
+        confidence=confidence,
         **extra,
     )
 
@@ -95,13 +104,21 @@ class StaticQuotaSource:
         return [_sample(provider, remaining, self.name) for provider, remaining in self.data.items()]
 
 
+# Higher authority always wins before freshness is compared. Provider response
+# headers and provider account/key endpoints report the provider's own resource
+# state. Local tools can estimate use, but must not overwrite those facts.
 PRECEDENCE = {
-    "tokscale": 100,
-    "ccusage": 80,
-    "model_scan_quota": 70,
-    "billing": 60,
-    "rate_limiter": 50,
-    "usage_tracker": 40,
+    "header": 1000,
+    "openrouter-current-key": 1000,
+    "provider_account": 1000,
+    "poll": 900,  # legacy provider-poll source name
+    "billing": 700,
+    "model_scan_quota": 500,
+    "tokscale": 200,
+    "ccusage": 190,
+    "rate_limiter": 150,
+    "usage_tracker": 100,
+    "static": 0,
 }
 
 
@@ -147,6 +164,8 @@ class QuotaMeter:
     reset_at: str = ""
     source: str = ""
     observed_at: float = 0.0
+    resource: str = ""
+    confidence: float = 0.0
 
     @property
     def remaining_fraction(self) -> float:
@@ -190,6 +209,7 @@ def meters_to_samples(meters: Iterable[QuotaMeter]) -> dict[str, QuotaSample]:
             unit=m.unit,
             source=m.source or "meter",
             observed_at=m.observed_at or time.time(),
+            confidence=m.confidence,
         )
         for provider, m in by_provider.items()
     }
