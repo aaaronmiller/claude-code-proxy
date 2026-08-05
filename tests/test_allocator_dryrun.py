@@ -233,3 +233,31 @@ def test_allocator_flag_registered_and_off_by_default():
     s = M.get_by_env_var("ALLOCATOR_ENABLED")
     assert s is not None and s.default is False
     assert M.get_by_cli_flag("--allocator-enabled") is s
+
+
+def test_unknown_quota_does_not_outrank_measured_capacity():
+    """A provider nobody has measured must not beat one reporting real headroom.
+
+    Regression for a defect found 2026-08-04: _min_headroom returned 1.0 when a
+    candidate had no meter, so an unmeasured provider scored perfect capacity and
+    won every headroom comparison. Ignorance outranked evidence, and the more
+    honestly a provider reported its quota the less likely it was to be chosen.
+    """
+    from src.services.allocator import HEADROOM_UNKNOWN, _min_headroom
+
+    measured = Candidate(
+        "or/free-a", "openrouter", fitness=60, has_tools=True, api_model="or/free-a"
+    )
+    unmeasured = Candidate(
+        "ghost/model", "ghostprovider", fitness=60, has_tools=True, api_model="ghost/model"
+    )
+
+    # ABUNDANT covers the openrouter candidate; nothing covers the ghost provider.
+    measured_headroom = _min_headroom(measured, [SCARCE, ABUNDANT], {})
+    unknown_headroom = _min_headroom(unmeasured, [SCARCE, ABUNDANT], {})
+
+    assert unknown_headroom == HEADROOM_UNKNOWN
+    assert unknown_headroom < 1.0, "unknown quota must not score as full capacity"
+    assert unknown_headroom < measured_headroom, (
+        "a measured, healthy provider must outrank an unmeasured one"
+    )

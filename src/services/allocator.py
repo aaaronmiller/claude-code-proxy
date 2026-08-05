@@ -108,12 +108,27 @@ def _affordable(c: Candidate, role: RoleSpec, meters: Sequence[QuotaMeter], rem:
     return True
 
 
+# A candidate with no meter is not a candidate with full quota. Scoring unknown
+# as 1.0 rewarded ignorance: a provider nobody had measured outranked a provider
+# reporting an honest half-full window, because 1.0 beats 0.5. Unknown now sits
+# below any healthy measurement, so measured-and-fine wins and only
+# measured-and-low loses to it.
+#
+# A flattening threshold was also tried here, collapsing every headroom above
+# 0.25 to a tie so price and fitness would decide among healthy providers. It
+# was removed: test_satisficing_role_preserves_scarce_capacity showed that
+# low-value-sensitivity roles rely on the full ordering to steer away from
+# scarcer capacity even when that capacity is still healthy. Preserving scarce
+# capacity is the behaviour, not noise.
+HEADROOM_UNKNOWN = 0.20
+
+
 def _min_headroom(c: Candidate, meters: Sequence[QuotaMeter], rem: dict[str, float]) -> float:
     fracs = []
     for m in _meters_for(c, meters):
         if m.limit > 0:
             fracs.append(rem.get(m.id, m.remaining) / m.limit)
-    return min(fracs) if fracs else 1.0
+    return min(fracs) if fracs else HEADROOM_UNKNOWN
 
 
 def _debit(c: Candidate, role: RoleSpec, meters: Sequence[QuotaMeter], rem: dict[str, float]) -> None:
