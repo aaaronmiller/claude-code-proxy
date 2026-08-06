@@ -775,12 +775,14 @@ def _get_model_size_from_model_id(model_id: str) -> str:
         model_id: The OpenAI model ID
 
     Returns:
-        "big", "middle", or "small"
+        "xbig", "big", "middle", or "small"
     """
     model_lower = model_id.lower()
 
     # Match against configured models
-    if model_lower == config.big_model.lower():
+    if config.xbig_model and model_lower == config.xbig_model.lower():
+        return "xbig"
+    elif model_lower == config.big_model.lower():
         return "big"
     elif model_lower == config.middle_model.lower():
         return "middle"

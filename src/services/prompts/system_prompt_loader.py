@@ -90,13 +90,22 @@ def get_model_system_prompt(model_size: str, config) -> Optional[str]:
     Get the system prompt for a specific model size.
 
     Args:
-        model_size: "big", "middle", or "small"
+        model_size: "xbig", "big", "middle", or "small"
         config: Configuration object
 
     Returns:
         The system prompt text or None if not configured
     """
-    if model_size.lower() == "big":
+    if model_size.lower() == "xbig":
+        if not config.enable_custom_xbig_prompt:
+            return None
+        # Try file first, then inline
+        if config.xbig_system_prompt_file:
+            return load_system_prompt(f"path:{config.xbig_system_prompt_file}")
+        if config.xbig_system_prompt:
+            return load_system_prompt(config.xbig_system_prompt)
+
+    elif model_size.lower() == "big":
         if not config.enable_custom_big_prompt:
             return None
         # Try file first, then inline
@@ -130,7 +139,7 @@ def inject_system_prompt(messages: list, model_size: str, config) -> list:
 
     Args:
         messages: List of message dictionaries
-        model_size: "big", "middle", or "small"
+        model_size: "xbig", "big", "middle", or "small"
         config: Configuration object
 
     Returns:

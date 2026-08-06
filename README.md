@@ -302,6 +302,13 @@ Configured in `.env` and `~/.xx/config.json`. Add your own models, reorder prior
     "auto_start": true
   },
   "model_tiers": {
+    "XBIG": {
+      "default": "openai/gpt-5.5",
+      "cascade": [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nex-agi/nex-n2-pro:free"
+      ]
+    },
     "BIG": {
       "default": "moonshotai/kimi-k2.6:free",
       "cascade": [

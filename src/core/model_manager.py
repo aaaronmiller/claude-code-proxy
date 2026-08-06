@@ -161,9 +161,13 @@ class ModelManager:
         if not is_capable:
             return None
 
-        # Get default effort from config
-        default_effort = self.config.reasoning_effort
-        default_max_tokens = self.config.reasoning_max_tokens
+        # A configured tier override wins over the global default. This keeps
+        # the four tier surfaces semantically aligned: the value exposed as
+        # XBIG_MODEL_REASONING (and its BIG/MIDDLE/SMALL peers) is consumed by
+        # the same request path that applies the global reasoning setting.
+        tier_override = self._get_tier_reasoning_override(model_name)
+        default_effort = tier_override or self.config.reasoning_effort
+        default_max_tokens = tier_override or self.config.reasoning_max_tokens
 
         if reasoning_type == "effort" and default_effort:
             try:
@@ -178,13 +182,31 @@ class ModelManager:
                 return None
 
         elif reasoning_type == "thinking_tokens" and default_max_tokens:
-            validated_budget = validate_anthropic_thinking(default_max_tokens)
-            return AnthropicThinkingConfig(type="enabled", budget=validated_budget)
+            try:
+                validated_budget = validate_anthropic_thinking(int(default_max_tokens))
+                return AnthropicThinkingConfig(type="enabled", budget=validated_budget)
+            except (TypeError, ValueError) as e:
+                logger.warning(f"Invalid tier/default reasoning token budget: {e}")
+                return None
 
         elif reasoning_type == "thinking_budget" and default_max_tokens:
-            validated_budget = validate_gemini_thinking(default_max_tokens)
-            return GeminiThinkingConfig(budget=validated_budget)
+            try:
+                validated_budget = validate_gemini_thinking(int(default_max_tokens))
+                return GeminiThinkingConfig(budget=validated_budget)
+            except (TypeError, ValueError) as e:
+                logger.warning(f"Invalid tier/default reasoning token budget: {e}")
+                return None
 
+        return None
+
+    def _get_tier_reasoning_override(self, model_name: str) -> Optional[str]:
+        """Return the configured reasoning override for the model's tier."""
+
+        requested = (model_name or "").lower()
+        for tier in ("xbig", "big", "middle", "small"):
+            configured = (getattr(self.config, f"{tier}_model", "") or "").lower()
+            if configured and requested == configured:
+                return getattr(self.config, f"{tier}_model_reasoning", None) or None
         return None
 
     def _create_reasoning_config(

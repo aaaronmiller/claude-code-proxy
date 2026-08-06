@@ -49,8 +49,10 @@ def configure_reasoning():
         effort = os.getenv("REASONING_EFFORT", "disabled")
         tokens = os.getenv("REASONING_MAX_TOKENS", "not set")
         exclude = os.getenv("REASONING_EXCLUDE", "false")
+        xbig_reasoning = os.getenv("XBIG_MODEL_REASONING", "")
         big_reasoning = os.getenv("BIG_MODEL_REASONING", "")
         middle_reasoning = os.getenv("MIDDLE_MODEL_REASONING", "")
+        small_reasoning = os.getenv("SMALL_MODEL_REASONING", "")
 
         console.print("\n[bold yellow]Current Settings:[/]")
         console.print(f"  Effort:      [cyan]{effort}[/]")
@@ -58,20 +60,24 @@ def configure_reasoning():
         console.print(
             f"  Exclude:     [cyan]{exclude}[/] (Don't reason on non-coding tasks)"
         )
+        console.print(f"  XBIG Override:   [cyan]{xbig_reasoning or '(none)'}[/]")
         console.print(f"  BIG Override:    [cyan]{big_reasoning or '(none)'}[/]")
         console.print(f"  MIDDLE Override: [cyan]{middle_reasoning or '(none)'}[/]")
+        console.print(f"  SMALL Override:  [cyan]{small_reasoning or '(none)'}[/]")
 
         console.print("\n[bold cyan]Options:[/]")
         console.print("  [1] Set Effort (low/medium/high)")
         console.print("  [2] Set Max Budget Tokens")
         console.print("  [3] Toggle Exclusion")
-        console.print("  [4] Set BIG tier reasoning override")
-        console.print("  [5] Set MIDDLE tier reasoning override")
-        console.print("  [6] [red]Disable Reasoning[/] (Unset variables)")
+        console.print("  [4] Set XBIG tier reasoning override")
+        console.print("  [5] Set BIG tier reasoning override")
+        console.print("  [6] Set MIDDLE tier reasoning override")
+        console.print("  [7] Set SMALL tier reasoning override")
+        console.print("  [8] [red]Disable Reasoning[/] (Unset variables)")
         console.print("  [0] Back")
 
         choice = Prompt.ask(
-            "\nSelect option", choices=["1", "2", "3", "4", "5", "6", "0"], default="0"
+            "\nSelect option", choices=["1", "2", "3", "4", "5", "6", "7", "8", "0"], default="0"
         )
 
         updates = {}
@@ -90,21 +96,31 @@ def configure_reasoning():
             new_val = "true" if exclude.lower() != "true" else "false"
             updates["REASONING_EXCLUDE"] = new_val
         elif choice == "4":
+            updates["XBIG_MODEL_REASONING"] = Prompt.ask(
+                "XBIG tier reasoning override", default=xbig_reasoning
+            )
+        elif choice == "5":
             updates["BIG_MODEL_REASONING"] = Prompt.ask(
                 "BIG tier reasoning override", default=big_reasoning
             )
-        elif choice == "5":
+        elif choice == "6":
             updates["MIDDLE_MODEL_REASONING"] = Prompt.ask(
                 "MIDDLE tier reasoning override", default=middle_reasoning
             )
-        elif choice == "6":
+        elif choice == "7":
+            updates["SMALL_MODEL_REASONING"] = Prompt.ask(
+                "SMALL tier reasoning override", default=small_reasoning
+            )
+        elif choice == "8":
             if Confirm.ask("Disable reasoning features?"):
                 updates["REASONING_EFFORT"] = None
                 updates["REASONING_MAX_TOKENS"] = None
                 # We might keep EXCLUDE or remove it, usually good to remove
                 updates["REASONING_EXCLUDE"] = None
+                updates["XBIG_MODEL_REASONING"] = None
                 updates["BIG_MODEL_REASONING"] = None
                 updates["MIDDLE_MODEL_REASONING"] = None
+                updates["SMALL_MODEL_REASONING"] = None
 
         if updates:
             update_env_file(updates)
@@ -546,27 +562,29 @@ def configure_custom_prompts():
             )
         )
 
+        xbig_enabled = os.getenv("ENABLE_CUSTOM_XBIG_PROMPT", "false")
         big_enabled = os.getenv("ENABLE_CUSTOM_BIG_PROMPT", "false")
         middle_enabled = os.getenv("ENABLE_CUSTOM_MIDDLE_PROMPT", "false")
         small_enabled = os.getenv("ENABLE_CUSTOM_SMALL_PROMPT", "false")
 
         console.print("\n[bold yellow]Current Settings:[/]")
-        console.print(f"  1. BIG Custom Prompt:    [cyan]{big_enabled}[/]")
-        console.print(f"  2. MIDDLE Custom Prompt: [cyan]{middle_enabled}[/]")
-        console.print(f"  3. SMALL Custom Prompt:  [cyan]{small_enabled}[/]")
+        console.print(f"  1. XBIG Custom Prompt:   [cyan]{xbig_enabled}[/]")
+        console.print(f"  2. BIG Custom Prompt:    [cyan]{big_enabled}[/]")
+        console.print(f"  3. MIDDLE Custom Prompt: [cyan]{middle_enabled}[/]")
+        console.print(f"  4. SMALL Custom Prompt:  [cyan]{small_enabled}[/]")
 
         console.print("\n[bold cyan]Options:[/]")
         console.print("  Enter number to configure, or [0] to Back")
 
         choice = Prompt.ask(
-            "\nSelect option", choices=["1", "2", "3", "0"], default="0"
+            "\nSelect option", choices=["1", "2", "3", "4", "0"], default="0"
         )
         updates = {}
 
         if choice == "0":
             return
-        elif choice in ["1", "2", "3"]:
-            tier = {"1": "BIG", "2": "MIDDLE", "3": "SMALL"}[choice]
+        elif choice in ["1", "2", "3", "4"]:
+            tier = {"1": "XBIG", "2": "BIG", "3": "MIDDLE", "4": "SMALL"}[choice]
             enabled = Confirm.ask(f"Enable custom prompt for {tier}?")
             updates[f"ENABLE_CUSTOM_{tier}_PROMPT"] = "true" if enabled else "false"
             if enabled:

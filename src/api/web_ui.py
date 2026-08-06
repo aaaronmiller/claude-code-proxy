@@ -220,6 +220,10 @@ async def get_config():
         # ═══════════════════════════════════════════════════════════════════════════════
         # MODEL SETTINGS
         # ═══════════════════════════════════════════════════════════════════════════════
+        "xbig_model": os.getenv("XBIG_MODEL", ""),
+        "xbig_endpoint": os.getenv("XBIG_ENDPOINT", ""),
+        "xbig_api_key": "***" if os.getenv("XBIG_API_KEY") else "",
+        "xbig_cascade": os.getenv("XBIG_CASCADE", ""),
         # ═══════════════════════════════════════════════════════════════════════════════
         # REASONING CONFIGURATION
         # ═══════════════════════════════════════════════════════════════════════════════
@@ -232,12 +236,16 @@ async def get_config():
         "reasoning_exclude": os.getenv("REASONING_EXCLUDE", "false"),
         "verbosity": os.getenv("VERBOSITY", ""),
         # Per-tier reasoning overrides
+        "xbig_model_reasoning": os.getenv("XBIG_MODEL_REASONING", ""),
         "big_model_reasoning": os.getenv("BIG_MODEL_REASONING", ""),
         "middle_model_reasoning": os.getenv("MIDDLE_MODEL_REASONING", ""),
         "small_model_reasoning": os.getenv("SMALL_MODEL_REASONING", ""),
         # ═══════════════════════════════════════════════════════════════════════════════
         # CUSTOM SYSTEM PROMPTS
         # ═══════════════════════════════════════════════════════════════════════════════
+        "enable_custom_xbig_prompt": os.getenv("ENABLE_CUSTOM_XBIG_PROMPT", "false"),
+        "xbig_system_prompt": os.getenv("XBIG_SYSTEM_PROMPT", ""),
+        "xbig_system_prompt_file": os.getenv("XBIG_SYSTEM_PROMPT_FILE", ""),
         "enable_custom_big_prompt": os.getenv("ENABLE_CUSTOM_BIG_PROMPT", "false"),
         "big_system_prompt": os.getenv("BIG_SYSTEM_PROMPT", ""),
         "big_system_prompt_file": os.getenv("BIG_SYSTEM_PROMPT_FILE", ""),

@@ -1,5 +1,5 @@
 """Generic manifest save endpoint (POST /api/config/manifest) — the backbone that lets the
-web + TUI settings forms edit ANY of the 64 settings, not just hand-listed ones.
+web + TUI settings forms edit every manifest setting, not just hand-listed ones.
 
 update_env_values is monkeypatched so the test never touches the real .env; we assert the
 validated set that would be persisted + hot-applied to os.environ.

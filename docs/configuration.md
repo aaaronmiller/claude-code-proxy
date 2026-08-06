@@ -77,15 +77,17 @@ For the complete generated list, see `docs/feature-parity.md`.
 
 Use `model: "fusion"` or `model: "fusion/<profile>"` for per-request Fusion. Use `ccp-fusion <profile> <prompt>` for one-shot prompts from shell-capable agents.
 
-### Reasoning (5 settings)
+### Reasoning (7 settings)
 
 | Setting | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
 | `REASONING_EFFORT` | `--reasoning-effort` | `low` | Default effort: low/medium/high |
 | `REASONING_MAX_TOKENS` | `--reasoning-max-tokens` | `32000` | Max thinking tokens |
 | `REASONING_EXCLUDE` | `--reasoning-exclude` | `false` | Strip thinking from response |
+| `XBIG_MODEL_REASONING` | `--xbig-reasoning` | — | XBIG tier reasoning override |
 | `BIG_MODEL_REASONING` | `--big-reasoning` | — | BIG tier reasoning override |
 | `MIDDLE_MODEL_REASONING` | `--middle-reasoning` | — | MIDDLE tier reasoning override |
+| `SMALL_MODEL_REASONING` | `--small-reasoning` | — | SMALL tier reasoning override |
 
 ### Router Slots (6 settings)
 

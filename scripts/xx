@@ -10,7 +10,7 @@
 #   run   : i init  c continue  r resume      (lowercase = interactive)
 #           I init  C continue  R resume      (UPPERCASE = headless, needs a prompt)
 #   route : p proxy(default,+Headroom/RTK+reroute)  b bypass(native model)  d direct(raw)
-#   model : m best  f free  t tool  r reason  v verify  s fast  0-9 profile  (proxy only)
+#   model : x xbig  m best  f free  t tool  r reason  v verify  s fast  0-9 profile  (proxy only)
 # Model/route/selector tables live in ~/.xx/config.json.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
@@ -62,7 +62,7 @@ ${CYAN}xx${NC} — LLM launcher   ${DIM}xx <code> [opts] [prompt]  ·  xx <comma
 ${DIM}code = <agent><run>[route][model]   route defaults to proxy${NC}
 
 ${GRN}AGENT${NC}          ${GRN}RUN${NC} ${DIM}(lower=interactive UPPER=headless)${NC}   ${GRN}ROUTE${NC}        ${GRN}MODEL${NC} ${DIM}(proxy only)${NC}
- c claude        i/I init       r/R resume          p proxy*      m best    r reason
+ c claude        i/I init       r/R resume          p proxy*      x xbig   m best    r reason
  h hermes        c/C continue                       b bypass      f free    v verify
  x codex         ${DIM}o${NC} opencode  ${DIM}q${NC} qwen              d direct      t tool    s fast
  p pi   a ante   g antigravity                                    0-9 profile slot
@@ -110,6 +110,7 @@ resolve_model() { # <code> <provider>
     local code="$1" prov="${2:-}" m=""
     case "$code" in
         [0-9]) m="$(_cfg "d['profiles'].get('$code')")" ;;
+        x) m="$(_cfg "d.get('model_tiers', {}).get('XBIG', {}).get('default')")" ;;
         m) m="$(_scan best "$prov")" ;;     f) m="$(_scan free "$prov")" ;;
         t) m="$(_scan tool "$prov")" ;;     r) m="$(_scan reasoning "$prov")" ;;
         v) m="$(_scan verifier "$prov")" ;; s) m="$(_scan fast "$prov")" ;;
@@ -164,12 +165,12 @@ case "${#REST}" in
     0) ;;
     1) case "$REST" in
            p|b|d)             ROUTE="$REST" ;;
-           m|f|t|r|v|s|[0-9]) MODELCODE="$REST" ;;
-           *) die "bad route/model char '$REST' in '$CODE' (route p/b/d · model m f t r v s 0-9)" ;;
+           x|m|f|t|r|v|s|[0-9]) MODELCODE="$REST" ;;
+           *) die "bad route/model char '$REST' in '$CODE' (route p/b/d · model x m f t r v s 0-9)" ;;
        esac ;;
     2) ROUTE="${REST:0:1}"; MODELCODE="${REST:1:1}"
        case "$ROUTE"     in p|b|d) ;;              *) die "bad route '$ROUTE' (p/b/d)" ;; esac
-       case "$MODELCODE" in m|f|t|r|v|s|[0-9]) ;;  *) die "bad model '$MODELCODE' (m f t r v s 0-9)" ;; esac ;;
+       case "$MODELCODE" in x|m|f|t|r|v|s|[0-9]) ;;  *) die "bad model '$MODELCODE' (x m f t r v s 0-9)" ;; esac ;;
 esac
 # RULE: model selectors only apply on proxy route
 if [ -n "$MODELCODE" ] && [ "$ROUTE" != "p" ]; then
@@ -319,8 +320,15 @@ esac
 
 # ── dry-run / verbose / exec ─────────────────────────────────────────────────
 if [ "$VERBOSE" = 1 ] || [ "$DRYRUN" = 1 ]; then
+    declare -a DISPLAY_ENV=()
+    for assignment in "${ENVV[@]}"; do
+        case "$assignment" in
+            *_API_KEY=*) DISPLAY_ENV+=("${assignment%%=*}=<set>") ;;
+            *) DISPLAY_ENV+=("$assignment") ;;
+        esac
+    done
     note "agent=$AGENT_NAME run=$RUNBASE headless=$HEADLESS route=$ROUTE model=${MODEL:-<default>} profile=$PROFILE"
-    note "→ ${ENVV[*]:-(direct)} ${CMD[*]}"
+    note "→ ${DISPLAY_ENV[*]:-(direct)} ${CMD[*]}"
 fi
 [ "$DRYRUN" = 1 ] && exit 0
 

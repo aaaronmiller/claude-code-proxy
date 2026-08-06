@@ -1,6 +1,6 @@
 # Configuration Feature Parity
 
-Auto-generated from `src/core/config_manifest.py` — 70 settings.
+Auto-generated from `src/core/config_manifest.py` — 99 settings.
 
 Every setting on every surface. All four surfaces (CLI flag, TUI menu, Web UI, .env)
 are listed per setting. ✅ = supported, — = N/A on that surface.
@@ -9,10 +9,10 @@ are listed per setting. ✅ = supported, — = N/A on that surface.
 
 | Surface | Coverage |
 |---|---|
-| .env file | 70/70 (100%) — every setting has an env var by definition |
-| CLI flags | 70/70 (100%) |
-| TUI widgets | 70/70 (100%) |
-| Web components | 70/70 (100%) |
+| .env file | 99/99 (100%) — every setting has an env var by definition |
+| CLI flags | 99/99 (100%) |
+| TUI widgets | 99/99 (100%) |
+| Web components | 99/99 (100%) |
 
 ## Authentication & API Keys
 
@@ -75,9 +75,23 @@ are listed per setting. ✅ = supported, — = N/A on that surface.
 
 | Setting | .env | CLI | TUI | Web | Description |
 |---|---|---|---|---|---|
+| `XBIG_MODEL` | ✅ | `--xbig-model` | `input` | `input` | XBIG tier model (frontier-level) |
 | `BIG_MODEL` | ✅ | `--big-model` | `input` | `input` | BIG tier model (opus-level) |
 | `MIDDLE_MODEL` | ✅ | `--middle-model` | `input` | `input` | MIDDLE tier model (sonnet-level) |
 | `SMALL_MODEL` | ✅ | `--small-model` | `input` | `input` | SMALL tier model (haiku-level) |
+| `ENABLE_XBIG_ENDPOINT` | ✅ | `--enable-xbig-endpoint` | `toggle` | `switch` | Enable the XBIG tier endpoint |
+| `XBIG_ENDPOINT` | ✅ | `--xbig-endpoint` | `input` | `input` | XBIG tier provider endpoint |
+| `XBIG_API_KEY` | ✅ | `--xbig-api-key` | `input` | `input` | XBIG tier provider API key |
+| `ENABLE_BIG_ENDPOINT` | ✅ | `--enable-big-endpoint` | `toggle` | `switch` | Enable the BIG tier endpoint |
+| `BIG_ENDPOINT` | ✅ | `--big-endpoint` | `input` | `input` | BIG tier provider endpoint |
+| `BIG_API_KEY` | ✅ | `--big-api-key` | `input` | `input` | BIG tier provider API key |
+| `ENABLE_MIDDLE_ENDPOINT` | ✅ | `--enable-middle-endpoint` | `toggle` | `switch` | Enable the MIDDLE tier endpoint |
+| `MIDDLE_ENDPOINT` | ✅ | `--middle-endpoint` | `input` | `input` | MIDDLE tier provider endpoint |
+| `MIDDLE_API_KEY` | ✅ | `--middle-api-key` | `input` | `input` | MIDDLE tier provider API key |
+| `ENABLE_SMALL_ENDPOINT` | ✅ | `--enable-small-endpoint` | `toggle` | `switch` | Enable the SMALL tier endpoint |
+| `SMALL_ENDPOINT` | ✅ | `--small-endpoint` | `input` | `input` | SMALL tier provider endpoint |
+| `SMALL_API_KEY` | ✅ | `--small-api-key` | `input` | `input` | SMALL tier provider API key |
+| `XBIG_CASCADE` | ✅ | `--xbig-cascade` | `textarea` | `textarea` | XBIG tier fallback models (comma-separated) |
 | `BIG_CASCADE` | ✅ | `--big-cascade` | `textarea` | `textarea` | BIG tier fallback models (comma-separated) |
 | `MIDDLE_CASCADE` | ✅ | `--middle-cascade` | `textarea` | `textarea` | MIDDLE tier fallback models (comma-separated) |
 | `SMALL_CASCADE` | ✅ | `--small-cascade` | `textarea` | `textarea` | SMALL tier fallback models (comma-separated) |
@@ -104,8 +118,27 @@ are listed per setting. ✅ = supported, — = N/A on that surface.
 | `REASONING_EFFORT` | ✅ | `--reasoning-effort` | `select` | `select` | Default reasoning effort level |
 | `REASONING_MAX_TOKENS` | ✅ | `--reasoning-max-tokens` | `number` | `slider` | Max thinking tokens for extended reasoning |
 | `REASONING_EXCLUDE` | ✅ | `--reasoning-exclude` | `toggle` | `switch` | Strip thinking tokens from response (reduce output size) |
+| `XBIG_MODEL_REASONING` | ✅ | `--xbig-reasoning` | `input` | `input` | Per-tier reasoning override for XBIG model |
 | `BIG_MODEL_REASONING` | ✅ | `--big-reasoning` | `input` | `input` | Per-tier reasoning override for BIG model |
 | `MIDDLE_MODEL_REASONING` | ✅ | `--middle-reasoning` | `input` | `input` | Per-tier reasoning override for MIDDLE model |
+| `SMALL_MODEL_REASONING` | ✅ | `--small-reasoning` | `input` | `input` | Per-tier reasoning override for SMALL model |
+
+## Custom System Prompts
+
+| Setting | .env | CLI | TUI | Web | Description |
+|---|---|---|---|---|---|
+| `ENABLE_CUSTOM_XBIG_PROMPT` | ✅ | `--enable-custom-xbig-prompt` | `toggle` | `switch` | Enable the custom XBIG tier system prompt |
+| `XBIG_SYSTEM_PROMPT_FILE` | ✅ | `--xbig-system-prompt-file` | `input` | `input` | Path to the XBIG tier system prompt file |
+| `XBIG_SYSTEM_PROMPT` | ✅ | `--xbig-system-prompt` | `textarea` | `textarea` | Inline XBIG tier system prompt |
+| `ENABLE_CUSTOM_BIG_PROMPT` | ✅ | `--enable-custom-big-prompt` | `toggle` | `switch` | Enable the custom BIG tier system prompt |
+| `BIG_SYSTEM_PROMPT_FILE` | ✅ | `--big-system-prompt-file` | `input` | `input` | Path to the BIG tier system prompt file |
+| `BIG_SYSTEM_PROMPT` | ✅ | `--big-system-prompt` | `textarea` | `textarea` | Inline BIG tier system prompt |
+| `ENABLE_CUSTOM_MIDDLE_PROMPT` | ✅ | `--enable-custom-middle-prompt` | `toggle` | `switch` | Enable the custom MIDDLE tier system prompt |
+| `MIDDLE_SYSTEM_PROMPT_FILE` | ✅ | `--middle-system-prompt-file` | `input` | `input` | Path to the MIDDLE tier system prompt file |
+| `MIDDLE_SYSTEM_PROMPT` | ✅ | `--middle-system-prompt` | `textarea` | `textarea` | Inline MIDDLE tier system prompt |
+| `ENABLE_CUSTOM_SMALL_PROMPT` | ✅ | `--enable-custom-small-prompt` | `toggle` | `switch` | Enable the custom SMALL tier system prompt |
+| `SMALL_SYSTEM_PROMPT_FILE` | ✅ | `--small-system-prompt-file` | `input` | `input` | Path to the SMALL tier system prompt file |
+| `SMALL_SYSTEM_PROMPT` | ✅ | `--small-system-prompt` | `textarea` | `textarea` | Inline SMALL tier system prompt |
 
 ## Router Slots
 
