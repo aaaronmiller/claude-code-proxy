@@ -33,7 +33,12 @@ from src.services.conversion.response_converter import (
     streaming_transform_partial,
     normalize_tool_arguments,
 )
-from src.services.conversion.request_converter import _normalize_system_role
+from src.services.conversion.request_converter import (
+    _normalize_system_role,
+    _apply_reasoning_config,
+)
+from src.models.reasoning import OpenAIReasoningConfig
+from src.core.reasoning_validator import validate_openai_reasoning
 from src.core.fusion import (
     apply_fusion_to_openai_request,
     openrouter_api_key,
@@ -92,11 +97,96 @@ class OpenAIChatRequest(BaseModel):
     presence_penalty: Optional[float] = None
     stop: Optional[Any] = None
     user: Optional[str] = None
+    # Reasoning surface (Codex CLI submits reasoning_effort; OpenRouter-style
+    # clients submit a `reasoning` dict). Both must survive routing.
+    reasoning_effort: Optional[str] = None
+    reasoning: Optional[Dict[str, Any]] = None
+    # Standard chat-completion surface that Codex and OpenAI-format IDEs send.
+    parallel_tool_calls: Optional[bool] = None
+    top_k: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+    response_format: Optional[Dict[str, Any]] = None
+    max_completion_tokens: Optional[int] = None
+    seed: Optional[int] = None
+    stream_options: Optional[Dict[str, Any]] = None
 
 
 # ═══════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
 # ═══════════════════════════════════════════════════════════════
+
+
+def apply_openai_client_reasoning_and_extras(
+    openai_request: Dict[str, Any],
+    client_effort: Optional[str],
+    client_reasoning: Optional[Dict[str, Any]],
+    parsed_reasoning_config: Any,
+    model_manager: Any,
+    config: Any,
+    top_k: Optional[int] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    request_id: str = "",
+) -> None:
+    """Apply reasoning and SDK-unsafe fields for the OpenAI/Codex path.
+
+    - The client's top-level ``reasoning_effort`` (or an OpenRouter-style
+      ``reasoning`` dict with ``effort`` / ``max_tokens``) wins over the
+      env/tier-derived config returned by ``parse_and_map_model``. Invalid
+      client effort is dropped with a warning and the parsed config is used.
+    - ``reasoning_effort``, ``reasoning``, ``top_k`` and ``metadata`` are not
+      OpenAI SDK parameters; they are removed from the request dict and
+      re-emitted through the single reasoning/extra_body channels so the
+      upstream sees exactly one representation.
+    """
+    openai_request.pop("reasoning_effort", None)
+    openai_request.pop("reasoning", None)
+    openai_request.pop("top_k", None)
+    openai_request.pop("metadata", None)
+
+    effort: Optional[str] = client_effort
+    max_tokens: Optional[int] = None
+    if not effort and isinstance(client_reasoning, dict):
+        effort = client_reasoning.get("effort")
+        mt = client_reasoning.get("max_tokens")
+        if mt is not None:
+            try:
+                max_tokens = int(mt)
+            except (TypeError, ValueError):
+                max_tokens = None
+
+    effective: Any = None
+    if effort:
+        try:
+            effective = OpenAIReasoningConfig(
+                enabled=True,
+                effort=validate_openai_reasoning(effort),
+                exclude=config.reasoning_exclude,
+            )
+        except ValueError as _ve:
+            logger.warning(
+                f"[{request_id}] Invalid client reasoning_effort "
+                f"'{effort}' dropped ({_ve}); falling back to parsed config"
+            )
+            effective = parsed_reasoning_config
+    elif max_tokens is not None:
+        effective = OpenAIReasoningConfig(
+            enabled=True, max_tokens=max_tokens, exclude=config.reasoning_exclude
+        )
+    else:
+        effective = parsed_reasoning_config
+
+    if effective is not None:
+        _apply_reasoning_config(
+            openai_request,
+            effective,
+            openai_request.get("model", ""),
+            model_manager,
+        )
+
+    if top_k is not None:
+        openai_request.setdefault("extra_body", {})["top_k"] = top_k
+    if metadata:
+        openai_request.setdefault("extra_body", {})["metadata"] = metadata
 
 
 def normalize_openai_tools_for_provider(
@@ -622,6 +712,22 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
                         client = _AsyncOpenAI(api_key=api_key, base_url=base_url)
         except Exception as _ms_err:
             logger.warning(f"model_scan overlay error (non-fatal): {_ms_err}")
+
+        # Reasoning + extra-field compliance (Codex/OpenAI path): the client's
+        # reasoning level and SDK-unsafe fields must never be dropped while
+        # routing. Applied after all model swaps so the final routed model
+        # still carries the client's explicit reasoning choice.
+        apply_openai_client_reasoning_and_extras(
+            openai_request,
+            client_effort=body.reasoning_effort,
+            client_reasoning=body.reasoning,
+            parsed_reasoning_config=reasoning_config,
+            model_manager=model_manager,
+            config=config,
+            top_k=body.top_k,
+            metadata=body.metadata,
+            request_id=request_id,
+        )
 
         # Check if passthrough mode is active (disables cascade + routing)
         from src.core.proxy_chain import get_chain

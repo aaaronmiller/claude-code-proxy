@@ -201,7 +201,7 @@ class ConfigValidator:
         reasoning_max_tokens = os.getenv("REASONING_MAX_TOKENS")
 
         if reasoning_effort:
-            valid_efforts = ["low", "medium", "high"]
+            valid_efforts = ["low", "medium", "high", "xl", "max"]
             if reasoning_effort not in valid_efforts:
                 self.warnings.append(
                     f'REASONING_EFFORT="{reasoning_effort}" is invalid\n'

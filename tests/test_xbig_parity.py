@@ -121,6 +121,34 @@ def test_xbig_reasoning_override_reaches_request_configuration():
     assert resolved.effort == "high"
 
 
+def test_max_reasoning_level_reaches_every_tier_override():
+    for tier, model in (
+        ("xbig", "openai/gpt-5.5"),
+        ("big", "openai/gpt-5"),
+        ("middle", "openai/gpt-5-mini"),
+        ("small", "openai/gpt-5-nano"),
+    ):
+        cfg = SimpleNamespace(
+            xbig_model="openai/gpt-5.5",
+            big_model="openai/gpt-5",
+            middle_model="openai/gpt-5-mini",
+            small_model="openai/gpt-5-nano",
+            xbig_model_reasoning="",
+            big_model_reasoning="",
+            middle_model_reasoning="",
+            small_model_reasoning="",
+            reasoning_effort="low",
+            reasoning_max_tokens=32000,
+            reasoning_exclude=False,
+        )
+        setattr(cfg, f"{tier}_model_reasoning", "max")
+
+        resolved = ModelManager(cfg)._get_default_reasoning_config(model)
+
+        assert isinstance(resolved, OpenAIReasoningConfig)
+        assert resolved.effort == "max"
+
+
 def test_examples_document_all_xbig_surfaces():
     combined = (ROOT / ".env.example").read_text() + (ROOT / "config/env.example").read_text()
     for env_var in (

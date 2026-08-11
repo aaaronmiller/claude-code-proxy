@@ -86,7 +86,9 @@ def configure_reasoning():
             return
         elif choice == "1":
             new_effort = Prompt.ask(
-                "Select effort", choices=["low", "medium", "high"], default="medium"
+                "Select effort",
+                choices=["low", "medium", "high", "xl", "max"],
+                default="medium",
             )
             updates["REASONING_EFFORT"] = new_effort
         elif choice == "2":

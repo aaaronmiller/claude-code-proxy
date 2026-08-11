@@ -18,6 +18,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] — Performance & Reliability Improvements + Profile Routing Spec
 
+### Added
+
+- Reasoning compliance for the request-conversion layer: Claude Code `effort`/`thinking`
+  fields now survive routing to the OpenAI format (`reasoning.effort` / `reasoning.max_tokens`
+  / `thinking`), including adaptive thinking without a budget. `top_k` and `metadata.user_id`
+  map to `extra_body.top_k` / `user`, and `output_format`/`output_config` map to
+  `response_format`.
+- Codex/OpenAI path (`/v1/chat/completions`): `OpenAIChatRequest` now types
+  `reasoning_effort`, `reasoning`, `parallel_tool_calls`, `top_k`, `metadata`,
+  `response_format`, `max_completion_tokens`, `seed`, and `stream_options`; the previously
+  parsed-but-dropped env/tier reasoning config is now applied, client reasoning levels win
+  over env/tier defaults, and SDK-unsafe fields ride `extra_body`.
+
 ### Fixed
 - **XBIG four-tier configuration parity** (`src/core/config_manifest.py`, `src/core/model_manager.py`, `src/services/conversion/request_converter.py`, `src/services/prompts/system_prompt_loader.py`, `src/api/web_ui.py`, `src/cli/advanced_config.py`, examples, and `scripts/xx`) - XBIG now has the same model, cascade, reasoning, and custom-system-prompt surfaces as BIG/MIDDLE/SMALL. The request path recognizes an explicitly configured XBIG model, applies its tier reasoning override and prompt, and the launcher can select the XBIG tier without exposing credentials.
 - **Provider quota contract and source authority** (`src/core/client.py`, `src/core/quota_adapters.py`, `src/core/quota_live.py`, `src/core/quota_sources.py`) - migrated OpenRouter current-key polling from the stale `/api/v1/auth/key` path to `/api/v1/key`, rejects inconsistent payloads instead of inventing quota, preserves the old parser entry point, captures rate-limit headers from successful streaming and non-streaming responses, and makes provider headers/account endpoints outrank Tokscale and ccusage estimates.
@@ -25,6 +38,7 @@ All notable changes to this project will be documented in this file.
 - **Automatic allocator identity inference removed** (`src/services/allocator.py`, `src/core/model_scan_runtime.py`) - allocator snapshot output now requires exact provider and API model identity, unresolved identities are excluded and reported, and display or benchmark names cannot be converted into callable routes by string fallback.
 
 ### Added
+- **Five-level reasoning scale with `xl` and `max`** (`src/core/reasoning_validator.py`, `src/core/validator.py`, `src/core/config_manifest.py`, `src/cli/advanced_config.py`, `src/static/index.html`, `src/services/models/model_parser.py`, `src/models/reasoning.py`, examples) - reasoning effort now accepts `xl` and `max` alongside `low`/`medium`/`high`. The five levels are available to the global `REASONING_EFFORT`, every per-tier override (`XBIG/BIG/MIDDLE/SMALL_MODEL_REASONING`), and model suffix notation (`gpt-5:max`), so Claude Code clients that advertise `max` reasoning for some models can be routed through all B/M/S tiers.
 - **Strict callable catalog and identity-map contracts** (`src/services/models/callable_catalog.py`, `src/services/models/callable_identity.py`, `specs/003-model-scan-integration/contracts/`) - adds versioned JSON schemas, validated immutable consumers, explicit provenanced capability-to-callable joins, and offline fixtures covering missing, ambiguous, unreachable, and unresolved identities. These contracts do not activate routing.
 - **Deterministic default-off routing snapshot publisher** (`src/services/models/deterministic_routing_snapshot.py`) - builds content-addressed snapshots with exact callable identity, policy/catalog versions, expiry, ordered rank, eligibility, exclusions, and evidence references; validates before atomic publication and retains an independently readable last-known-good recovery copy. Missing, stale, incompatible, invalid, and interrupted replacements are covered without wiring the publisher into active routing.
 - **Strict task-classification contract** (`src/services/models/task_classification.py`, `specs/003-model-scan-integration/contracts/task_classification.schema.json`) - records the two-level task taxonomy, required capabilities, explicit public/proprietary classification, importance, confidence, and provenance. Active-taxonomy validation rejects unknown or mismatched classes, and the strict schema forbids provider, model, and callable-selection fields.

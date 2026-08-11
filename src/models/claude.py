@@ -108,7 +108,7 @@ class ClaudeMessagesRequest(BaseModel):
     tools: Optional[List[ClaudeTool]] = None
     tool_choice: Optional[Dict[str, Any]] = None
     thinking: Optional[ClaudeThinkingConfig] = None
-    effort: Optional[Literal["max", "high", "medium", "low"]] = None
+    effort: Optional[Literal["max", "xl", "high", "medium", "low"]] = None
     # Structured output support (GA Jan 2026+)
     output_format: Optional[Dict[str, Any]] = None  # Deprecated legacy field
     output_config: Optional[Dict[str, Any]] = None  # New GA format

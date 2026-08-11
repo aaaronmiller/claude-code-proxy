@@ -174,7 +174,7 @@ SETTINGS: List[Setting] = [
     # GROUP: reasoning
     # ════════════════════════════════════════════════════════════════════════
     Setting("REASONING_EFFORT", str, "low", "Default reasoning effort level", "reasoning",
-            cli_flag="--reasoning-effort", choices=["low", "medium", "high"],
+            cli_flag="--reasoning-effort", choices=["low", "medium", "high", "xl", "max"],
             tui_widget="select", web_component="select"),
     Setting("REASONING_MAX_TOKENS", int, 32000, "Max thinking tokens for extended reasoning",
             "reasoning", cli_flag="--reasoning-max-tokens", tui_widget="number",

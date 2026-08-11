@@ -165,3 +165,95 @@ class TestRequestConverterWithReasoning:
         assert "extra_body" in result
         assert "thinking" in result["extra_body"]
         assert result["extra_body"]["thinking"]["budget"] == 4096
+
+
+def _converter_manager(openai_base_url="https://openrouter.ai/api/v1", parsed=None):
+    mm = Mock()
+    mm.config.openai_base_url = openai_base_url
+    mm.config.min_tokens_limit = 100
+    mm.config.max_tokens_limit = 8000
+    mm.config.reasoning_exclude = False
+    mm.config.verbosity = None
+    mm.config.enable_custom_big_prompt = False
+    mm.config.enable_custom_middle_prompt = False
+    mm.config.enable_custom_small_prompt = False
+    mm.config.enable_custom_xbig_prompt = False
+    mm.config.normalize_system_role = False
+    mm.parse_and_map_model.return_value = ("openai/gpt-5", parsed)
+    mm.is_newer_openai_model.return_value = True
+    return mm
+
+
+class TestRequestLevelFieldForwarding:
+    """Claude request fields must survive routing to the OpenAI format."""
+
+    def _request(self, **overrides):
+        base = dict(
+            model="openai/gpt-5",
+            max_tokens=4096,
+            messages=[ClaudeMessage(role="user", content="hi")],
+        )
+        base.update(overrides)
+        return ClaudeMessagesRequest(**base)
+
+    def test_effort_max_survives_routing(self):
+        result = convert_claude_to_openai(
+            self._request(effort="max"), _converter_manager()
+        )
+        assert result["extra_body"]["reasoning"]["effort"] == "max"
+
+    def test_effort_xl_parses_and_survives(self):
+        result = convert_claude_to_openai(
+            self._request(effort="xl"), _converter_manager()
+        )
+        assert result["extra_body"]["reasoning"]["effort"] == "xl"
+
+    def test_client_effort_wins_over_parsed_config(self):
+        parsed = OpenAIReasoningConfig(enabled=True, effort="low", exclude=False)
+        result = convert_claude_to_openai(
+            self._request(effort="max"), _converter_manager(parsed=parsed)
+        )
+        assert result["extra_body"]["reasoning"]["effort"] == "max"
+
+    def test_thinking_budget_maps_to_effort_model_token_budget(self):
+        from src.models.claude import ClaudeThinkingConfig
+        result = convert_claude_to_openai(
+            self._request(thinking=ClaudeThinkingConfig(type="enabled", budget_tokens=8000)),
+            _converter_manager(),
+        )
+        assert result["extra_body"]["reasoning"]["max_tokens"] == 8000
+
+    def test_adaptive_thinking_emits_type_without_budget(self):
+        from src.models.claude import ClaudeThinkingConfig
+        result = convert_claude_to_openai(
+            self._request(thinking=ClaudeThinkingConfig(type="adaptive")),
+            _converter_manager(),
+        )
+        assert result["extra_body"]["thinking"] == {"type": "adaptive"}
+
+    def test_top_k_rides_extra_body(self):
+        result = convert_claude_to_openai(
+            self._request(top_k=40), _converter_manager()
+        )
+        assert result["extra_body"]["top_k"] == 40
+
+    def test_metadata_user_id_maps_to_user(self):
+        result = convert_claude_to_openai(
+            self._request(metadata={"user_id": "u-123"}), _converter_manager()
+        )
+        assert result["user"] == "u-123"
+
+    def test_output_config_maps_to_response_format(self):
+        result = convert_claude_to_openai(
+            self._request(
+                output_config={
+                    "type": "json_schema",
+                    "json_schema": {"name": "t", "schema": {"type": "object"}},
+                }
+            ),
+            _converter_manager(),
+        )
+        assert result["response_format"] == {
+            "type": "json_schema",
+            "json_schema": {"name": "t", "schema": {"type": "object"}},
+        }

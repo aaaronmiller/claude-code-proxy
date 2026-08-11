@@ -17,7 +17,10 @@ class TestOpenAIReasoningValidation:
         assert validate_openai_reasoning("low") == "low"
         assert validate_openai_reasoning("medium") == "medium"
         assert validate_openai_reasoning("high") == "high"
+        assert validate_openai_reasoning("xl") == "xl"
+        assert validate_openai_reasoning("max") == "max"
         assert validate_openai_reasoning("HIGH") == "high"  # Case insensitive
+        assert validate_openai_reasoning("MAX") == "max"  # Case insensitive
 
     def test_invalid_effort_level(self):
         """Test validation rejects invalid effort levels."""

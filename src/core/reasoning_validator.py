@@ -16,8 +16,8 @@ from typing import Tuple
 logger = logging.getLogger(__name__)
 
 
-# Valid OpenAI reasoning effort levels
-VALID_EFFORT_LEVELS = {"low", "medium", "high"}
+# Valid OpenAI reasoning effort levels (five-level scale: low, medium, high, xl, max)
+VALID_EFFORT_LEVELS = {"low", "medium", "high", "xl", "max"}
 
 # Anthropic thinking token constraints
 ANTHROPIC_MIN_TOKENS = 1024
@@ -75,7 +75,7 @@ def validate_openai_reasoning(effort: str) -> str:
     Validate OpenAI reasoning effort level.
 
     Args:
-        effort: Reasoning effort level (low, medium, high)
+        effort: Reasoning effort level (low, medium, high, xl, max)
 
     Returns:
         Validated effort level (lowercase)

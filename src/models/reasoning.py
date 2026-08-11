@@ -19,7 +19,7 @@ class ReasoningConfig:
 class OpenAIReasoningConfig(ReasoningConfig):
     """Configuration for OpenAI reasoning models (o-series, GPT-5)."""
     enabled: bool = True
-    effort: Optional[str] = None  # 'low', 'medium', 'high'
+    effort: Optional[str] = None  # 'low', 'medium', 'high', 'xl', 'max'
     max_tokens: Optional[int] = None  # Arbitrary token budget
     exclude: bool = False  # Whether to exclude reasoning from response
 

@@ -11,6 +11,7 @@ from src.models.reasoning import (
     AnthropicThinkingConfig,
     GeminiThinkingConfig,
 )
+from src.core.reasoning_validator import is_reasoning_capable_model
 from src.services.models.model_filter import model_filter
 from src.core.constants import Constants
 from src.services.tools.tool_mapper import sanitize_tool_declarations
@@ -278,22 +279,22 @@ def _apply_reasoning_config(
 
     # Anthropic thinking tokens
     elif isinstance(reasoning_config, AnthropicThinkingConfig):
+        # Adaptive thinking (Opus 4.6+) carries no budget; only include the
+        # budget key when one was actually set.
+        thinking_params: Dict[str, Any] = {"type": reasoning_config.type}
+        if reasoning_config.budget:
+            thinking_params["budget"] = reasoning_config.budget
+
         # Anthropic uses 'thinking' parameter in request body
         # For OpenRouter, this goes in extra_body
         if is_using_openrouter:
             if "extra_body" not in openai_request:
                 openai_request["extra_body"] = {}
 
-            openai_request["extra_body"]["thinking"] = {
-                "type": reasoning_config.type,
-                "budget": reasoning_config.budget,
-            }
+            openai_request["extra_body"]["thinking"] = thinking_params
         else:
             # For direct Anthropic API (if proxying), add to top level
-            openai_request["thinking"] = {
-                "type": reasoning_config.type,
-                "budget": reasoning_config.budget,
-            }
+            openai_request["thinking"] = thinking_params
 
         logger.info(
             f"Applied Anthropic thinking config for {model_name}: "
@@ -605,6 +606,85 @@ def convert_claude_to_openai(
         _apply_reasoning_config(
             openai_request, reasoning_config, openai_model, model_manager
         )
+
+    # Request-level reasoning: Claude Code submits top-level `effort` and
+    # `thinking`. These are explicit client choices and must not be dropped
+    # when routing to another provider. Client wins over env/tier defaults.
+    if claude_request.effort is not None:
+        _apply_reasoning_config(
+            openai_request,
+            OpenAIReasoningConfig(
+                enabled=True,
+                effort=claude_request.effort,
+                exclude=config.reasoning_exclude,
+            ),
+            openai_model,
+            model_manager,
+        )
+    elif claude_request.thinking is not None:
+        thinking_budget = claude_request.thinking.budget_tokens
+        if thinking_budget is not None:
+            # A token budget on an effort-style model maps to the OpenAI
+            # reasoning token budget; on Anthropic/Gemini models it maps to a
+            # native thinking budget.
+            _capable, _reasoning_type = is_reasoning_capable_model(openai_model)
+            if _reasoning_type == "effort":
+                _apply_reasoning_config(
+                    openai_request,
+                    OpenAIReasoningConfig(
+                        enabled=True,
+                        max_tokens=thinking_budget,
+                        exclude=config.reasoning_exclude,
+                    ),
+                    openai_model,
+                    model_manager,
+                )
+            else:
+                _apply_reasoning_config(
+                    openai_request,
+                    AnthropicThinkingConfig(
+                        type=claude_request.thinking.type, budget=thinking_budget
+                    ),
+                    openai_model,
+                    model_manager,
+                )
+        else:
+            # Adaptive thinking carries no budget.
+            _apply_reasoning_config(
+                openai_request,
+                AnthropicThinkingConfig(
+                    type=claude_request.thinking.type, budget=0
+                ),
+                openai_model,
+                model_manager,
+            )
+
+    # top_k is not an OpenAI SDK parameter; ride it in extra_body so
+    # OpenRouter/DeepSeek/Qwen/xAI-style backends that accept it still get it.
+    if claude_request.top_k is not None:
+        openai_request.setdefault("extra_body", {})["top_k"] = claude_request.top_k
+
+    # Anthropic metadata.user_id maps to the OpenAI `user` field.
+    if claude_request.metadata and isinstance(claude_request.metadata, dict):
+        _user_id = claude_request.metadata.get("user_id")
+        if _user_id:
+            openai_request["user"] = _user_id
+
+    # Structured output (Claude GA output_format/output_config) maps to the
+    # OpenAI response_format surface. The inner json_schema payload is passed
+    # through unchanged.
+    _structured = claude_request.output_config or claude_request.output_format
+    if _structured and isinstance(_structured, dict):
+        _structured_type = _structured.get("type")
+        if _structured_type == "json_schema" and isinstance(
+            _structured.get("json_schema"), dict
+        ):
+            openai_request["response_format"] = {
+                "type": "json_schema",
+                "json_schema": _structured["json_schema"],
+            }
+        elif _structured_type == "text":
+            openai_request["response_format"] = {"type": "text"}
 
     # Add verbosity if configured (for providers that support it)
     # Note: Not all models support verbosity, and some only support specific values

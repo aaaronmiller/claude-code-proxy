@@ -200,7 +200,7 @@ def parse_model_name(model_name: str) -> ParsedModel:
 
     try:
         if reasoning_type == "effort":
-            # OpenAI o-series: expect 'low', 'medium', 'high', k-notation, or numeric token budget
+            # OpenAI o-series: expect 'low', 'medium', 'high', 'xl', 'max', k-notation, or numeric token budget
             if suffix.isdigit():
                 # Numeric suffix = arbitrary token budget
                 reasoning_value = int(suffix)
