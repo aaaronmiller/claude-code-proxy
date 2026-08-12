@@ -86,7 +86,7 @@ class ModelManager:
         # Check for hybrid tier/provider format first (e.g., opus/qwen-2.5, sonnet/openai/gpt-4o)
         if "/" in model_lower:
             parts = model_lower.split("/", 1)
-            if parts[0] in ["opus", "sonnet", "haiku"]:
+            if parts[0] in ["opus", "sonnet", "haiku", "fable"]:
                 # This is tier/provider-model format, return the provider-model part
                 # The actual model ID after the tier prefix
                 provider_model = parts[1]
@@ -100,6 +100,9 @@ class ModelManager:
             return self.config.middle_model
         elif "opus" in model_lower:
             return self.config.big_model
+        elif "fable" in model_lower:
+            # Fable-level slots route to the XBIG tier (most capable, highest cost)
+            return self.config.xbig_model
         else:
             # Pass through all other models as-is (Gemini, OpenAI, OpenRouter, custom, etc.)
             return claude_model
