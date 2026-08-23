@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import threading
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from src.core.assignments import Assignment, get_registry
 from src.core.model_scan_binder import BindResult, ResolvedBinding, SelectionPolicy, bind
 from src.core.persistence_boundary import non_persisting_preview
 from src.core.profiles import DEFAULT_PROFILES_PATH, get_all_profiles
@@ -52,7 +51,12 @@ def get_active_allocation() -> dict[str, Any]:
 
 
 def resolve_profile_binding(profile_name: str, assignment_id: str) -> ResolvedBinding | None:
-    """Return the active request-time overlay for a profile/assignment pair."""
+    """Return the active dynamic binding for a profile/assignment pair.
+
+    A named profile override wins when present. Otherwise every request sees the
+    active global binding. Static configuration remains outside this function and
+    is therefore the exact fallback when Model Scan is disabled or unavailable.
+    """
     from src.core.profiles import ACTIVE_PROFILE, get_canary_binding
 
     profile = ACTIVE_PROFILE.get()
@@ -71,7 +75,61 @@ def resolve_profile_binding(profile_name: str, assignment_id: str) -> ResolvedBi
         active = _ACTIVE_BINDING
         if active is None:
             return None
-        return active.overlay.get(profile_name, {}).get(assignment_id)
+        return active.overlay.get(profile_name, {}).get(
+            assignment_id,
+            active.global_tiers.get(assignment_id),
+        )
+
+
+@dataclass(frozen=True)
+class CallableBinding:
+    """A dynamic binding joined to the router-owned provider registry."""
+
+    binding: ResolvedBinding
+    endpoint: str
+    provider: str
+    api_key: str = field(repr=False)
+
+
+def configured_assignment_id(model: str, config: Any) -> str | None:
+    """Match a routed model to one configured tier without family guessing."""
+
+    def normalize(value: Any) -> str:
+        text = str(value or "").lower()
+        return text.split("/", 1)[1] if "/" in text else text
+
+    routed = normalize(model)
+    if not routed:
+        return None
+    for assignment_id in ("xbig", "big", "middle", "small"):
+        if routed == normalize(getattr(config, f"{assignment_id}_model", "")):
+            return assignment_id
+    return None
+
+
+def resolve_callable_binding(
+    profile_name: str,
+    assignment_id: str,
+    config: Any,
+) -> CallableBinding | None:
+    """Return a credential-paired dynamic route, or abstain to static routing.
+
+    Model Scan owns the model identity and ranking. Clutch owns provider URLs and
+    credentials. A snapshot binding is never applied unless that join is complete.
+    """
+    binding = resolve_profile_binding(profile_name, assignment_id)
+    if binding is None or not binding.provider:
+        return None
+    endpoint = binding.base_url or config.get_provider_endpoint(binding.provider)
+    api_key = config.get_provider_api_key(binding.provider)
+    if not endpoint or not api_key:
+        return None
+    return CallableBinding(
+        binding=binding,
+        endpoint=str(endpoint),
+        provider=binding.provider,
+        api_key=str(api_key),
+    )
 
 
 def _profile_bindings(path: Path | None) -> dict[str, dict[str, str]]:
@@ -93,11 +151,11 @@ def _profile_lanes(path: Path | None) -> dict[str, str]:
     }
 
 
-def _static_assignments() -> dict[str, Assignment]:
-    return {assignment.id: assignment for assignment in get_registry().list()}
+def _static_assignments() -> dict[str, Any]:
+    return _chain_assignments(get_chain())
 
 
-def _chain_assignments(chain: ProxyChain) -> dict[str, Assignment]:
+def _chain_assignments(chain: ProxyChain) -> dict[str, Any]:
     return {assignment.id: assignment for assignment in chain.assignments}
 
 
@@ -662,11 +720,12 @@ def create_model_scan_canary(
 
 
 def reload_model_scan(*, profiles_path: Path | None = None) -> dict[str, Any]:
-    """Reload model-scan bindings from disk/gateway and update assignment registry.
+    """Reload model-scan bindings into the request-time in-memory overlay.
 
-    Disabled config is a clean no-op. Invalid snapshots leave the previous good in-memory overlay
-    in place and do not mutate assignments. When ALLOCATOR_ENABLED + session_profiles are set, the
-    F18 allocator also writes per-profile overlays (consumed at request time, no registry writes).
+    Disabled config is a clean no-op. Invalid snapshots leave the previous good
+    in-memory overlay in place. Static assignments, environment values, and
+    profile files are never rewritten. When ALLOCATOR_ENABLED + session_profiles
+    are set, the F18 allocator also writes per-profile in-memory overlays.
     """
     global _ACTIVE_BINDING, _ACTIVE_ALLOCATION
     chain = get_chain()
@@ -703,23 +762,15 @@ def reload_model_scan(*, profiles_path: Path | None = None) -> dict[str, Any]:
     else:
         result = BindResult(scan_id=snap.scan_id, schema_version=snap.schema_version)
 
-    registry = get_registry()
-    changed = False
-    for assignment_id, binding in result.global_tiers.items():
-        current = registry.get(assignment_id)
-        if current is None:
-            continue
-        updates = _binding_to_assignment_updates(binding)
-        if any(getattr(current, key) != value for key, value in updates.items()):
-            registry.update(assignment_id, updates, principal="model_scan")
-            changed = True
-
     alloc_report = _apply_allocator(snap, config, result) if allocator_on else dict(_ALLOC_NOOP)
 
     with _LOCK:
+        changed = _ACTIVE_BINDING != result
         _ACTIVE_BINDING = result
         _ACTIVE_ALLOCATION = alloc_report
 
     out = _summary(enabled=True, changed=changed, result=result)
+    out["activation"] = "in_memory_overlay"
+    out["persistent_writes"] = []
     out["allocator"] = alloc_report
     return out

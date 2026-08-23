@@ -222,8 +222,8 @@
     }
   ],
   "model_scan": {
-    "enabled": false,
-    "policy": "static",
+    "enabled": true,
+    "policy": "roles",
     "snapshot_path": "~/.config/model-scan/routing_snapshot.json",
     "gateway_url": "http://127.0.0.1:7099/routing-snapshot",
     "cache_ttl_s": 300,

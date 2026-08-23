@@ -126,7 +126,9 @@ def test_allocator_disabled_is_noop(monkeypatch, tmp_path):
 
     # no allocator overlay produced; the normal slot-binding path still works
     assert summary["allocator"]["enabled"] is False
-    assert model_scan_runtime.resolve_profile_binding("rich", "big") is None
+    binding = model_scan_runtime.resolve_profile_binding("rich", "big")
+    assert binding is not None
+    assert binding.source == "snapshot"
 
 
 def test_allocator_enabled_but_no_profiles_is_noop(monkeypatch, tmp_path):

@@ -32,6 +32,13 @@ All notable changes to this project will be documented in this file.
   over env/tier defaults, and SDK-unsafe fields ride `extra_body`.
 
 ### Fixed
+- **Model Scan binder activation** (`src/core/model_scan_runtime.py`, request endpoints,
+  `config/proxy_chain.json`, `profiles/profiles.json`) - activates the single proven-safe
+  Haiku redirect as an in-memory Clutch overlay, removes stale `R*` profile bindings,
+  joins snapshot identities to the router-owned provider URL and credential before use,
+  applies the same dynamic state to profiled and unprefixed Anthropic/OpenAI requests,
+  and leaves static configuration byte-identical for disabled, stale, invalid, or
+  incomplete dynamic inputs.
 - **XBIG four-tier configuration parity** (`src/core/config_manifest.py`, `src/core/model_manager.py`, `src/services/conversion/request_converter.py`, `src/services/prompts/system_prompt_loader.py`, `src/api/web_ui.py`, `src/cli/advanced_config.py`, examples, and `scripts/xx`) - XBIG now has the same model, cascade, reasoning, and custom-system-prompt surfaces as BIG/MIDDLE/SMALL. The request path recognizes an explicitly configured XBIG model, applies its tier reasoning override and prompt, and the launcher can select the XBIG tier without exposing credentials.
 - **Provider quota contract and source authority** (`src/core/client.py`, `src/core/quota_adapters.py`, `src/core/quota_live.py`, `src/core/quota_sources.py`) - migrated OpenRouter current-key polling from the stale `/api/v1/auth/key` path to `/api/v1/key`, rejects inconsistent payloads instead of inventing quota, preserves the old parser entry point, captures rate-limit headers from successful streaming and non-streaming responses, and makes provider headers/account endpoints outrank Tokscale and ccusage estimates.
 - **Durable typed quota meters** (`src/core/quota_store.py`, `src/core/quota_live.py`) - atomically persists provider/resource/window/remaining/reset/source/confidence facts with private file permissions, restores last-known facts after restart, exposes staleness without deleting evidence, and treats corruption or write failure as fail-open.

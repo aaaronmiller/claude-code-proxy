@@ -1,7 +1,7 @@
 """Runtime binding tests for the model-scan integration.
 
-These cover the mutable wiring around the pure binder: preserving config, reloading a snapshot,
-updating static tier assignments, and exposing per-profile overlays without request-time file IO.
+These cover the in-memory dynamic layer, exact static fallback, provider joins,
+and per-profile overlays without request-time file IO.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from src.core.assignments import Assignment
 from src.core.profiles import resolve_profile
 from src.core.proxy_chain import ProxyChain
 
@@ -65,7 +64,7 @@ def test_resolve_profile_deep_merges_slot_bindings(tmp_path):
     }
 
 
-def test_reload_model_scan_updates_assignments_and_overlay(monkeypatch, tmp_path):
+def test_reload_model_scan_activates_overlay_without_persisting(monkeypatch, tmp_path):
     from src.core import proxy_chain as proxy_chain_module
     from src.core import model_scan_runtime
 
@@ -117,8 +116,10 @@ def test_reload_model_scan_updates_assignments_and_overlay(monkeypatch, tmp_path
             {
                 "default": {
                     "slot_bindings": {
+                        "xbig": "R1_primary",
                         "big": "R1_primary",
                         "middle": "R_curator",
+                        "small": "R1_primary",
                     }
                 },
                 "codex": {
@@ -138,15 +139,88 @@ def test_reload_model_scan_updates_assignments_and_overlay(monkeypatch, tmp_path
 
     assert summary["enabled"] is True
     assert summary["scan_id"] == 1487
+    assert summary["activation"] == "in_memory_overlay"
+    assert summary["persistent_writes"] == []
     chain = proxy_chain_module.reload_chain()
     big = next(a for a in chain.assignments if a.id == "big")
     middle = next(a for a in chain.assignments if a.id == "middle")
-    assert big.model == "openrouter/deepseek/deepseek-v4-flash:free"
-    assert big.provider == "openrouter"
+    assert big.model == "static/big"
+    assert big.provider == "static"
     assert middle.model == "static/middle"
+    default = model_scan_runtime.resolve_profile_binding("default", "big")
+    assert default is not None
+    assert default.api_model == "openrouter/deepseek/deepseek-v4-flash:free"
+    assert model_scan_runtime.resolve_profile_binding("default", "xbig") is not None
+    assert model_scan_runtime.resolve_profile_binding("default", "middle") is not None
+    assert model_scan_runtime.resolve_profile_binding("default", "small") is not None
     overlay = model_scan_runtime.resolve_profile_binding("codex", "big")
     assert overlay is not None
     assert overlay.api_model == "ollama_cloud/qwen3-coder-next:cloud"
+
+
+def test_callable_binding_requires_provider_url_and_key(monkeypatch):
+    from src.core import model_scan_runtime
+    from src.core.model_scan_binder import BindResult, ResolvedBinding
+
+    binding = ResolvedBinding(
+        api_model="poolside/laguna-xs-2.1:free",
+        base_url="",
+        cascade=(),
+        source="snapshot",
+        provider="openrouter",
+        role="S01_haiku",
+    )
+    monkeypatch.setattr(
+        model_scan_runtime,
+        "_ACTIVE_BINDING",
+        BindResult(global_tiers={"small": binding}),
+    )
+
+    class Config:
+        def __init__(self, *, endpoint="", key=""):
+            self.endpoint = endpoint
+            self.key = key
+
+        def get_provider_endpoint(self, provider):
+            return self.endpoint if provider == "openrouter" else None
+
+        def get_provider_api_key(self, provider):
+            return self.key if provider == "openrouter" else None
+
+    assert model_scan_runtime.resolve_callable_binding("default", "small", Config()) is None
+    assert (
+        model_scan_runtime.resolve_callable_binding(
+            "default", "small", Config(endpoint="https://openrouter.ai/api/v1")
+        )
+        is None
+    )
+    target = model_scan_runtime.resolve_callable_binding(
+        "default",
+        "small",
+        Config(endpoint="https://openrouter.ai/api/v1", key="private-test-key"),
+    )
+    assert target is not None
+    assert target.binding.api_model == "poolside/laguna-xs-2.1:free"
+    assert target.endpoint == "https://openrouter.ai/api/v1"
+    assert target.provider == "openrouter"
+    assert "private-test-key" not in repr(target)
+
+
+def test_configured_assignment_matching_has_no_family_heuristic():
+    from src.core.model_scan_runtime import configured_assignment_id
+
+    class Config:
+        xbig_model = "provider/x-model"
+        big_model = "provider/b-model"
+        middle_model = "provider/m-model"
+        small_model = "provider/s-model"
+
+    config = Config()
+    assert configured_assignment_id("other/x-model", config) == "xbig"
+    assert configured_assignment_id("provider/b-model", config) == "big"
+    assert configured_assignment_id("m-model", config) == "middle"
+    assert configured_assignment_id("provider/s-model", config) == "small"
+    assert configured_assignment_id("claude-haiku-4-5", config) is None
 
 
 def test_reload_model_scan_missing_snapshot_keeps_previous_assignments(monkeypatch, tmp_path):

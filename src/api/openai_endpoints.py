@@ -679,37 +679,51 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
         except Exception as _to_err:
             logger.warning(f"tier_override error (non-fatal): {_to_err}")
 
-        # Model-scan profile overlays are resolved at reload time. The request path only reads
-        # the active in-memory overlay and carries the resolved cascade into client.py.
+        # Model Scan is a dynamic in-memory layer over static configuration. It
+        # applies to both unprefixed and named-profile requests. The shared
+        # resolver abstains unless the model identity joins to a router-owned
+        # provider URL and credential.
         try:
             from src.core.profiles import ACTIVE_PROFILE
-            from src.core.model_scan_runtime import resolve_profile_binding
+            from src.core.model_scan_runtime import (
+                configured_assignment_id,
+                resolve_callable_binding,
+            )
 
             _profile = ACTIVE_PROFILE.get()
-            if _profile is not None and tier:
-                _binding = resolve_profile_binding(_profile.name, tier)
-                if _binding is not None:
+            _profile_name = _profile.name if _profile is not None else "default"
+            _dynamic_assignment = configured_assignment_id(
+                openai_request.get("model", ""),
+                config,
+            )
+            if _dynamic_assignment:
+                _callable = resolve_callable_binding(
+                    _profile_name,
+                    _dynamic_assignment,
+                    config,
+                )
+                if _callable is not None:
+                    _binding = _callable.binding
                     _orig = openai_request.get("model")
                     if _orig != _binding.api_model:
                         logger.info(
-                            f"[profile={_profile.name}] model_scan "
-                            f"({tier}): {_orig} → {_binding.api_model}"
+                            f"[profile={_profile_name}] model_scan "
+                            f"({_dynamic_assignment}): {_orig} → {_binding.api_model}"
                         )
                         openai_request["model"] = _binding.api_model
-                        if _profile.get("spoof_response_model") is not False:
+                        if (
+                            _profile is not None
+                            and _profile.get("spoof_response_model") is not False
+                        ):
                             _spoof_response_to = _orig
                     openai_request["_model_scan_cascade"] = list(_binding.cascade)
-                    if _binding.base_url:
-                        base_url = _binding.base_url
-                        endpoint = _binding.base_url
-                        if _binding.provider:
-                            provider = _binding.provider
-                            _binding_key = config.get_provider_api_key(_binding.provider)
-                            if _binding_key:
-                                api_key = _binding_key
-                        from openai import AsyncOpenAI as _AsyncOpenAI
+                    base_url = _callable.endpoint
+                    endpoint = _callable.endpoint
+                    provider = _callable.provider
+                    api_key = _callable.api_key
+                    from openai import AsyncOpenAI as _AsyncOpenAI
 
-                        client = _AsyncOpenAI(api_key=api_key, base_url=base_url)
+                    client = _AsyncOpenAI(api_key=api_key, base_url=base_url)
         except Exception as _ms_err:
             logger.warning(f"model_scan overlay error (non-fatal): {_ms_err}")
 

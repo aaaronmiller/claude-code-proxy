@@ -751,40 +751,6 @@ async def create_message(
                                 f"'{_provider_name}' for '{assignment_id}' not in "
                                 "PROVIDERS_* registry — ignored"
                             )
-                # 3.6. model-scan slot_bindings: request-time profile overlay.
-                #      The binder resolves this at reload time; the hot path only
-                #      reads the in-memory overlay and applies its cascade.
-                if assignment_id:
-                    try:
-                        from src.core.model_scan_runtime import resolve_profile_binding
-
-                        _binding = resolve_profile_binding(_profile.name, assignment_id)
-                    except Exception:
-                        _binding = None
-                    if _binding is not None:
-                        _orig_model = openai_request.get("model")
-                        if _orig_model != _binding.api_model:
-                            logger.info(
-                                f"[profile={_profile.name}] model_scan "
-                                f"({assignment_id}): {_orig_model} → {_binding.api_model}"
-                            )
-                            openai_request["model"] = _binding.api_model
-                        openai_request["_model_scan_cascade"] = list(_binding.cascade)
-                        if _binding.base_url:
-                            endpoint = _binding.base_url
-                            if _binding.provider:
-                                provider = _binding.provider
-                                _binding_key = config.get_provider_api_key(_binding.provider)
-                                if _binding_key:
-                                    active_api_key = _binding_key
-                            custom_client = OpenAIClient(
-                                active_api_key,
-                                endpoint,
-                                config.request_timeout,
-                                api_version=config.azure_api_version,
-                                custom_headers=custom_headers,
-                            )
-                            custom_client.configure_per_model_clients(config)
                 # 4. provider_override (Phase 4): force a specific provider entry
                 #    from the PROVIDERS_* registry. Wins over the use_case_route's
                 #    base_url/api_key. Used for per-profile OAuth account selection,
@@ -816,6 +782,52 @@ async def create_message(
                         )
         except Exception as _profile_err:
             logger.warning(f"Profile overlay error (non-fatal): {_profile_err}")
+
+        # Model Scan is a dynamic in-memory layer over static configuration. It
+        # applies to both unprefixed and named-profile requests. The shared
+        # resolver abstains unless the snapshot identity joins to a router-owned
+        # provider URL and credential, so incomplete dynamic state stays static.
+        try:
+            from src.core.model_scan_runtime import (
+                configured_assignment_id,
+                resolve_callable_binding,
+            )
+            from src.core.profiles import ACTIVE_PROFILE
+
+            _profile = ACTIVE_PROFILE.get()
+            _profile_name = _profile.name if _profile is not None else "default"
+            _dynamic_assignment = assignment_id or configured_assignment_id(
+                routed_model,
+                config,
+            )
+            _callable = (
+                resolve_callable_binding(_profile_name, _dynamic_assignment, config)
+                if _dynamic_assignment
+                else None
+            )
+            if _callable is not None:
+                _binding = _callable.binding
+                _orig_model = openai_request.get("model")
+                if _orig_model != _binding.api_model:
+                    logger.info(
+                        f"[profile={_profile_name}] model_scan "
+                        f"({_dynamic_assignment}): {_orig_model} → {_binding.api_model}"
+                    )
+                    openai_request["model"] = _binding.api_model
+                openai_request["_model_scan_cascade"] = list(_binding.cascade)
+                endpoint = _callable.endpoint
+                provider = _callable.provider
+                active_api_key = _callable.api_key
+                custom_client = OpenAIClient(
+                    active_api_key,
+                    endpoint,
+                    config.request_timeout,
+                    api_version=config.azure_api_version,
+                    custom_headers=custom_headers,
+                )
+                custom_client.configure_per_model_clients(config)
+        except Exception as _ms_err:
+            logger.warning(f"model_scan overlay error (non-fatal): {_ms_err}")
 
         # Strip proxy-internal keys before forwarding upstream
         openai_request.pop("_original_model", None)

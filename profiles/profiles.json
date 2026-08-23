@@ -7,9 +7,8 @@
     "web_search_intercept": true,
     "lane": "interactive",
     "slot_bindings": {
-      "big": "R1_primary",
-      "middle": "R2_fast",
-      "small": "R3_free"
+      "small": "S01_haiku",
+      "background": "S01_haiku"
     }
   },
   "pi": {
@@ -30,23 +29,7 @@
     "lane": "standby",
     "force_main": "qwen/qwen3-next-80b-a3b-thinking",
     "toolcall_models": ["qwen/qwen3-next-80b-a3b-thinking"],
-    "slot_bindings": {
-      "primary": "R1_primary",
-      "compression": "R6_compression",
-      "vision": "R7_vision",
-      "web_extract": "R8_web_extract",
-      "session_search": "R9_session_search",
-      "approval": "R10_approval",
-      "flush_memories": "R11_flush_memories",
-      "delegation": "R12_delegation",
-      "mcp": "R_mcp",
-      "skills_hub": "R_skills_hub",
-      "title_generation": "R_title_gen",
-      "triage": "R_triage",
-      "kanban": "R_kanban",
-      "profile_description": "R_profile_desc",
-      "curator": "R_curator"
-    }
+    "slot_bindings": {}
   },
   "hermes-bypass": {
     "notes": "hermes-bp — main model unchanged (caller decides), tool calls forced to owl-alpha (agentic) with multi-provider cascade.",
@@ -111,28 +94,16 @@
   "codex": {
     "notes": "codex CLI — measured model-scan bindings when model_scan.enabled is true.",
     "lane": "interactive",
-    "slot_bindings": {
-      "big": "R1_primary",
-      "middle": "R8_web_extract",
-      "small": "R8_web_extract"
-    }
+    "slot_bindings": {}
   },
   "ante": {
     "notes": "Ante low-RAM agent — standby lane, inherits measured free/cheap role bindings.",
     "lane": "standby",
-    "slot_bindings": {
-      "big": "R8_web_extract",
-      "middle": "R6_compression",
-      "small": "R10_approval"
-    }
+    "slot_bindings": {}
   },
   "antigravity": {
     "notes": "Antigravity OAuth-hosted agent — interactive lane with measured primary and delegation roles.",
     "lane": "interactive",
-    "slot_bindings": {
-      "big": "R1_primary",
-      "middle": "R12_delegation",
-      "small": "R8_web_extract"
-    }
+    "slot_bindings": {}
   }
 }
