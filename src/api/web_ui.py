@@ -320,7 +320,7 @@ async def get_config():
         # ═══════════════════════════════════════════════════════════════════════════════
         # CASCADE (Fallback)
         # ═══════════════════════════════════════════════════════════════════════════════
-        "model_cascade": os.getenv("MODEL_CASCADE", "false"),
+        "model_cascade": str(getattr(config, "model_cascade", False)).lower() if hasattr(config, "model_cascade") else os.getenv("MODEL_CASCADE", "false"),
         "big_cascade": os.getenv("BIG_CASCADE", ""),
         "middle_cascade": os.getenv("MIDDLE_CASCADE", ""),
         "small_cascade": os.getenv("SMALL_CASCADE", ""),
