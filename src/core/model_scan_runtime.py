@@ -719,7 +719,25 @@ def create_model_scan_canary(
     }
 
 
+_LAST_RELOAD: dict[str, Any] | None = None
+
+
+def last_reload_summary() -> dict[str, Any] | None:
+    """Return the most recent reload summary, or None before the first reload."""
+    with _LOCK:
+        return dict(_LAST_RELOAD) if _LAST_RELOAD is not None else None
+
+
 def reload_model_scan(*, profiles_path: Path | None = None) -> dict[str, Any]:
+    """Reload model-scan bindings and remember the summary for diagnostics."""
+    global _LAST_RELOAD
+    out = _reload_model_scan(profiles_path=profiles_path)
+    with _LOCK:
+        _LAST_RELOAD = out
+    return out
+
+
+def _reload_model_scan(*, profiles_path: Path | None = None) -> dict[str, Any]:
     """Reload model-scan bindings into the request-time in-memory overlay.
 
     Disabled config is a clean no-op. Invalid snapshots leave the previous good

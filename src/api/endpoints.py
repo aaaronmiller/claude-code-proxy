@@ -374,6 +374,16 @@ async def shadow_model_scan_bindings():
         raise HTTPException(status_code=500, detail="model-scan shadow comparison failed") from exc
 
 
+@router.get("/api/model-scan/diagnostics")
+async def model_scan_diagnostics():
+    """Read-only process/dependency/catalog/snapshot/quota/binding/reload report."""
+    from src.core.model_scan_diagnostics import assert_no_secrets, collect_diagnostics
+
+    report = collect_diagnostics()
+    assert_no_secrets(report)
+    return report
+
+
 @router.get("/api/model-scan/dashboard")
 async def model_scan_dashboard(limit: int = 25):
     """Return model-scan provenance, compression stats, and recent CCP errors."""

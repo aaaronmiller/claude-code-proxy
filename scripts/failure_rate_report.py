@@ -100,8 +100,8 @@ def get_failure_stats(days=7):
         failure_pct = (failures / total * 100) if total > 0 else 0
         print(f"{day:<12} {model or 'unknown':<40} {total:>8} {failures:>10} {failure_pct:>11.1f}%")
     
-    conn.close()
-    
+    # (connection stays open; closed after the recent-errors query below)
+
     # Recent errors
     print("\n\nRECENT ERRORS (last 10):")
     print(f"{'Timestamp':<25} {'Model':<35} {'Error'}")
