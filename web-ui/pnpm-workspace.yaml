@@ -1,0 +1,3 @@
+virtualStoreType: global
+onlyBuiltDependencies:
+  - esbuild
