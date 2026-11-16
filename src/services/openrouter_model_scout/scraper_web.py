@@ -12,9 +12,6 @@ import time
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
-from camoufox.sync_api import Camoufox
-from crawl4ai import AsyncWebCrawler
-from crawl4ai.extraction_strategy import LLMExtractionStrategy
 from pydantic import BaseModel, Field
 
 from openrouter_model_scout.models import Performance, Benchmarks, IntelligenceMetrics, CodingMetrics, AgenticMetrics
@@ -59,7 +56,7 @@ class ScraperManager:
         self.stealth_mode = stealth_mode
         self.max_concurrent = max_concurrent
         self.delay_range = delay_range
-        self._browser: Optional[Camoufox] = None
+        self._browser: Optional[Any] = None
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
     def __enter__(self):
@@ -74,6 +71,8 @@ class ScraperManager:
     def start(self) -> None:
         """Initialize the browser."""
         if self._browser is None:
+            from camoufox.sync_api import Camoufox
+
             logger.info("Starting Camoufox browser...")
             # Camoufox has stealth built-in by default; no extra parameters needed
             self._browser = Camoufox(headless=True)  # type: ignore[call-arg]
@@ -138,6 +137,9 @@ class ScraperManager:
         Returns:
             Dictionary with extracted fields
         """
+        from crawl4ai import AsyncWebCrawler
+        from crawl4ai.extraction_strategy import LLMExtractionStrategy
+
         # Configure extraction strategy
         extraction_strategy = LLMExtractionStrategy(
             llm_provider="openai",

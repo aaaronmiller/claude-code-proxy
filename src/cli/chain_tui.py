@@ -390,7 +390,7 @@ class ChainTUI(App):
                     yield IdentifierMappingPanel(id="mappings-panel")
         yield Footer()
 
-    async     async def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         self._refresh_table()
         self.query_one("#chain-table", DataTable).focus()
         self._update_right_panel_visibility()

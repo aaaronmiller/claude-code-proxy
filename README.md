@@ -49,6 +49,11 @@ codex-run # = cg_run xx xip   → Codex init, proxy
 
 ## Quick Start
 
+The Python gateway requires Python 3.11 or newer. Install the optional scraping
+dependencies with `uv sync --extra scrape`, or GraphQL support with
+`uv sync --extra graphql`. Browser-based scraping also requires browser setup
+for the relevant tool.
+
 ```bash
 # 1. Install
 git clone https://github.com/aaaronmiller/claude-code-proxy.git

@@ -15,11 +15,10 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi[standard]>=0.121.0",
     "uvicorn>=0.38.0",
@@ -37,9 +36,19 @@ dependencies = [
     "openpyxl>=3.1.0",
     "reportlab>=4.0.0",
     "requests>=2.32.0",
+    "jinja2>=3.1.6",
+    "jsonschema>=4.26.0",
+    "mcp>=1.27.0",
+    "models-dev>=1.0.347",
+    "prometheus-client>=0.25.0",
+    "pyyaml>=6.0.3",
+    "sse-starlette>=3.7.0",
+    "textual>=8.2.3",
 ]
 
 [project.optional-dependencies]
+scrape = ["camoufox", "crawl4ai", "playwright"]
+graphql = ["strawberry-graphql"]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
@@ -60,6 +69,7 @@ ccp-fusion = "src.cli.fusion:main"
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+    "hypothesis>=6.100.0",
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=6.0.0",
     "black>=25.0.0",

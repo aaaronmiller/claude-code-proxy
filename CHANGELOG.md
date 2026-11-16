@@ -18,6 +18,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] — Performance & Reliability Improvements + Profile Routing Spec
 
+### Fixed
+
+- Declare gateway runtime dependencies, require Python 3.11 or newer, and make scraping and GraphQL dependencies optional extras. Fix the integrations endpoint startup error with current FastAPI and repair the chain TUI syntax.
+
 ### Added
 
 - Reasoning compliance for the request-conversion layer: Claude Code `effort`/`thinking`

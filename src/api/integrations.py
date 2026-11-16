@@ -8,7 +8,7 @@ Date: 2026-01-05
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Literal, Optional
 from datetime import datetime
 
 from src.core.logging import logger
@@ -302,7 +302,7 @@ async def forward_batch(events: List[Dict[str, Any]], integrations: Optional[Lis
 
 @router.get("/api/integrations/monitoring/external")
 async def get_external_metrics(
-    system: str = Query(..., enum=["datadog", "newrelic"]),
+    system: Literal["datadog", "newrelic"] = Query(...),
     metric: str = Query(...),
     hours: int = Query(24, ge=1, le=168)
 ):
