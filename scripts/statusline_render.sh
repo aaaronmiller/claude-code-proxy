@@ -8,7 +8,7 @@
 # Wire up in ~/.claude/settings.json:
 #   "statusLine": {
 #     "type": "command",
-#     "command": "bash /home/cheta/code/claude-code-proxy/scripts/statusline_render.sh"
+#     "command": "bash ~/code/claude-code-proxy/scripts/statusline_render.sh"
 #   }
 #
 # Config at ~/.claude/statusline-config.json:

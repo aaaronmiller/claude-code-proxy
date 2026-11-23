@@ -129,7 +129,7 @@ cmd_health() {
     echo "💾 Compression Stats:"
     if [[ -f "$HOME/.compression_stats.json" ]]; then
         python3 -c "
-import json
+import json, os
 with open('$HOME/.compression_stats.json') as f:
     stats = json.load(f)
 total = stats.get('total', {})
@@ -189,49 +189,49 @@ cmd_apply_mode() {
     case "$mode" in
         max-compression)
             python3 << 'PYEOF'
-import json
+import json, os
 config = {
     "kompress": {"device": "cuda", "batch_size": 16, "preload": True, "resident": True},
     "cache": {"enabled": True, "max_size_mb": 2000}
 }
-with open("/home/misscheta/.headroom/config.json", "w") as f:
+with open(os.path.expanduser("~/.headroom/config.json"), "w") as f:
     json.dump(config, f, indent=2)
 PYEOF
             log_success "Applied: MAX COMPRESSION mode"
             ;;
         balanced)
             python3 << 'PYEOF'
-import json
+import json, os
 config = {
     "kompress": {"device": "cuda", "batch_size": 8, "preload": True, "resident": True},
     "cache": {"enabled": True, "max_size_mb": 1500}
 }
-with open("/home/misscheta/.headroom/config.json", "w") as f:
+with open(os.path.expanduser("~/.headroom/config.json"), "w") as f:
     json.dump(config, f, indent=2)
 PYEOF
             log_success "Applied: BALANCED mode"
             ;;
         speed)
             python3 << 'PYEOF'
-import json
+import json, os
 config = {
     "kompress": {"device": "cuda", "batch_size": 4, "preload": True, "resident": True},
     "cache": {"enabled": True, "max_size_mb": 500}
 }
-with open("/home/misscheta/.headroom/config.json", "w") as f:
+with open(os.path.expanduser("~/.headroom/config.json"), "w") as f:
     json.dump(config, f, indent=2)
 PYEOF
             log_success "Applied: SPEED mode"
             ;;
         free-tier)
             python3 << 'PYEOF'
-import json
+import json, os
 config = {
     "kompress": {"device": "cuda", "batch_size": 8, "preload": True, "resident": True},
             "compression_thresholds": {"min_tokens": 100},
     "cache": {"enabled": True, "max_size_mb": 1500}
 }
-with open("/home/misscheta/.headroom/config.json", "w") as f:
+with open(os.path.expanduser("~/.headroom/config.json"), "w") as f:
     json.dump(config, f, indent=2)
 PYEOF
             log_success "Applied: FREE-TIER mode"
@@ -249,10 +249,10 @@ cmd_stats() {
         # Quick one-liner stats
         if [[ -f "$HOME/.compression_stats.json" ]]; then
             python3 << 'PYEOF'
-import json
+import json, os
 from datetime import datetime, timedelta
 
-with open("/home/misscheta/.compression_stats.json") as f:
+with open(os.path.expanduser("~/.compression_stats.json")) as f:
     stats = json.load(f)
 
 total = stats.get('total', {})

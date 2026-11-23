@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /home/cheta/code/claude-code-proxy
+cd $HOME/code/claude-code-proxy
 source .venv/bin/activate
 source .env 2>/dev/null
 echo "BIG_MODEL=$BIG_MODEL"

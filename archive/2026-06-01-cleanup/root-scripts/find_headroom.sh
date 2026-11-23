@@ -1,10 +1,10 @@
 #!/bin/bash
 echo "=== Finding headroom ==="
-find /home/cheta -name "headroom" -type f 2>/dev/null
+find $HOME -name "headroom" -type f 2>/dev/null
 find /usr/local -name "headroom" -type f 2>/dev/null
 echo "=== Checking pip ==="
 pip show headroom 2>/dev/null || echo "not in global pip"
-/home/cheta/code/claude-code-proxy/.venv/bin/pip show headroom 2>/dev/null || echo "not in proxy venv pip"
+$HOME/code/claude-code-proxy/.venv/bin/pip show headroom 2>/dev/null || echo "not in proxy venv pip"
 echo "=== Checking cargo ==="
 ls ~/.cargo/bin/headroom 2>/dev/null || echo "not in cargo"
 echo "=== Checking systemd service ==="
