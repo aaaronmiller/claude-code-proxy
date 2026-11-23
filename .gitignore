@@ -381,3 +381,7 @@ tests/integration/ranking_alignment_report.json
 
 # raw 400 request/response capture kept local-only (sources/diagnostics/PROVENANCE.md)
 sources/diagnostics/claude-code-coding-rules-and-memory.txt
+
+# Session transcripts and verbatim operator prompts live in the private Living Documents record (MT-186)
+USERPROMPTS*.md
+archive/2026-06-01-cleanup/root-docs/session.md
