@@ -18,7 +18,7 @@ This breaks the autonomous flow that Claude Code is designed for.
 
 ## Log Analysis
 
-**Debug Traffic Log:** `/home/misscheta/code/claude-code-proxy/logs/debug_traffic.log`
+**Debug Traffic Log:** `~/code/claude-code-proxy/logs/debug_traffic.log`
 
 Analysis of the traffic log shows:
 - Multiple consecutive requests with increasing message sizes (140KB → 171KB)

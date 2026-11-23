@@ -1,6 +1,6 @@
 # Claude Code Proxy — Fork Audit Documentation
 
-**Location:** `/home/misscheta/code/claude-code-proxy/booger/`  
+**Location:** `~/code/claude-code-proxy/booger/`  
 **Audit date:** 2026-04-21  
 **Auditor:** Kilo (automated + manual diff analysis)  
 **Repositories compared:**  

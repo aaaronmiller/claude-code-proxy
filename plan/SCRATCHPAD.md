@@ -83,7 +83,7 @@ harness reached via VibeProxy/CLIProxyAPI OAuth.
 - Live capability probing (dry-run max_tokens:1 on cache miss/error) (PROP) -> Proxy update plan.md:147,1261
 - ORMS daemon: hybrid API sync (<30s/300 models) + conditional deep scrape (camoufox+crawl4ai, <1% block) + checksum change detect + leaderboards (PROP) -> PRD- proxy model scraper helper.md:21-216; PRD- MAUG.md:352-458,1520-1672; Proxy update plan.md:735-877
 - ORMS: the brainstorming doc claimed it does not exist, but the model-scan program DOES exist at
-  /home/cheta/code/model-scan (dink.py). SUPERSEDED: fold in / extend, not build from scratch.
+  ~/code/model-scan (dink.py). SUPERSEDED: fold in / extend, not build from scratch.
   See 01-CURRENT-STATE. -> Proxy update plan.md:2800,2817
 - Pre-made ORMS alternatives surveyed (openrouter-provider-api, openrouter-inspector, or-models, llm_models_spider) (EXT) -> Proxy update plan.md:2804-2855
 - Data sources: artificialanalysis.ai (IQ/coding/agentic/reasoning/speed; free endpoint /v2/language/models/free), models.dev (ctx/maxout/toolcall/reasoning/cache/multimodal/pricing/dates), PinchBench (agentic %), llm-stats.com coding arena (TrueSkill, SWE-Bench/LiveCodeBench/Terminal-Bench/Aider), LMArena ELO (EXT) -> MODEL_ARCHITECTURE.md:74-99,840-855; AAA model-scan algorithm construction.md:1-17,151-301
@@ -161,7 +161,7 @@ harness reached via VibeProxy/CLIProxyAPI OAuth.
 
 ## F08. COMPRESSION & CACHING LAYER
 
-- Headroom = input/prompt compression 70-90% (CUR; at /home/cheta/code/input-compression/, port 8787 authoritative vs 8001 in superseded draft) -> unified_project_idea_record.md:94-101; Optimal compression...md:78-83,250-261; PRD- MAUG.md:477-503
+- Headroom = input/prompt compression 70-90% (CUR; at ~/code/input-compression/, port 8787 authoritative vs 8001 in superseded draft) -> unified_project_idea_record.md:94-101; Optimal compression...md:78-83,250-261; PRD- MAUG.md:477-503
 - RTK = shell/terminal-output compression via CLI hooks (CUR; "retk" in user goal == RTK) -> unified_project_idea_record.md:102-106; Optimal compression...md:84-88
 - Kompressor = Headroom's model-weight compression (quantization/sparsification), real and
   orthogonal to context compression (user correction) -> Optimal compression...md:78-82

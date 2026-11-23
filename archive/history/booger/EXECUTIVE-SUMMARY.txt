@@ -113,7 +113,7 @@ This is NOT the simple upstream proxy. This is a **Full AI Gateway Platform** wi
 
 ## 📁 AUDIT DELIVERABLES
 
-  /home/misscheta/code/claude-code-proxy/booger/
+  ~/code/claude-code-proxy/booger/
   ├── AUDIT.md                       ← START HERE (25K, 570 lines)
   ├── FEATURES.md                    ← All 64 features, categorized
   ├── FILE-CHANGES.md                ← File-by-file diff manifest

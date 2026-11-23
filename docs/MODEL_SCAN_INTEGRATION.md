@@ -16,7 +16,7 @@ credentials, cascades, sessions, and logging.
 Run model-scan independently:
 
 ```bash
-cd /home/cheta/code/model-scan
+cd ~/code/model-scan
 model-scan --emit-snapshot
 python3 gateway.py 7099
 ```

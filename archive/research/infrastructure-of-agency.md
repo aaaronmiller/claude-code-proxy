@@ -353,7 +353,7 @@ _Strength scale: 0 (not expressed), 1 (weakly expressed), 2 (moderately expresse
 
 ## Appendix B: Data Availability
 
-All 17 active projects are available locally at `/home/cheta/code/`. The alluvial genealogy visualization is available at `docs/research/alluvial-graph.html` (note: visualization data reflects initial 21-project survey; gene expression matrix in Appendix A is the verified, corrected source of truth). The conceptual gene model and expression data are available in the tables above.
+All 17 active projects are available locally at `~/code/`. The alluvial genealogy visualization is available at `docs/research/alluvial-graph.html` (note: visualization data reflects initial 21-project survey; gene expression matrix in Appendix A is the verified, corrected source of truth). The conceptual gene model and expression data are available in the tables above.
 
 ### Verification Methodology
 

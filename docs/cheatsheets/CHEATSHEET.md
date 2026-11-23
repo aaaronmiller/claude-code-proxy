@@ -16,8 +16,8 @@ Claude Code
 ### 1. CLIProxyAPIPlus (port 8317)
 
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus \
-  --config /home/cheta/code/cliproxyapi/config.yaml &
+~/code/cliproxyapi/cli-proxy-api-plus \
+  --config ~/code/cliproxyapi/config.yaml &
 ```
 
 Verify: `curl -s http://127.0.0.1:8317/v1/models -H "Authorization: Bearer pass" | python3 -m json.tool`
@@ -43,7 +43,7 @@ ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass claude
 
 ```bash
 # Terminal 1: CLIProxyAPIPlus
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus --config ~/code/cliproxyapi/config.yaml
 
 # Terminal 2: claude-code-proxy
 cd ~/code/claude-code-proxy && source .venv/bin/activate && source .envrc && python start_proxy.py --skip-validation
@@ -61,52 +61,52 @@ Auto-refresh runs every 15 minutes. Add `-incognito` for multi-account login.
 
 **Antigravity** (Google-hosted Claude/Gemini — 10x limits)
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus -antigravity-login --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus -antigravity-login --config ~/code/cliproxyapi/config.yaml
 ```
 
 **Kiro** (AWS CodeWhisperer — Google OAuth)
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus -kiro-login --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus -kiro-login --config ~/code/cliproxyapi/config.yaml
 ```
 
 **Kiro** (AWS Builder ID — better UX)
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus -kiro-aws-authcode --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus -kiro-aws-authcode --config ~/code/cliproxyapi/config.yaml
 ```
 
 **Kiro** (import from Kiro IDE if already logged in)
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus -kiro-import --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus -kiro-import --config ~/code/cliproxyapi/config.yaml
 ```
 
 **Claude** (Anthropic OAuth)
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus -claude-login --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus -claude-login --config ~/code/cliproxyapi/config.yaml
 ```
 
 **Google Gemini CLI**
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus -login --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus -login --config ~/code/cliproxyapi/config.yaml
 ```
 
 **OpenAI Codex**
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus -codex-login --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus -codex-login --config ~/code/cliproxyapi/config.yaml
 ```
 
 **GitHub Copilot**
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus -github-copilot-login --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus -github-copilot-login --config ~/code/cliproxyapi/config.yaml
 ```
 
 **Qwen**
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus -qwen-login --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus -qwen-login --config ~/code/cliproxyapi/config.yaml
 ```
 
 **iFlow**
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus -iflow-login --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus -iflow-login --config ~/code/cliproxyapi/config.yaml
 ```
 
 After adding a provider, CLIProxyAPIPlus auto-detects the new credential file and reloads. No restart needed.

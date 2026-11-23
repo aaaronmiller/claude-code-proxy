@@ -9,7 +9,7 @@ tags: [ai-gateway, registry, orms, model-scan, benchmarks, models-dev, artificia
 # F03: Provider and Model Registry + Scanning/Benchmarking (ORMS)
 
 > STATUS v1.1: model-scan already EXISTS and is a complete working program at
-> `/home/cheta/code/model-scan` (`dink.py`, ~3600 lines). Its real scoring engine (4-axis +
+> `~/code/model-scan` (`dink.py`, ~3600 lines). Its real scoring engine (4-axis +
 > slot-fitness + calibration constants + tiers.yaml + blocklist.yaml) SUPERSEDES the
 > brainstorming-doc formulas below. See `01-CURRENT-STATE-AND-GAPS.md` section 3 for the
 > authoritative algorithm. The notes below remain as design/source context only.
@@ -36,7 +36,7 @@ model-scan program the user plans to fold in fully.
 - Smart change detection: SHA-256 checksum, >10% pricing delta re-scrape, new-model queue,
   30-day full audit. (`:86-92`)
 - SUPERSEDED: the brainstorming doc said ORMS does not exist, but model-scan DOES exist at
-  /home/cheta/code/model-scan (complete program). Fold in / extend, not build from scratch.
+  ~/code/model-scan (complete program). Fold in / extend, not build from scratch.
   (`Proxy update plan.md:2800-2855`; see STATUS banner above + 01-CURRENT-STATE)
 - Graceful degradation: scrape failure falls back to API-only so the gateway never blocks.
   (`PRD- proxy model scraper helper.md:240-241`)

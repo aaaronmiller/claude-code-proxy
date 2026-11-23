@@ -8,7 +8,7 @@ tags: [ai-gateway, recon, quota, rotation, allocator, s1-06, s1-08, read-only]
 
 # Recon 02: Quota / rotation / capability substrate (S1-06 + S1-08 prep, read-only)
 
-Read-only inspection of `/home/cheta/code/claude-code-proxy`. Key result: the F06 quota and F18
+Read-only inspection of `~/code/claude-code-proxy`. Key result: the F06 quota and F18
 allocator substrate ALREADY EXISTS in the proxy. The new work is EXTEND, not build-new. This
 re-scopes F06/F18 downward.
 

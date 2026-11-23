@@ -12,8 +12,8 @@ This doc reconciles the v1 plan (built from 21 brainstorming docs) with the ACTU
 the three live repos. Read it before the feature files: it overrides any "(PROPOSED)" tag in
 F01-F17 where the thing already exists.
 
-Evidence: deep read of `/home/cheta/code/claude-code-proxy` (specs 000-003 + docs + src),
-`/home/cheta/code/model-scan` (scoring engine), and intent-mining of USERPROMPTS-v2.md (6464
+Evidence: deep read of `~/code/claude-code-proxy` (specs 000-003 + docs + src),
+`~/code/model-scan` (scoring engine), and intent-mining of USERPROMPTS-v2.md (6464
 lines of verbatim prompts) + CASS (873 conversations).
 
 ## 0. The big reframe: this is a PIVOT, not a greenfield rebuild
@@ -26,10 +26,10 @@ greenfield framing in `00-MASTER-PLAN.md` should be read as "unify and extend th
 "build from zero". Most core modules already exist and must be preserved, not rebuilt.
 
 The three repos to unify:
-- `/home/cheta/code/claude-code-proxy` - the gateway (translation, routing, chain, config, web-ui)
-- `/home/cheta/code/model-scan` - the model scanner + scoring engine (`dink.py` ~3600 lines)
-- `/home/cheta/code/input-compression` - Headroom (compression), with RTK as a CLI-side wrapper
-- `/home/cheta/code/wiki-memory` - the memory backend (audit summaries already exist)
+- `~/code/claude-code-proxy` - the gateway (translation, routing, chain, config, web-ui)
+- `~/code/model-scan` - the model scanner + scoring engine (`dink.py` ~3600 lines)
+- `~/code/input-compression` - Headroom (compression), with RTK as a CLI-side wrapper
+- `~/code/wiki-memory` - the memory backend (audit summaries already exist)
 
 ## 1. RESOLVED DECISIONS
 
@@ -99,7 +99,7 @@ F09, F17 are genuinely new. The plan's effort should concentrate on the partial/
 
 ## 3. THE REAL MODEL-SCAN SCORING ENGINE (supersedes brainstorming formulas)
 
-From `/home/cheta/code/model-scan`. Two paths: v5 multi-axis engine (`scoring/`) and a legacy
+From `~/code/model-scan`. Two paths: v5 multi-axis engine (`scoring/`) and a legacy
 heuristic in `dink.py`. Slot fitness is the selection score.
 
 - 4 axes, each calibrated-base + bounded modifiers, clamped 0-100 (`scoring/engine.py:88-142`):

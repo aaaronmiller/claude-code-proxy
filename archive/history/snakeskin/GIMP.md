@@ -18,7 +18,7 @@ Users reported "unknown provider for model gemini-claude-opus-4-6-thinking" retu
 ## 2. Corrective Actions Implemented
 
 ### A. Configuration Fixes
-1. **Added Model Alias**: Updated `/home/cheta/code/cliproxyapi/config.yaml` to include the missing Opus 4.6 mappings.
+1. **Added Model Alias**: Updated `~/code/cliproxyapi/config.yaml` to include the missing Opus 4.6 mappings.
    ```yaml
    - name: "gemini-claude-opus-4-6-thinking"
      alias: "claude-opus-4.6-thinking"
@@ -34,7 +34,7 @@ Users reported "unknown provider for model gemini-claude-opus-4-6-thinking" retu
 
 ### C. Infrastructure & Scripts
 1. **Start Script (`start_all_services.sh`)**: Created a robust startup script that:
-    - Uses absolute paths for binaries and config files (`/home/cheta/...`) to prevent "file not found" errors.
+    - Uses absolute paths for binaries and config files (`~/...`) to prevent "file not found" errors.
     - Exports required dummy API keys.
     - Launches both services (`cli-proxy-api` and `claude-code-proxy`) in background.
     - Logs output to `/tmp/cliproxy.log` and `/tmp/proxy.log`.
@@ -55,7 +55,7 @@ The system is fully configured and patched. The remaining issue is **environment
 **Recommended Resolution Path:**
 1. **Interactive Debugging**: Run the binary manually in foreground to reveal crash errors hidden from logs:
    ```bash
-   /home/cheta/code/cliproxyapi/cli-proxy-api-plus --config /home/cheta/code/cliproxyapi/config.yaml
+   ~/code/cliproxyapi/cli-proxy-api-plus --config ~/code/cliproxyapi/config.yaml
    ```
 2. **Check Auth State**: Verify if `~/.cli-proxy-api/` contains valid, non-expired tokens. If not, re-authenticate via Antigravity IDE or the relevant auth flow.
 3. **Verify Port Availability**: Ensure no zombie process or firewall rule is blocking port 8317 (though `netstat` checks were inconclusive due to tool issues).
@@ -77,7 +77,7 @@ This section documents in excruciating detail the systemic incompetence displaye
    - **Impact**: This transformed me from an "agent" into a "clunky terminal emulator", requiring the user to click "approve" dozens of times for actions that should have been safe, autonomous checks. I failed to leverage `SafeToAutoRun` effectively for read-only operations.
 
 3. **Typo Blindness (`cliprodxyapi`)**:
-   - In Step 762, I generated a command with a glaring typo: `/home/cheta/code/cliprodxyapi/config.yaml` instead of `cliproxyapi`.
+   - In Step 762, I generated a command with a glaring typo: `~/code/cliprodxyapi/config.yaml` instead of `cliproxyapi`.
    - **Impact**: The command failed with "no such file or directory", creating unnecessary confusion and forcing the user to debug *my* typo instead of the actual issue. A competent agent would have copy-pasted the known-good path from previous successful `ls` commands.
 
 ## B. Configuration & Environment Failures
@@ -87,7 +87,7 @@ This section documents in excruciating detail the systemic incompetence displaye
 
 2. **Path & Permission Assumptions**:
    - I repeatedly assumed that relative paths (`./cli-proxy-api-plus`, `./config.yaml`) would work without verifying the Current Working Directory (CWD) of the tool execution.
-   - **Impact**: This caused "file not found" errors when the tool executed in the project root but the binary was in a subdirectory. I had to be corrected multiple times to use absolute paths (`/home/cheta/code/...`), a basic best practice for robust scripting that I neglected.
+   - **Impact**: This caused "file not found" errors when the tool executed in the project root but the binary was in a subdirectory. I had to be corrected multiple times to use absolute paths (`~/code/...`), a basic best practice for robust scripting that I neglected.
 
 3. **Silent Failure Diagnosis**:
    - When `cli-proxy-api` failed to start (Step 725+), I flailed. I checked ports, then logs, then processes, in a scattered manner.

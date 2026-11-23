@@ -122,7 +122,7 @@ Add a single segment to your status line script:
 
 ```bash
 # In ~/.claude/status-line.sh, add before `build_status_line`:
-PROXY_METRICS=$(/home/cheta/code/claude-code-proxy/scripts/cc_statusline_metrics.sh all)
+PROXY_METRICS=$(~/code/claude-code-proxy/scripts/cc_statusline_metrics.sh all)
 echo -e "$PROXY_METRICS"
 ```
 
@@ -136,7 +136,7 @@ Source the helper and add its functions to the `metrics` array:
 
 ```bash
 # In ~/.claude/status-line.sh, near the top:
-source /home/cheta/code/claude-code-proxy/scripts/cc_statusline_metrics.sh
+source ~/code/claude-code-proxy/scripts/cc_statusline_metrics.sh
 
 # In build_status_line() metrics block, add:
 local ph; ph=$(get_proxy_health);       [ -n "$ph" ] && metrics+=("$ph")

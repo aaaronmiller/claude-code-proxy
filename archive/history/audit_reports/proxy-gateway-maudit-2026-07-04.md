@@ -205,7 +205,7 @@ The codebase uses three overlapping identity models:
 
 ## 5. MAUG PRD Gap Analysis
 
-**File:** `/home/cheta/code/ai-gateway/archive/source-docs/PRD- MAUG.md` (1969 lines)
+**File:** `~/code/ai-gateway/archive/source-docs/PRD- MAUG.md` (1969 lines)
 
 The MAUG PRD identifies several requirements the current proxy doesn't implement:
 

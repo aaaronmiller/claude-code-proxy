@@ -137,9 +137,9 @@ Add fixtures that verify:
 
 The current codebase is broader than the target architecture:
 
-- [src/main.py](/home/cheta/code/claude-code-proxy/src/main.py#L4) through [src/main.py](/home/cheta/code/claude-code-proxy/src/main.py#L42) import many non-core APIs.
-- [src/main.py](/home/cheta/code/claude-code-proxy/src/main.py#L271) through [src/main.py](/home/cheta/code/claude-code-proxy/src/main.py#L301) mount analytics, billing, alerts, dashboards, RBAC, provider auth, and GraphQL.
-- [src/services/conversion/request_converter.py](/home/cheta/code/claude-code-proxy/src/services/conversion/request_converter.py#L308) and [src/services/conversion/response_converter.py](/home/cheta/code/claude-code-proxy/src/services/conversion/response_converter.py#L729) through [src/services/conversion/response_converter.py](/home/cheta/code/claude-code-proxy/src/services/conversion/response_converter.py#L860) contain the actual middleware value.
+- [src/main.py](~/code/claude-code-proxy/src/main.py#L4) through [src/main.py](~/code/claude-code-proxy/src/main.py#L42) import many non-core APIs.
+- [src/main.py](~/code/claude-code-proxy/src/main.py#L271) through [src/main.py](~/code/claude-code-proxy/src/main.py#L301) mount analytics, billing, alerts, dashboards, RBAC, provider auth, and GraphQL.
+- [src/services/conversion/request_converter.py](~/code/claude-code-proxy/src/services/conversion/request_converter.py#L308) and [src/services/conversion/response_converter.py](~/code/claude-code-proxy/src/services/conversion/response_converter.py#L729) through [src/services/conversion/response_converter.py](~/code/claude-code-proxy/src/services/conversion/response_converter.py#L860) contain the actual middleware value.
 
 ## Required New Documents
 

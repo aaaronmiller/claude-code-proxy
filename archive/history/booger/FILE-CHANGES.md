@@ -1,7 +1,7 @@
 # File Changes Manifest — Claude Code Proxy Fork
 
-**Target:** /home/misscheta/code/claude-code-proxy  
-**Upstream:** /home/misscheta/code/claude-code-proxy-upstream  
+**Target:** ~/code/claude-code-proxy  
+**Upstream:** ~/code/claude-code-proxy-upstream  
 **Comparison Date:** 2026-04-21  
 
 ---
@@ -324,7 +324,7 @@ socket.io-client
 To reproduce this audit:
 
 ```bash
-cd /home/misscheta/code
+cd ~/code
 # Clone upstream if not present
 git clone --depth=1 https://github.com/fuergaosi233/claude-code-proxy.git claude-code-proxy-upstream
 

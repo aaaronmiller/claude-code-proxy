@@ -269,7 +269,7 @@ The following files have been migrated to use dynamic model family detection:
 **Solution:** Added `CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000` to `~/.zshrc`.
 
 **Files Modified:**
-- `/home/cheta/.zshrc`
+- `~/.zshrc`
 
 ---
 

@@ -17,10 +17,10 @@ Claude Code
 ### 1. CLIProxyAPIPlus (port 8317)
 p
 ```bash
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus \
-  --config /home/cheta/code/cliproxyapi/config.yaml &
+~/code/cliproxyapi/cli-proxy-api-plus \
+  --config ~/code/cliproxyapi/config.yaml &
 ```
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus --config /home/cheta/code/cliproxyapi/config.yaml &
+~/code/cliproxyapi/cli-proxy-api-plus --config ~/code/cliproxyapi/config.yaml &
 
 Verify: `curl -s http://127.0.0.1:8317/v1/models -H "Authorization: Bearer pass" | python3 -m json.tool`
 
@@ -42,7 +42,7 @@ ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_API_KEY=pass claude
 
 ```bash
 # Terminal 1: CLIProxyAPIPlus
-/home/cheta/code/cliproxyapi/cli-proxy-api-plus --config /home/cheta/code/cliproxyapi/config.yaml
+~/code/cliproxyapi/cli-proxy-api-plus --config ~/code/cliproxyapi/config.yaml
 
 # Terminal 2: claude-code-proxy
 cd ~/code/claude-code-proxy && source .venv/bin/activate && source .envrc && python start_proxy.py --skip-validation
@@ -59,8 +59,8 @@ All login commands open a browser for OAuth. Credentials save to `~/.cli-proxy-a
 Auto-refresh runs every 15 minutes. Add `-incognito` for multi-account login.
 
 ```bash
-CLIP="/home/cheta/code/cliproxyapi/cli-proxy-api-plus"
-CONF="--config /home/cheta/code/cliproxyapi/config.yaml"
+CLIP="~/code/cliproxyapi/cli-proxy-api-plus"
+CONF="--config ~/code/cliproxyapi/config.yaml"
 
 # Antigravity (Google-hosted Claude/Gemini — 10x limits)
 $CLIP -antigravity-login $CONF

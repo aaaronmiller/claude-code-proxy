@@ -8,7 +8,7 @@ tags: [ai-gateway, implementation, log, progress]
 
 # Implementation Log
 
-Tracks actual code changes in `/home/cheta/code/claude-code-proxy`. Defaults approved by user
+Tracks actual code changes in `~/code/claude-code-proxy`. Defaults approved by user
 ("begin"): extend claude-code-proxy in place; not committed unless asked.
 
 Branch: `feat/clutch-dynamic-tool-capability` (created off main; pre-existing WIP carried over).

@@ -8,7 +8,7 @@ tags: [ai-gateway, recon, config-parity, manifest, s1-02, read-only]
 
 # Recon 03: Config parity mechanism (S1-02 prep, read-only)
 
-Read-only inspection of `/home/cheta/code/claude-code-proxy`. Confirms how to add settings so
+Read-only inspection of `~/code/claude-code-proxy`. Confirms how to add settings so
 they reach all 4 surfaces automatically.
 
 ## The parity engine - `src/core/config_manifest.py`

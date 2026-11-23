@@ -332,7 +332,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/home/misscheta/bin/mem-watch
+ExecStart=~/bin/mem-watch
 Restart=always
 User=misscheta
 

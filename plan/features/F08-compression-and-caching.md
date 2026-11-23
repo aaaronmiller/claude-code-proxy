@@ -23,7 +23,7 @@ agent.md:78-82`)
 
 - RTK: shell/terminal-output compression via CLI hooks; transport layer, runs first.
   (`Optimal compression for hermes agent.md:84-88`) (CURRENT)
-- Headroom: input/prompt compression 70-90%, at /home/cheta/code/input-compression/, port 8787
+- Headroom: input/prompt compression 70-90%, at ~/code/input-compression/, port 8787
   (authoritative; 8001 is a superseded draft). (`:78-83,250-261`; `unified_project_idea_record.md:94-101`) (CURRENT)
 - Context engine on assembled context: hermes-lcm (primary) OR pi-context-prune (alt) OR built-in
   (skip). (`Optimal compression...md:52-77`)

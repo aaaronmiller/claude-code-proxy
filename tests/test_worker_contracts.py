@@ -24,7 +24,7 @@ IDENTITY = TaskIdentity(
     project_id="claude-code-proxy",
     session_id="sess-1",
     trace_id="trace-1",
-    worktree_path="/home/cheta/code/claude-code-proxy/.worktrees/b09",
+    worktree_path="/home/user/code/claude-code-proxy/.worktrees/b09",
 )
 
 APPROVAL = Approval("dec-1", "user", "CG-T043", "2026-08-29T00:00:00Z")

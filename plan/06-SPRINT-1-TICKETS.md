@@ -12,7 +12,7 @@ Concrete starting work, grounded in the real `claude-code-proxy` tree. Approach:
 rebuild. Each ticket has files to touch, steps, and a runnable acceptance test (AT). Order =
 dependency order. Sizes: S < 0.5d, M ~ 1-2d, L ~ 3-5d.
 
-Repo root for all paths: `/home/cheta/code/claude-code-proxy`.
+Repo root for all paths: `~/code/claude-code-proxy`.
 
 ## S1-01 [W0] Validate the config spine [S]
 - Files: `tests/`, `specs/001-unified-config-system/tasks.md` (T062).
@@ -49,7 +49,7 @@ Repo root for all paths: `/home/cheta/code/claude-code-proxy`.
 - Deps: none.
 
 ## S1-05 [W5] Vendor model-scan into the repo [M]
-- Files: new `src/services/model_scan/` (or git submodule of `/home/cheta/code/model-scan`),
+- Files: new `src/services/model_scan/` (or git submodule of `~/code/model-scan`),
   `config/proxy_chain.json` (model_scan.snapshot_path).
 - Steps: bring model-scan in as a package; keep the snapshot producer/consumer boundary (no
   scoring on hot path); point `snapshot_path` at the in-repo output.

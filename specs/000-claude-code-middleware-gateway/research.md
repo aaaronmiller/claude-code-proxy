@@ -21,7 +21,7 @@ Rejected.
 Reason:
 
 - The repository currently mixes gateway concerns with analytics, billing, alerts, dashboards, RBAC, GraphQL, and crosstalk.
-- That scope is visible in [src/main.py](/home/cheta/code/claude-code-proxy/src/main.py#L4) through [src/main.py](/home/cheta/code/claude-code-proxy/src/main.py#L42) and [src/main.py](/home/cheta/code/claude-code-proxy/src/main.py#L271) through [src/main.py](/home/cheta/code/claude-code-proxy/src/main.py#L301).
+- That scope is visible in [src/main.py](~/code/claude-code-proxy/src/main.py#L4) through [src/main.py](~/code/claude-code-proxy/src/main.py#L42) and [src/main.py](~/code/claude-code-proxy/src/main.py#L271) through [src/main.py](~/code/claude-code-proxy/src/main.py#L301).
 - The most painful recent work is still Claude Code compatibility, tool continuation, and request/response transformation.
 
 ### Replace with external middleware

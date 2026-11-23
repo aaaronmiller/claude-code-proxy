@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from src.core.living_document_refs import (
@@ -14,7 +16,7 @@ from src.core.living_document_refs import (
     validate_ref,
 )
 
-DOSSIER = "/home/cheta/LIVING_DOCUMENTS/projects/claude-code-proxy"
+DOSSIER = str(Path.home() / "LIVING_DOCUMENTS/projects/claude-code-proxy")
 
 
 def _make_dossier(tmp_path, project_id="claude-code-proxy"):

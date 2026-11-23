@@ -152,7 +152,7 @@ orchestrate a small number of strong external projects rather than reimplement t
 | RTK | Invoke (chain stage) | shell/output compression via CLI hooks |
 | hermes-lcm | Embed or Invoke | context engine; do not stack with pi-context-prune |
 | CLIProxyAPI | Invoke (sidecar, opt-in) | OAuth for Antigravity/Anthropic |
-| ORMS / model-scan | Fold in (extend) | EXISTS at /home/cheta/code/model-scan (dink.py + scoring engine); not build-from-scratch. Vendor into repo, keep snapshot boundary |
+| ORMS / model-scan | Fold in (extend) | EXISTS at ~/code/model-scan (dink.py + scoring engine); not build-from-scratch. Vendor into repo, keep snapshot boundary |
 | wiki-memory | Invoke (hooks) | user's bespoke memory at /code/wiki-memory |
 | Translation, routing, quota, registry | Build | the core differentiators |
 | resillm | drop | no library; replaced by LiteLLM Router |

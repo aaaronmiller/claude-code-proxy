@@ -73,7 +73,7 @@ Functional audit of the CHANGELOG entries vs. actual code state. Findings + fixe
 - `validate_safe_filename` applied across 6 profile/crosstalk endpoints in `web_ui.py`
 - `CrosstalkOrchestrator._get_or_create_client()` lazy init (`crosstalk.py:68-79`)
 - Reasoning heartbeat + tee-to-disk + upstream-error detection in both `convert_openai_streaming_to_claude` and `..._with_cancellation`
-- Model rankings cron **is** installed (prior audit gave a false negative — `grep` is aliased to `rg` which handled `\|` differently; the entry `0 */6 * * * cd /home/cheta/code/claude-code-proxy && .venv/bin/python tools/refresh_model_rankings.py --force ...` was already present)
+- Model rankings cron **is** installed (prior audit gave a false negative — `grep` is aliased to `rg` which handled `\|` differently; the entry `0 */6 * * * cd ~/code/claude-code-proxy && .venv/bin/python tools/refresh_model_rankings.py --force ...` was already present)
 
 **Fixed in this pass:**
 - **API key slice leak** — CHANGELOG claimed `client.py` was reduced to `[:8]`, but 4 debug logs still exposed `[:20]` or `[:10]` of live tokens (lines 131, 157, 163, 351, 491). All reduced to `[:8]`.
@@ -234,7 +234,7 @@ This implementation plan serves as the definitive roadmap for the agent orchestr
 - **File**: `tools/refresh_model_rankings.py` — EXISTS, verified
 - Should run every 6h to refresh `data/free_model_rankings.json`
 - **No crontab entry** — confirmed via `crontab -l`. Need to add:
-  `0 */6 * * * cd /home/cheta/code/claude-code-proxy && .venv/bin/python tools/refresh_model_rankings.py`
+  `0 */6 * * * cd ~/code/claude-code-proxy && .venv/bin/python tools/refresh_model_rankings.py`
 
 #### H. Tmux Status Bar Testing
 - After `proxies up`, verify tmux status bars render correctly

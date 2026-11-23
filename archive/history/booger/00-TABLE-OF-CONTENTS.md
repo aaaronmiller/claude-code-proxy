@@ -195,7 +195,7 @@ booger/
 2. Read `scratch-2.md` and `scratch-3.md` (raw diffs)
 3. Read `SCRATCH-4-FEATURE-INVENTORY.md`
 4. Browse `file-inventory.txt` and `file-diff-inventory.txt`
-5. Cross-reference against actual source code in `/home/misscheta/code/claude-code-proxy/`
+5. Cross-reference against actual source code in `~/code/claude-code-proxy/`
 
 ---
 
@@ -231,4 +231,4 @@ K = thousand (e.g., 25K = 25,000)
 
 **Last updated:** 2026-04-21  
 **Maintainer:** Kilo (audit)  
-**Location:** `/home/misscheta/code/claude-code-proxy/booger/`
+**Location:** `~/code/claude-code-proxy/booger/`

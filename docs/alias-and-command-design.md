@@ -148,7 +148,7 @@ proxies restart     → Stop and restart (defaults to last mode)
 ### The Aliases (3 lines in .zshrc)
 
 ```bash
-alias proxies='/home/cheta/code/claude-code-proxy/proxies'
+alias proxies='~/code/claude-code-proxy/proxies'
 alias cc='ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude'
 alias qw='OPENAI_BASE_URL=http://127.0.0.1:8787/v1 qwen'
 ```

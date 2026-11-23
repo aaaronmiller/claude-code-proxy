@@ -8,7 +8,7 @@ tags: [ai-gateway, recon, hardcoded-models, s1-03, read-only]
 
 # Recon 01: Hardcoded-model audit (ticket S1-03, read-only)
 
-Read-only grep over `/home/cheta/code/claude-code-proxy`. No files changed. Verdict: routing is
+Read-only grep over `~/code/claude-code-proxy`. No files changed. Verdict: routing is
 largely config/snapshot-driven already; only two genuine name-keyed spots need fixing for W1.
 
 ## Good news (already dynamic)

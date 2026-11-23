@@ -244,7 +244,7 @@ EOF
 
 ### Patch content_router.py
 ```python
-# Add to /home/misscheta/.local/lib/python3.14/site-packages/headroom/transforms/content_router.py
+# Add to ~/.local/lib/python3.14/site-packages/headroom/transforms/content_router.py
 
 def should_compress(self, content: str, content_type: str) -> bool:
     """Determine if content should be compressed."""

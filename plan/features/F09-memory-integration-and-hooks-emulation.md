@@ -9,7 +9,7 @@ tags: [ai-gateway, memory, wiki-memory, hooks, hooks-emulation, content-injectio
 # F09: Memory Integration and Hooks Emulation
 
 The one genuinely-new core module (no proxy integration exists yet). Two halves: (a) wire the
-user's bespoke memory system at `/home/cheta/code/wiki-memory` into the request path via
+user's bespoke memory system at `~/code/wiki-memory` into the request path via
 content-injection (recall, pre-request) and storage hooks (persist, post-response); (b) a
 hooks-emulation bus so CLIs that lack native hooks gain the same behavior uniformly because the
 gateway is the interception point. Hooks emulation IS the memory integration mechanism.
